@@ -304,6 +304,74 @@
             margin-top: 0.25rem;
         }
 
+        .we-local-drafts-popover {
+            width: 22rem;
+            min-width: 0;
+            max-width: calc(100vw - 1.5rem);
+        }
+
+        .we-local-drafts-heading {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 0.375rem;
+        }
+
+        .we-local-drafts-list {
+            margin: 0;
+            padding: 0;
+            border: 0;
+            min-width: 0;
+        }
+
+        .we-local-draft-option {
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+            margin: 0;
+            padding: 0.75rem 0.625rem;
+            min-height: 44px;
+            border-top: 1px solid rgba(var(--now-color--neutral-0, 0, 0, 0), 0.15);
+            font-weight: 400;
+            cursor: pointer;
+        }
+
+        .we-local-draft-option--selected {
+            background: rgba(var(--now-color--primary-1, 81, 77, 206), 0.1);
+        }
+
+        .we-local-draft-option input {
+            margin: 0;
+            flex-shrink: 0;
+            accent-color: rgb(var(--now-button--primary--background-color, var(--now-color--primary-1, 81, 77, 206)));
+        }
+
+        .we-local-draft-details {
+            display: flex;
+            flex-direction: column;
+            gap: 0.125rem;
+            flex: 1;
+            min-width: 0;
+            overflow-wrap: break-word;
+        }
+
+        .we-local-draft-fields {
+            margin-top: 0.25rem;
+        }
+
+        .we-local-drafts-actions {
+            border-top: 1px solid rgba(var(--now-color--neutral-0, 0, 0, 0), 0.15);
+            padding-top: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .we-local-drafts-actions .we-local-draft-discard {
+            color: rgb(var(--now-color_alert--critical-3, 185, 25, 49));
+            background: transparent;
+            border-color: transparent;
+        }
+
         /* Header */
         .we-header {
             background: rgb(var(--now-color_background--tertiary));
@@ -2906,20 +2974,31 @@
                 </div>
 
                 <!-- Local draft recovery -->
-                <div class="we-alert-pill-wrapper" ng-if="localDrafts.length || localDraftError" we-close-on-outside-click="openDropdown" close-key="'alert-draft'" ng-mouseenter="onAlertPillEnter('alert-draft')" ng-mouseleave="onAlertPillLeave('alert-draft')">
-                    <button type="button" class="btn we-alert-pill we-alert-pill--warning" ng-class="{'active': openDropdown === 'alert-draft'}" ng-focus="onAlertPillFocus('alert-draft')" ng-keydown="onAlertPillKeydown($event, 'alert-draft')" ng-click="toggleDropdown('alert-draft'); $event.stopPropagation()" aria-label="Local draft recovery" aria-expanded="{{openDropdown === 'alert-draft'}}">
+                <div class="we-alert-pill-wrapper" ng-if="!isVersionView &amp;&amp; (localDrafts.length || localDraftError)" we-close-on-outside-click="openDropdown" close-key="'alert-draft'" ng-mouseenter="onAlertPillEnter('alert-draft')" ng-mouseleave="onAlertPillLeave('alert-draft')">
+                    <button type="button" class="btn we-alert-pill we-alert-pill--info" ng-class="{'active': openDropdown === 'alert-draft'}" ng-focus="onAlertPillFocus('alert-draft')" ng-keydown="onAlertPillKeydown($event, 'alert-draft')" ng-click="toggleDropdown('alert-draft'); $event.stopPropagation()" aria-label="Local draft recovery" aria-expanded="{{openDropdown === 'alert-draft'}}">
                         <i class="icon-condition" aria-hidden="true"></i>
-                        <span>{{localDrafts.length ? 'Unsaved draft' : 'Local draft unavailable'}}</span>
+                        <span>{{localDrafts.length === 1 ? 'Local draft found' : localDrafts.length ? 'Local drafts found' : 'Local draft unavailable'}}</span>
                     </button>
-                    <div class="we-alert-popover" ng-if="openDropdown === 'alert-draft'" ng-mouseenter="onAlertPopoverEnter()" ng-mouseleave="onAlertPopoverLeave('alert-draft')" ng-click="$event.stopPropagation()" role="dialog" aria-label="Local drafts">
+                    <div class="we-alert-popover we-local-drafts-popover" ng-if="openDropdown === 'alert-draft'" ng-mouseenter="onAlertPopoverEnter()" ng-mouseleave="onAlertPopoverLeave('alert-draft')" ng-click="$event.stopPropagation()" role="dialog" aria-label="Local drafts">
+                        <div class="we-local-drafts-heading">
+                            <span class="we-alert-popover-title">{{localDrafts.length === 1 ? 'Local draft found' : 'Local drafts found'}}</span>
+                            <span class="we-alert-popover-body" ng-if="localDrafts.length">{{localDrafts.length + (localDrafts.length === 1 ? ' draft' : ' drafts')}}</span>
+                        </div>
                         <div class="we-alert-popover-body" ng-if="localDraftError" role="alert" ng-bind="localDraftError"></div>
-                        <div ng-repeat="draft in localDrafts track by draft.key">
-                            <div class="we-alert-popover-body"><strong>Last edited:</strong> {{getLocalDraftEditedLabel(draft)}}</div>
-                            <div class="we-alert-popover-actions">
-                                <button type="button" class="btn btn-default btn-sm" ng-click="compareLocalDraft(draft)" ng-disabled="draftRecovery.busy" ng-keydown="onAlertActionKeydown($event, 'alert-draft', false)">Compare</button>
-                                <button type="button" class="btn btn-primary btn-sm" ng-click="restoreLocalDraft(draft)" ng-disabled="draftRecovery.busy" ng-keydown="onAlertActionKeydown($event, 'alert-draft', false)">Restore</button>
-                                <button type="button" class="btn btn-danger btn-sm" ng-click="discardLocalDraft(draft)" ng-disabled="draftRecovery.busy" ng-keydown="onAlertActionKeydown($event, 'alert-draft', $last)">Discard</button>
-                            </div>
+                        <fieldset class="we-local-drafts-list" ng-if="localDrafts.length">
+                            <legend class="sr-only">Choose a draft</legend>
+                            <label class="we-local-draft-option" ng-repeat="draft in localDrafts track by draft.key" ng-class="{'we-local-draft-option--selected': localDraftSelection.draft === draft}">
+                                <input type="radio" name="local-draft" ng-model="localDraftSelection.draft" ng-value="draft" ng-disabled="draftRecovery.busy" ng-keydown="onAlertActionKeydown($event, 'alert-draft', false)" />
+                                <span class="we-local-draft-details">
+                                    <strong title="{{draft.updatedAt | date:'medium'}}">{{getLocalDraftEditedLabel(draft)}}</strong>
+                                    <span class="we-local-draft-fields" ng-bind="draft.fieldsLabel"></span>
+                                </span>
+                            </label>
+                        </fieldset>
+                        <div class="we-alert-popover-actions we-local-drafts-actions" ng-if="localDrafts.length">
+                            <button type="button" class="btn btn-default btn-sm" ng-click="compareLocalDraft(localDraftSelection.draft)" ng-disabled="draftRecovery.busy || !localDraftSelection.draft" ng-keydown="onAlertActionKeydown($event, 'alert-draft', false)">Compare</button>
+                            <button type="button" class="btn btn-primary btn-sm" ng-click="restoreLocalDraft(localDraftSelection.draft)" ng-disabled="draftRecovery.busy || !localDraftSelection.draft" ng-keydown="onAlertActionKeydown($event, 'alert-draft', false)">Restore</button>
+                            <button type="button" class="btn btn-link btn-sm we-local-draft-discard" ng-click="discardLocalDraft(localDraftSelection.draft)" ng-disabled="draftRecovery.busy || !localDraftSelection.draft" ng-keydown="onAlertActionKeydown($event, 'alert-draft', true)">Discard</button>
                         </div>
                     </div>
                 </div>
@@ -2980,6 +3059,7 @@
                             <span>Unsaved changes</span>
                         </div>
                         <div class="we-alert-popover-body" ng-if="userPrefs.autosaveInterval &amp;&amp; lastDraftSaveTime"><strong>Draft saved</strong>: {{getLastDraftSaveLabel()}}</div>
+                        <div class="we-alert-popover-body" ng-if="localDraftError" role="alert" ng-bind="localDraftError"></div>
                         <div class="we-alert-popover-body">
                             You have unsaved changes in one or more fields. Save your work to avoid losing it.
                         </div>
@@ -2990,7 +3070,7 @@
                 </div>
 
                 <!-- Saved pill (right-aligned; narrow layout only — see header-actions copy for wide layout) -->
-                <div class="we-alert-pill-wrapper we-alert-pill-wrapper--right" ng-if="!isVersionView &amp;&amp; isNarrowLayout &amp;&amp; lastSaveTime &amp;&amp; !saveError &amp;&amp; !hasUnsavedChanges()" we-close-on-outside-click="openDropdown" close-key="'alert-saved'" ng-mouseenter="onAlertPillEnter('alert-saved')" ng-mouseleave="onAlertPillLeave('alert-saved')" style="margin-left: auto;">
+                <div class="we-alert-pill-wrapper we-alert-pill-wrapper--right" ng-if="!isVersionView &amp;&amp; isNarrowLayout &amp;&amp; lastSaveTime &amp;&amp; !saveError &amp;&amp; !hasUnsavedChanges() &amp;&amp; !localDrafts.length &amp;&amp; !localDraftError" we-close-on-outside-click="openDropdown" close-key="'alert-saved'" ng-mouseenter="onAlertPillEnter('alert-saved')" ng-mouseleave="onAlertPillLeave('alert-saved')" style="margin-left: auto;">
                     <button type="button" class="btn we-alert-pill we-alert-pill--success" ng-class="{'active': openDropdown === 'alert-saved'}" ng-focus="onAlertPillFocus('alert-saved')" ng-keydown="onAlertPillKeydown($event, 'alert-saved')" ng-click="toggleDropdown('alert-saved'); $event.stopPropagation()" aria-label="Save details" aria-expanded="{{openDropdown === 'alert-saved'}}">
                         <i class="icon-check-circle" aria-hidden="true"></i>
                         <span ng-bind="getLastSaveLabel()"></span>
@@ -3335,6 +3415,7 @@
                                 <span>Unsaved changes</span>
                             </div>
                             <div class="we-alert-popover-body" ng-if="userPrefs.autosaveInterval &amp;&amp; lastDraftSaveTime"><strong>Draft saved</strong>: {{getLastDraftSaveLabel()}}</div>
+                            <div class="we-alert-popover-body" ng-if="localDraftError" role="alert" ng-bind="localDraftError"></div>
                             <div class="we-alert-popover-body">
                                 You have unsaved changes in one or more fields. Save your work to avoid losing it.
                             </div>
@@ -3345,7 +3426,7 @@
                     </div>
 
                     <!-- Saved pill (wide layout only — see pill bar copy for narrow layout) -->
-                    <div class="we-alert-pill-wrapper we-alert-pill-wrapper--right" ng-if="!isVersionView &amp;&amp; !isNarrowLayout &amp;&amp; lastSaveTime &amp;&amp; !saveError &amp;&amp; !hasUnsavedChanges()" we-close-on-outside-click="openDropdown" close-key="'alert-saved'" ng-mouseenter="onAlertPillEnter('alert-saved')" ng-mouseleave="onAlertPillLeave('alert-saved')" style="margin-right: 0.375rem;">
+                    <div class="we-alert-pill-wrapper we-alert-pill-wrapper--right" ng-if="!isVersionView &amp;&amp; !isNarrowLayout &amp;&amp; lastSaveTime &amp;&amp; !saveError &amp;&amp; !hasUnsavedChanges() &amp;&amp; !localDrafts.length &amp;&amp; !localDraftError" we-close-on-outside-click="openDropdown" close-key="'alert-saved'" ng-mouseenter="onAlertPillEnter('alert-saved')" ng-mouseleave="onAlertPillLeave('alert-saved')" style="margin-right: 0.375rem;">
                         <button type="button" class="btn we-alert-pill we-alert-pill--success" ng-class="{'active': openDropdown === 'alert-saved'}" ng-focus="onAlertPillFocus('alert-saved')" ng-keydown="onAlertPillKeydown($event, 'alert-saved')" ng-click="toggleDropdown('alert-saved'); $event.stopPropagation()" aria-label="Save details" aria-expanded="{{openDropdown === 'alert-saved'}}">
                             <i class="icon-check-circle" aria-hidden="true"></i>
                             <span ng-bind="getLastSaveLabel()"></span>
@@ -4082,7 +4163,8 @@
                     <span ng-if="draftRecovery.conflict">Saved content has changed. Restore replaces the draft fields.</span>
                     <span ng-if="!draftRecovery.conflict &amp;&amp; hasUnsavedChanges()">Restore replaces current edits in the draft fields.</span>
                     <span ng-if="localDraftError" role="alert" ng-bind="localDraftError"></span>
-                    <button type="button" class="btn btn-primary" ng-click="restoreLocalDraft(versionDiffModal.localDraft, true)" ng-disabled="draftRecovery.busy" style="margin-left:auto">Restore draft</button>
+                    <button type="button" class="btn btn-danger" ng-click="discardLocalDraft(versionDiffModal.localDraft)" ng-disabled="draftRecovery.busy" style="margin-left:auto">Discard draft</button>
+                    <button type="button" class="btn btn-primary" ng-click="restoreLocalDraft(versionDiffModal.localDraft, true)" ng-disabled="draftRecovery.busy">Restore draft</button>
                     <button type="button" class="btn btn-default" ng-click="closeVersionDiffModal()">Close</button>
                 </div>
             </div>

@@ -2484,7 +2484,7 @@
                             $scope.loading = false;
                             buildVisibleItems();
                             initAllEditors();
-                            _findLocalDrafts();
+                            _findLocalDrafts(true);
                         })
                         .catch(function (err) {
                             $scope.loadError =
@@ -7535,7 +7535,7 @@
                         var currentBtn = $event.currentTarget;
                         var wrapper = currentBtn.closest ? currentBtn.closest('.we-alert-pill-wrapper') : null;
                         if (wrapper) {
-                            var firstAction = wrapper.querySelector('.we-alert-popover-actions button, .we-alert-popover-actions a');
+                            var firstAction = wrapper.querySelector('input[type="radio"]:checked, .we-alert-popover-actions button, .we-alert-popover-actions a');
                             if (firstAction) {
                                 $event.preventDefault();
                                 $event.stopPropagation();
@@ -7551,12 +7551,13 @@
                     if ($event.keyCode === 27) {
                         $event.preventDefault();
                         $event.stopPropagation();
-                        $scope.openDropdown = null;
                         var wrapper = $event.currentTarget.closest ? $event.currentTarget.closest('.we-alert-pill-wrapper') : null;
                         if (wrapper) {
                             var pillBtn = wrapper.querySelector('.we-alert-pill');
                             if (pillBtn) { pillBtn.focus(); }
                         }
+                        // Close after Angular has handled the pill's queued focus event.
+                        $scope.$evalAsync(function () { $scope.openDropdown = null; });
                     } else if ($event.keyCode === 9 && !$event.shiftKey && isLast) {
                         var currentWrapper = $event.currentTarget.closest ? $event.currentTarget.closest('.we-alert-pill-wrapper') : null;
                         $scope.openDropdown = null;
@@ -7579,8 +7580,8 @@
                             if (actions.length > 0 && actions[0] === $event.currentTarget) {
                                 $event.preventDefault();
                                 $event.stopPropagation();
-                                var pill = wrapperEl.querySelector('.we-alert-pill');
-                                if (pill) { pill.focus(); }
+                                var previousControl = wrapperEl.querySelector('input[type="radio"]:checked') || wrapperEl.querySelector('.we-alert-pill');
+                                if (previousControl) { previousControl.focus(); }
                             }
                         }
                     }
@@ -8033,6 +8034,7 @@
                 var _draftRetentionLoaded = false;
                 var _draftJson = {};
                 $scope.localDrafts = [];
+                $scope.localDraftSelection = { draft: null };
                 $scope.localDraftError = null;
                 $scope.lastDraftSaveTime = null;
                 $scope.draftRecovery = { entries: [], records: [], busy: false };
@@ -8053,6 +8055,26 @@
                     return 'we_local_draft:v1:' + $scope.currentUserId + ':' + SYS_ID + ':';
                 }
 
+                function _syncLocalDraftSelection() {
+                    var selected = $scope.localDraftSelection.draft;
+                    $scope.localDraftSelection.draft = $scope.localDrafts.find(function (draft) {
+                        return selected && draft.key === selected.key;
+                    }) || $scope.localDrafts[0] || null;
+                }
+
+                function _localDraftFieldSummary(draft) {
+                    return draft.entries.map(function (entry) {
+                        if (entry.type !== 'widget') {
+                            return { template: 'Angular template', provider: 'Angular provider', script_include: 'Script Include' }[entry.type];
+                        }
+                        var def = $scope.coreEditorDefs.find(function (d) { return d.field === entry.field; }) ||
+                            $scope.additionalWidgetFields.find(function (d) { return d.name === entry.field; });
+                        return (def && def.label) || { name: 'Name', id: 'ID', description: 'Description',
+                            controller_as: 'Controller alias', is_public: 'Public', roles: 'Roles', static: 'Static',
+                            option_schema: 'Option Schema', demo_data: 'Demo Data' }[entry.field] || entry.field.replace(/_/g, ' ');
+                    }).filter(function (label, index, labels) { return labels.indexOf(label) === index; }).join(' · ');
+                }
+
                 function _pruneLocalDrafts() {
                     if (!_draftRetentionLoaded || !$scope.currentUserId || !_validDraftRetentionDays($scope.userPrefs.draftRetentionDays)) { return; }
                     var prefix = 'we_local_draft:v1:' + $scope.currentUserId + ':';
@@ -8071,6 +8093,7 @@
                         }
                     }
                     $scope.localDrafts = $scope.localDrafts.filter(function (draft) { return draft.updatedAt > cutoff; });
+                    _syncLocalDraftSelection();
                 }
 
                 function _canDraft() {
@@ -8170,6 +8193,7 @@
                             if (key.indexOf(_draftPrefix()) === 0) { localStorage.removeItem(key); }
                         }
                         $scope.localDrafts = [];
+                        $scope.localDraftSelection.draft = null;
                         $scope.lastDraftSaveTime = null;
                         if ($scope.versionDiffModal.localDraft) { $scope.closeVersionDiffModal(); }
                         $scope.draftRecovery = { entries: [], records: [], busy: false };
@@ -8199,7 +8223,7 @@
                         });
                 }
 
-                function _findLocalDrafts() {
+                function _findLocalDrafts(onLoad) {
                     try {
                         _pruneLocalDrafts();
                         if (!_canDraft()) { return; }
@@ -8211,11 +8235,25 @@
                                 var raw = localStorage.getItem(key);
                                 var draft = JSON.parse(raw);
                                 if (_validLocalDraft(draft)) {
-                                    $scope.localDrafts.push({ key: key, raw: raw, updatedAt: draft.updatedAt, entries: draft.entries });
+                                    $scope.localDrafts.push({ key: key, raw: raw, updatedAt: draft.updatedAt,
+                                        entries: draft.entries, fieldsLabel: _localDraftFieldSummary(draft) });
                                 }
                             } catch (e) { /* Leave unreadable drafts untouched. */ }
                         }
                         $scope.localDrafts.sort(function (a, b) { return b.updatedAt - a.updatedAt; });
+                        _syncLocalDraftSelection();
+                        if (onLoad) {
+                            var previousKey;
+                            try {
+                                previousKey = sessionStorage.getItem(_draftPrefix());
+                                sessionStorage.setItem(_draftPrefix(), _draftPrefix() + _draftPageId);
+                            } catch (e) { /* Manual recovery still works when tab storage is unavailable. */ }
+                            if (document.wasDiscarded === true) {
+                                var previousDraft = $scope.localDrafts.find(function (draft) { return draft.key === previousKey; });
+                                if (!previousKey && $scope.localDrafts.length === 1) { previousDraft = $scope.localDrafts[0]; }
+                                if (previousDraft) { return $scope.restoreLocalDraft(previousDraft); }
+                            }
+                        }
                     } catch (e) {
                         $scope.localDraftError = 'Local drafts are unavailable. Check browser storage settings.';
                     }
@@ -8332,12 +8370,14 @@
                     // Another tab may have updated this draft since the recovery prompt appeared.
                     if (localStorage.getItem(draft.key) === draft.raw) { localStorage.removeItem(draft.key); }
                     $scope.localDrafts = $scope.localDrafts.filter(function (d) { return d !== draft; });
+                    _syncLocalDraftSelection();
                 }
 
                 $scope.discardLocalDraft = function (draft) {
                     try {
                         _removeRecoveredDraft(draft);
                         $scope.openDropdown = null;
+                        if ($scope.versionDiffModal.localDraft === draft) { $scope.closeVersionDiffModal(); }
                     } catch (e) { $scope.localDraftError = 'The local draft could not be discarded.'; }
                 };
 
