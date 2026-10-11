@@ -152,7 +152,7 @@ test('export passes the system property through paging to all rendered text', as
         context._weMarkdownAjax = async (_method, params) => ({
             ...page, hasMore: params.offset === 0, nextOffset: 1,
             rows: [{
-                table: 'child', id: String(params.offset), name: 'child_name+ [x].', type: 'child_type+ [x].',
+                table: 'child', id: String(params.offset), name: 'child_name+ [x].\\tail', type: 'child_type+ [x].',
                 secondary: ['extra_value+ [x].'], url: '/child_name',
                 ancestors: [{ table: 'parent', id: 'p', name: 'parent_name+ [x].', type: 'parent_type+ [x].', url: '/parent_name' }],
                 sourceSet: { table: 'sys_update_set', id: 's', name: 'set_name+ [x].', url: '/set_name' }
@@ -162,8 +162,15 @@ test('export passes the system property through paging to all rendered text', as
         await context.copyUpdateSetMarkdownPlus({ getTableName: () => 'sys_update_xml', getQuery: () => '' });
         assert.deepEqual(errors, []);
         assert.equal(copied.length, 1);
-        for (const label of ['child_name+ [x].', 'child_type+ [x].', 'extra_value+ [x].', 'parent_name+ [x].', 'parent_type+ [x].', 'set_name+ [x].']) {
-            assert.ok(copied[0].includes(setting === 'true' ? label.replace(/[_+\[\].]/g, '\\$&') : label));
+        for (const [label, escaped] of [
+            ['child_name+ [x].\\tail', 'child\\_name\\+ \\[x\\]\\.\\\\tail'],
+            ['child_type+ [x].', 'child\\_type\\+ \\[x\\]\\.'],
+            ['extra_value+ [x].', 'extra\\_value\\+ \\[x\\]\\.'],
+            ['parent_name+ [x].', 'parent\\_name\\+ \\[x\\]\\.'],
+            ['parent_type+ [x].', 'parent\\_type\\+ \\[x\\]\\.'],
+            ['set_name+ [x].', 'set\\_name\\+ \\[x\\]\\.'],
+        ]) {
+            assert.ok(copied[0].includes(setting === 'true' ? escaped : label));
         }
         assert.ok(copied[0].includes('](/child_name)'), 'URLs are unchanged');
         assert.ok(!copied[0].split('\n').some(line => /^ +- /.test(line)), 'list limit reaches the clipboard through paging');

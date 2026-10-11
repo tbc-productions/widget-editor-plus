@@ -83,7 +83,7 @@
             '$sce',
             function ($sce) {
                 function escapeRegex(s) {
-                    return s.replace(/[-/\^$*+?.()|[]{}]/g, '\$&');
+                    return s.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
                 }
                 function escapeHtml(s) {
                     if (!s) {
