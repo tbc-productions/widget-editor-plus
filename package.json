@@ -1,6 +1,6 @@
 {
   "name": "widget-editor-plus",
-  "version": "1.23.4",
+  "version": "1.23.5",
   "description": "Enhanced Service Portal widget editor with Monaco-powered code editors, real-time user presence, per-field save, version history with diff comparison, and Angular template and provider management.",
   "license": "UNLICENSED",
   "engines": {

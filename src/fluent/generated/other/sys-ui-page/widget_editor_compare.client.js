@@ -662,7 +662,7 @@
         function _syncScope() {
             if (!_fieldDefs) { return; }
 
-            ctrl.recordName = (_recordData && _recordData.name) || '(Unnamed)';
+            ctrl.recordName = (_recordData && _recordData.name) || (_savedRecordData && _savedRecordData.name) || '(Unnamed)';
             var _tableSuffix = ctrl.tableLabel ? ' (' + ctrl.tableLabel + ')' : '';
             var _title = 'Compare: ' + ctrl.recordName + _tableSuffix + ' - ' + SITE_TITLE;
             document.title = _title;
@@ -1509,7 +1509,7 @@
             }
         });
 
-        if (!recordId) {
+        if (!recordId && !daToken) {
             ctrl.noRecordSelected = true;
             _pending++;
             _ajax('getDiffFieldDefs', { table: tableParam }, function(data) {
@@ -1586,10 +1586,11 @@
             }
 
             if (_openerSnap) {
-                // Convert snap (widget-specific shape) to generic record shape
+                var isNewSnapshot = !!_openerSnap._newRecord && !recordId;
+                delete _openerSnap._newRecord;
                 _recordData = {
                     sys_id:         recordId,
-                    name:           _openerSnap.name           || '',
+                    name:           _openerSnap.name || _openerSnap.id || '',
                     sys_updated_on: _openerSnap.sys_updated_on || '',
                     sys_updated_by: _openerSnap.sys_updated_by || '',
                     canWrite:       false,
@@ -1600,7 +1601,9 @@
                     values: _openerSnap
                 };
                 ctrl.currentIsUnsaved = !!_openerSnap._unsaved;
-                if (_openerSnap._unsaved) {
+                if (isNewSnapshot) {
+                    _savedRecordData = { values: {}, canWrite: false };
+                } else if (_openerSnap._unsaved) {
                     _pending++;
                     _ajax('getRecordForDiff', { table: tableParam, record_id: recordId }, function(data) {
                         if (data.success && data.record) {

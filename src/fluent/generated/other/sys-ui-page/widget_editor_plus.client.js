@@ -1352,6 +1352,8 @@
                     insertSpaceBeforeFuncParen: false,
                     tabSize: 4,
                     ctrlSSaveActiveOnly: true,
+                    autosaveInterval: 30,
+                    draftRetentionDays: 7,
                     flashOnEditorOpen: !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
                     showOpenInVsCode: true,
                     showRecentlyOpenedWidgets: true,
@@ -1930,15 +1932,22 @@
                 };
                 $scope.discardAndNewWidget = function () {
                     $scope.pendingNewWidget = false;
+                    _discardPageDraft();
                     _bypassUnloadWarning = true;
                     navigateToNewWidget();
                 };
                 $scope.saveAndNewWidget = function () {
                     $scope.pendingNewWidget = false;
+                    var payload = _buildSavePayload();
                     ajax('saveWidget', {
                         sys_id: SYS_ID,
-                        data: JSON.stringify(_buildSavePayload()),
-                    }).then(function () {
+                        data: JSON.stringify(payload),
+                    }).then(function (data) {
+                        if (!data.success) {
+                            $scope.saveError = data.error || 'Save failed';
+                            return;
+                        }
+                        _acceptWidgetSave(payload);
                         navigateToNewWidget();
                     });
                 };
@@ -1963,6 +1972,7 @@
                 $scope.discardAndOpenWidget = function () {
                     var target = $scope.pendingWidgetNav;
                     $scope.pendingWidgetNav = null;
+                    _discardPageDraft();
                     _bypassUnloadWarning = true;
                     navigateToWidget(target);
                 };
@@ -1970,10 +1980,16 @@
                 $scope.saveAndOpenWidget = function () {
                     var target = $scope.pendingWidgetNav;
                     $scope.pendingWidgetNav = null;
+                    var payload = _buildSavePayload();
                     ajax('saveWidget', {
                         sys_id: SYS_ID,
-                        data: JSON.stringify(_buildSavePayload()),
-                    }).then(function () {
+                        data: JSON.stringify(payload),
+                    }).then(function (data) {
+                        if (!data.success) {
+                            $scope.saveError = data.error || 'Save failed';
+                            return;
+                        }
+                        _acceptWidgetSave(payload);
                         navigateToWidget(target);
                     });
                 };
@@ -2072,6 +2088,12 @@
                     if (window.SNMonacoPlus && SNMonacoPlus.setUnusedVarsEnabled) {
                         SNMonacoPlus.setUnusedVarsEnabled($scope.userPrefs.showUnusedVars);
                     }
+                    if (_validAutosaveInterval(p.autosaveInterval)) {
+                        $scope.userPrefs.autosaveInterval = p.autosaveInterval;
+                    }
+                    if (_validDraftRetentionDays(p.draftRetentionDays)) {
+                        $scope.userPrefs.draftRetentionDays = p.draftRetentionDays;
+                    }
                     if (p.hasOwnProperty('fontSize')) {
                         var fs = parseInt(p.fontSize, 10);
                         if (fs >= 8 && fs <= 32) {
@@ -2169,6 +2191,7 @@
                                 .then(function (results) {
                                     var prefsData = results[0];
                                     var defaultsData = results[1];
+                                    _draftRetentionLoaded = !!(prefsData && prefsData.success);
                                     if (
                                         prefsData &&
                                         prefsData.success &&
@@ -2178,7 +2201,7 @@
                                             _applyUserPrefsData(
                                                 JSON.parse(prefsData.value)
                                             );
-                                        } catch (e) {}
+                                        } catch (e) { _draftRetentionLoaded = false; }
                                     }
                                     if (defaultsData && defaultsData.success) {
                                         _setAdditionalWidgetFields(
@@ -2209,6 +2232,7 @@
                                     $scope.loading = false;
                                     buildVisibleItems();
                                     initAllEditors();
+                                    _findLocalDrafts();
                                 })
                                 .catch(function () {
                                     $scope.loading = false;
@@ -2230,6 +2254,7 @@
                         $scope.loading = false;
                         loadWidgetList('');
                         ajax('getUserPrefs', {}).then(function (prefsData) {
+                            _draftRetentionLoaded = !!(prefsData && prefsData.success);
                             if (
                                 prefsData &&
                                 prefsData.success &&
@@ -2239,8 +2264,9 @@
                                     _applyUserPrefsData(
                                         JSON.parse(prefsData.value)
                                     );
-                                } catch (e) {}
+                                } catch (e) { _draftRetentionLoaded = false; }
                             }
+                            _findLocalDrafts();
                         });
                         return;
                     }
@@ -2339,6 +2365,9 @@
                                 if ($scope.isVersionView || $scope.widgetReverted) {
                                     return true;
                                 }
+                                if ($scope.localDrafts.length || $scope.localDraftError) {
+                                    return true;
+                                }
                                 if (!$scope.canWriteWidget && !$scope.widgetSysPolicy) {
                                     return true;
                                 }
@@ -2412,6 +2441,7 @@
                             };
                             lastServerValues = angular.copy(originalValues);
 
+                            _draftRetentionLoaded = !!(prefsData && prefsData.success);
                             if (
                                 prefsData &&
                                 prefsData.success &&
@@ -2421,7 +2451,7 @@
                                     _applyUserPrefsData(
                                         JSON.parse(prefsData.value)
                                     );
-                                } catch (e) {}
+                                } catch (e) { _draftRetentionLoaded = false; }
                             }
 
                             if (!$scope.isVersionView) {
@@ -2454,6 +2484,7 @@
                             $scope.loading = false;
                             buildVisibleItems();
                             initAllEditors();
+                            _findLocalDrafts(true);
                         })
                         .catch(function (err) {
                             $scope.loadError =
@@ -4304,228 +4335,9 @@
                     });
                 }
 
-                // Validates via AngularJS's own $parse, not a hand-rolled grammar.
-
-                // Mirrors Angular's own ngRepeat split regex, since the full attribute value isn't valid expression syntax for $parse.
-                // Regex escapes are doubled to survive template-literal parsing (\s → s, \n → newline byte) and land as one backslash in the deployed script.
-                var NG_REPEAT_REGEXP =
-                    /^\s*([\s\S]+?)\s+in\s+([\s\S]+?)(?:\s+as\s+([\s\S]+?))?(?:\s+track\s+by\s+([\s\S]+?))?\s*$/d;
-
-                // Mirrors Angular's own ngOptions split regex verbatim (escapes doubled per the note above).
-                var NG_OPTIONS_REGEXP =
-                    /^\s*([\s\S]+?)(?:\s+as\s+([\s\S]+?))?(?:\s+group\s+by\s+([\s\S]+?))?(?:\s+disable\s+when\s+([\s\S]+?))?\s+for\s+(?:([\$\w][\$\w]*)|(?:\(\s*([\$\w][\$\w]*)\s*,\s*([\$\w][\$\w]*)\s*\)))\s+in\s+([\s\S]+?)(?:\s+track\s+by\s+([\s\S]+?))?\s*$/d;
-
-                // ngPattern accepts a scope expression or a bare regex literal (e.g. /^\d+$/); validate literal shapes as RegExp, not via $parse.
-                var NG_PATTERN_REGEXP = /^\/(.*)\/([a-zA-Z]*)$/;
-
-                // Attributes whose value is a plain identifier/string, not an Angular expression.
-                var NG_NON_EXPRESSION_ATTRS = {
-                    'ng-app': true,
-                    'ng-controller': true,
-                    'ng-non-bindable': true,
-                    // ng-list's value is a literal delimiter string, not an expression.
-                    'ng-list': true,
-                    // ng-switch-when compares its value as a raw (optionally comma-separated) string.
-                    'ng-switch-when': true,
-                    // ng-switch-when-separator is a literal separator string, not an expression.
-                    'ng-switch-when-separator': true,
-                };
-
-                // Attributes holding interpolated text (e.g. {{ }} in a URL), not a standalone expression.
-                var NG_INTERPOLATE_ONLY_ATTRS = {
-                    'ng-href': true,
-                    'ng-src': true,
-                    'ng-srcset': true,
-                    'ng-bind-template': true,
-                };
-
-                var _ngParseFn = null;
-                function _getNgParse() {
-                    if (_ngParseFn) {
-                        return _ngParseFn;
-                    }
-                    if (!window.angular || !window.angular.injector) {
-                        return null;
-                    }
-                    try {
-                        var angular = window.angular;
-                        // Widget-defined filters aren't registered in this bare injector, so make $filter a no-op for unknown names.
-                        angular
-                            .module('weExprLintPermissiveFilters', [])
-                            .config([
-                                '$provide',
-                                function ($provide) {
-                                    $provide.decorator('$filter', [
-                                        '$delegate',
-                                        function ($delegate) {
-                                            return function (name) {
-                                                try {
-                                                    return $delegate(name);
-                                                } catch (e) {
-                                                    return angular.identity;
-                                                }
-                                            };
-                                        },
-                                    ]);
-                                },
-                            ]);
-                        _ngParseFn = angular
-                            .injector(['ng', 'weExprLintPermissiveFilters'])
-                            .get('$parse');
-                    } catch (e) {
-                        _ngParseFn = null;
-                    }
-                    return _ngParseFn;
-                }
-
-                // Scans template text for {{ }} interpolations and ng-*/data-ng-* attribute expressions, with offsets for editor mapping.
-                function _extractNgExpressions(text) {
-                    var out = [];
-                    var m;
-
-                    // Excludes newlines so an unclosed quote/}} mid-edit can't greedily match across lines.
-                    var interpRe = /\{\{([^\n]*?)\}\}/g;
-                    while ((m = interpRe.exec(text))) {
-                        out.push({
-                            expr: m[1],
-                            exprStart: m.index + 2,
-                            length: m[1].length,
-                        });
-                    }
-
-                    var attrRe =
-                        /((?:data-)?ng-[a-zA-Z-]+)\s*=\s*("([^"\n]*)"|'([^'\n]*)')/gd;
-                    while ((m = attrRe.exec(text))) {
-                        var attrName = m[1].replace(/^data-/, '').toLowerCase();
-                        if (NG_NON_EXPRESSION_ATTRS[attrName]) {
-                            continue;
-                        }
-                        if (
-                            NG_INTERPOLATE_ONLY_ATTRS[attrName] ||
-                            attrName.indexOf('ng-attr-') === 0
-                        ) {
-                            continue;
-                        }
-                        var valueIndices = m.indices[3] || m.indices[4];
-                        var value = m[3] !== undefined ? m[3] : m[4];
-                        var valueStart = valueIndices[0];
-
-                        if (attrName === 'ng-repeat' || attrName === 'ng-repeat-start') {
-                            var parts = NG_REPEAT_REGEXP.exec(value);
-                            if (!parts) {
-                                out.push({
-                                    expr: null,
-                                    exprStart: valueStart,
-                                    length: value.length,
-                                    forcedError:
-                                        'Expected "item in collection" (optionally "as alias" / "track by expr")',
-                                });
-                                continue;
-                            }
-                            out.push({
-                                expr: parts[2],
-                                exprStart: valueStart + parts.indices[2][0],
-                                length: parts[2].length,
-                            });
-                            if (parts[4]) {
-                                out.push({
-                                    expr: parts[4],
-                                    exprStart:
-                                        valueStart + parts.indices[4][0],
-                                    length: parts[4].length,
-                                });
-                            }
-                            continue;
-                        }
-
-                        if (attrName === 'ng-options') {
-                            var optParts = NG_OPTIONS_REGEXP.exec(value);
-                            if (!optParts) {
-                                out.push({
-                                    expr: null,
-                                    exprStart: valueStart,
-                                    length: value.length,
-                                    forcedError:
-                                        'Expected "label for value in collection" (optionally "select as label", "group by group", "disable when disable", "for (key, value) in", "track by expr")',
-                                });
-                                continue;
-                            }
-                            // Groups 1,2,3,4,8,9 are Angular expressions; 5/6/7 are bare loop variable names.
-                            [1, 2, 3, 4, 8, 9].forEach(function (g) {
-                                if (optParts[g] === undefined) {
-                                    return;
-                                }
-                                out.push({
-                                    expr: optParts[g],
-                                    exprStart: valueStart + optParts.indices[g][0],
-                                    length: optParts[g].length,
-                                });
-                            });
-                            continue;
-                        }
-
-                        if (attrName === 'ng-pattern') {
-                            var patParts = NG_PATTERN_REGEXP.exec(value);
-                            if (patParts) {
-                                try {
-                                    new RegExp(patParts[1], patParts[2]);
-                                } catch (e) {
-                                    out.push({
-                                        expr: null,
-                                        exprStart: valueStart,
-                                        length: value.length,
-                                        forcedError:
-                                            e.message ||
-                                            'Invalid regular expression',
-                                    });
-                                }
-                                continue;
-                            }
-                        }
-
-                        out.push({
-                            expr: value,
-                            exprStart: valueStart,
-                            length: value.length,
-                        });
-                    }
-
-                    return out;
-                }
-
                 function _computeNgExpressionMarkers(model) {
-                    var $parse = _getNgParse();
-                    if (!$parse) {
-                        return [];
-                    }
-                    var expressions = _extractNgExpressions(model.getValue());
-                    var markers = [];
-                    expressions.forEach(function (item) {
-                        var message = item.forcedError;
-                        if (!message && item.expr && item.expr.trim() !== '') {
-                            try {
-                                $parse(item.expr);
-                            } catch (e) {
-                                message = e.message || 'Invalid Angular expression';
-                            }
-                        }
-                        if (!message) {
-                            return;
-                        }
-                        var startPos = model.getPositionAt(item.exprStart);
-                        var endPos = model.getPositionAt(
-                            item.exprStart + item.length
-                        );
-                        markers.push({
-                            startLineNumber: startPos.lineNumber,
-                            startColumn: startPos.column,
-                            endLineNumber: endPos.lineNumber,
-                            endColumn: endPos.column,
-                            message: 'AngularJS: ' + message,
-                            severity: monaco.MarkerSeverity.Error,
-                        });
-                    });
-                    return markers;
+                    var html = window.MONACO_LANGUAGE_HTML;
+                    return html ? html.getExpressionMarkers(model, monaco) : [];
                 }
 
                 function _lintNgExpressions(paneKey) {
@@ -5515,8 +5327,9 @@
                                 $scope.widget.sys_updated_on =
                                     data.sys_updated_on;
                             }
-                            pane.dirty = false;
+                            pane.dirty = (editor ? editor.getValue() : $scope.widget[pane.field] || '') !== value;
                             pane.externalChange = null;
+                            _writeLocalDraft(true);
                             if (!hasUnsavedChanges()) {
                                 pane.savedAt = null;
                                 $scope.lastSaveTime = new Date();
@@ -5586,6 +5399,16 @@
                         : '';
                 };
 
+                $scope.getLocalDraftEditedLabel = function (draft) {
+                    return _formatRelativeTime(new Date(draft.updatedAt));
+                };
+
+                $scope.getLastDraftSaveLabel = function () {
+                    return $scope.userPrefs.autosaveInterval && $scope.lastDraftSaveTime
+                        ? _formatRelativeTime($scope.lastDraftSaveTime)
+                        : '';
+                };
+
                 $scope.getPaneSavedLabel = function (pane) {
                     return pane.savedAt
                         ? 'Saved ' + _formatRelativeTime(pane.savedAt)
@@ -5606,10 +5429,36 @@
                             return item.type === 'pane' && item.savedAt;
                         }
                     );
-                    if ($scope.lastSaveTime || hasPaneSaved) {
+                    if ($scope.lastSaveTime || ($scope.localDrafts && $scope.localDrafts.length) || ($scope.userPrefs.autosaveInterval && $scope.lastDraftSaveTime) || hasPaneSaved) {
                         $scope.$applyAsync();
                     }
                 }, 30000);
+
+                function _acceptWidgetSave(payload) {
+                    $scope.coreEditorDefs.forEach(function (def) {
+                        var val = payload[def.field] || '';
+                        originalValues[def.field] = val;
+                        lastServerValues[def.field] = val;
+                    });
+                    $scope.visibleItems.forEach(function (item) {
+                        if (item.type === 'pane' && item.field) {
+                            item.dirty = (monacoEditors[item.key] ? monacoEditors[item.key].getValue() : $scope.widget[item.field] || '') !== originalValues[item.field];
+                            item.savedAt = null;
+                            item.externalChange = null;
+                        }
+                    });
+                    originalHeader = {
+                        name: payload.name || '', id: payload.id || '', description: payload.description || '',
+                        controller_as: payload.controller_as || 'c', is_public: !!payload.public,
+                        roles: payload.roles || '', static: !!payload.static,
+                    };
+                    _captureAdditionalHeaderValues(payload);
+                    Object.keys(originalHeader).forEach(function (field) {
+                        var current = field === 'roles' ? $scope.rolesList.join(',') : $scope.widget[field];
+                        $scope.headerDirty[field] = current !== originalHeader[field];
+                    });
+                    _clearWidgetDrafts();
+                }
 
                 $scope.saveAll = function () {
                     if ($scope.isVersionView) {
@@ -5626,32 +5475,7 @@
                         return;
                     }
 
-                    // Pull latest Monaco values into widget object
-                    $scope.coreEditorDefs.forEach(function (def) {
-                        if (monacoEditors[def.key]) {
-                            $scope.widget[def.field] =
-                                monacoEditors[def.key].getValue();
-                        }
-                    });
-                    if ($scope.widget.is_public) {
-                        $scope.rolesList.length = 0;
-                    }
-                    $scope.widget.roles = $scope.rolesList.join(',');
-
-                    var payload = {
-                        name: $scope.widget.name,
-                        id: $scope.widget.id,
-                        description: $scope.widget.description,
-                        controller_as: $scope.widget.controller_as || 'c',
-                        public: $scope.widget.is_public,
-                        roles: $scope.widget.roles,
-                        static: !!$scope.widget.static,
-                        template: $scope.widget.template || '',
-                        css: $scope.widget.css || '',
-                        client_script: $scope.widget.client_script || '',
-                        script: $scope.widget.script || '',
-                        link: $scope.widget.link || '',
-                    };
+                    var payload = _buildSavePayload();
 
                     // Marks script fields self-saving so the record-watcher echo doesn't re-dirty panes.
                     var _saveAllScriptFields = [
@@ -5710,47 +5534,7 @@
                                 } catch (e) {}
                                 $scope.isNewWidget = false;
                             }
-                            // Refresh originals; clear all dirty indicators
-                            $scope.coreEditorDefs.forEach(function (def) {
-                                var val = monacoEditors[def.key]
-                                    ? monacoEditors[def.key].getValue()
-                                    : $scope.widget[def.field] || '';
-                                originalValues[def.field] = val;
-                                lastServerValues[def.field] = val;
-                            });
-                            $scope.visibleItems.forEach(function (item) {
-                                if (item.type === 'pane' && !item.hasIdInput) {
-                                    item.dirty = item.idDirty = false;
-                                    item.savedAt = null;
-                                    item.externalChange = null;
-                                }
-                            });
-                            // Reset header dirty tracking
-                            originalHeader = {
-                                name: $scope.widget.name || '',
-                                id: $scope.widget.id || '',
-                                description: $scope.widget.description || '',
-                                controller_as:
-                                    $scope.widget.controller_as || 'c',
-                                public: !!$scope.widget.is_public,
-                                roles: $scope.rolesList.join(','),
-                                static: !!$scope.widget.static,
-                            };
-                            _captureAdditionalHeaderValues($scope.widget);
-                            $scope.headerDirty = {
-                                name: false,
-                                id: false,
-                                description: false,
-                                controller_as: false,
-                                is_public: false,
-                                roles: false,
-                                static: false,
-                            };
-                            ($scope.additionalWidgetFields || []).forEach(
-                                function (fieldDef) {
-                                    $scope.headerDirty[fieldDef.name] = false;
-                                }
-                            );
+                            _acceptWidgetSave(payload);
                             // Sync ES12 — SYS_ID is now set even for newly-created widgets
                             ajax('saveEs12', {
                                 sys_id: SYS_ID,
@@ -6436,6 +6220,8 @@
                         $scope.userPrefs.insertSpaceBeforeFuncParen;
                     prefs.tabSize = $scope.userPrefs.tabSize;
                     prefs.remBase = $scope.userPrefs.remBase;
+                    prefs.autosaveInterval = $scope.userPrefs.autosaveInterval;
+                    prefs.draftRetentionDays = $scope.userPrefs.draftRetentionDays;
                     prefs.ctrlSSaveActiveOnly =
                         $scope.userPrefs.ctrlSSaveActiveOnly;
                     prefs.flashOnEditorOpen =
@@ -6627,6 +6413,8 @@
 
                 // Angular Providers (sp_angular_provider)
                 function openExtraPane(pane) {
+                    pane._draftOriginalId = pane.recordId || '';
+                    pane._draftOriginalType = pane.providerType || '';
                     extraPanes.push(pane);
                     buildVisibleItems();
                     $timeout(function () {
@@ -7313,14 +7101,15 @@
                             }
                             pane.lastServerContent = value;
                             delete pane._pendingSaveContent;
-                            pane.dirty = false;
+                            pane.dirty = (editor ? editor.getValue() : pane.content || '') !== value;
+                            _writeLocalDraft(true);
                             if (!hasUnsavedChanges()) {
                                 pane.savedAt = null;
                                 $scope.lastSaveTime = new Date();
                             } else {
                                 pane.savedAt = new Date();
                             }
-                            if (onSuccess) {
+                            if (onSuccess && !pane.dirty && !pane.idDirty) {
                                 onSuccess();
                             }
                         });
@@ -7361,8 +7150,12 @@
                         startPaneRecordWatcher(pane); // watch for external changes
                         pane.lastServerContent = value;
                         delete pane._pendingSaveContent;
-                        pane.dirty = false;
-                        pane.idDirty = false;
+                        pane._draftOriginalId = isTemplate ? dataObj.id : dataObj.name;
+                        pane._draftOriginalType = dataObj.type || '';
+                        pane.dirty = (editor ? editor.getValue() : pane.content || '') !== value;
+                        pane.idDirty = pane.recordId !== pane._draftOriginalId ||
+                            (!isTemplate && pane.providerType !== pane._draftOriginalType);
+                        _writeLocalDraft(true);
                         if (!hasUnsavedChanges()) {
                             pane.savedAt = null;
                             $scope.lastSaveTime = new Date();
@@ -7382,7 +7175,7 @@
                                 }
                             }
                         });
-                        if (onSuccess) {
+                        if (onSuccess && !pane.dirty && !pane.idDirty) {
                             onSuccess();
                         }
                     });
@@ -7401,6 +7194,7 @@
                     disposeEditor(pane.key);
                     _clearPaneWidths();
                     buildVisibleItems();
+                    _writeLocalDraft(true);
                 };
 
                 $scope.cancelClosePane = function () {
@@ -7495,6 +7289,7 @@
                     );
                     $scope.versionDiffModal.label = label;
                     $scope.versionDiffModal.isUnsaved = false;
+                    $scope.versionDiffModal.localDraft = null;
                     $scope.versionDiffModal.open = true;
                 };
 
@@ -7504,6 +7299,7 @@
                         $scope.versionDiffModal.url = null;
                         $scope.versionDiffModal.expandedField = null;
                         $scope.versionDiffModal.isUnsaved = false;
+                        $scope.versionDiffModal.localDraft = null;
                     });
                 };
 
@@ -7562,6 +7358,10 @@
                     snap.sys_updated_on = $scope.widget.sys_updated_on || '';
                     snap.sys_updated_by = $scope.widget.sys_updated_by || '';
 
+                    _openUnsavedSnapshotDiff('sp_widget', wSysId, snap, 'Unsaved changes');
+                };
+
+                function _openUnsavedSnapshotDiff(table, recordId, snap, label) {
                     var snapToken =
                         Date.now() + '_' + Math.random().toString(36).slice(2);
                     try {
@@ -7569,11 +7369,14 @@
                             '_weDiffSnap_' + snapToken,
                             JSON.stringify(snap)
                         );
-                    } catch (e) {}
+                    } catch (e) {
+                        $scope.localDraftError = 'The comparison could not be opened. Check browser storage settings.';
+                        return false;
+                    }
 
                     var params = {
-                        table: 'sp_widget',
-                        record_id: wSysId,
+                        table: table,
+                        record_id: recordId,
                         da_token: snapToken,
                     };
                     var rawUrl = _diffNavUrl(params);
@@ -7584,10 +7387,13 @@
                             angular.extend({}, params, { da_iframe: 'true' })
                         )
                     );
-                    $scope.versionDiffModal.label = 'Unsaved changes';
+                    $scope.versionDiffModal.label = label;
+                    $scope.versionDiffModal.expandedField = null;
+                    $scope.versionDiffModal.localDraft = null;
                     $scope.versionDiffModal.isUnsaved = true;
                     $scope.versionDiffModal.open = true;
-                };
+                    return true;
+                }
 
                 // Opens the diff page for an external-change alert on a pane.
                 // Shows the user's current (unsaved) editor state vs the server's updated saved state.
@@ -7729,7 +7535,7 @@
                         var currentBtn = $event.currentTarget;
                         var wrapper = currentBtn.closest ? currentBtn.closest('.we-alert-pill-wrapper') : null;
                         if (wrapper) {
-                            var firstAction = wrapper.querySelector('.we-alert-popover-actions button, .we-alert-popover-actions a');
+                            var firstAction = wrapper.querySelector('input[type="radio"]:checked, .we-alert-popover-actions button, .we-alert-popover-actions a');
                             if (firstAction) {
                                 $event.preventDefault();
                                 $event.stopPropagation();
@@ -7745,12 +7551,13 @@
                     if ($event.keyCode === 27) {
                         $event.preventDefault();
                         $event.stopPropagation();
-                        $scope.openDropdown = null;
                         var wrapper = $event.currentTarget.closest ? $event.currentTarget.closest('.we-alert-pill-wrapper') : null;
                         if (wrapper) {
                             var pillBtn = wrapper.querySelector('.we-alert-pill');
                             if (pillBtn) { pillBtn.focus(); }
                         }
+                        // Close after Angular has handled the pill's queued focus event.
+                        $scope.$evalAsync(function () { $scope.openDropdown = null; });
                     } else if ($event.keyCode === 9 && !$event.shiftKey && isLast) {
                         var currentWrapper = $event.currentTarget.closest ? $event.currentTarget.closest('.we-alert-pill-wrapper') : null;
                         $scope.openDropdown = null;
@@ -7773,8 +7580,8 @@
                             if (actions.length > 0 && actions[0] === $event.currentTarget) {
                                 $event.preventDefault();
                                 $event.stopPropagation();
-                                var pill = wrapperEl.querySelector('.we-alert-pill');
-                                if (pill) { pill.focus(); }
+                                var previousControl = wrapperEl.querySelector('input[type="radio"]:checked') || wrapperEl.querySelector('.we-alert-pill');
+                                if (previousControl) { previousControl.focus(); }
                             }
                         }
                     }
@@ -8220,6 +8027,456 @@
                     }
                 });
 
+                // Local drafts are recovery copies; only explicit Save actions write to ServiceNow.
+                var _draftPageId = Date.now() + '-' + Math.random().toString(36).slice(2);
+                var _draftTimer = null;
+                var _draftCaptureStopped = false;
+                var _draftRetentionLoaded = false;
+                var _draftJson = {};
+                $scope.localDrafts = [];
+                $scope.localDraftSelection = { draft: null };
+                $scope.localDraftError = null;
+                $scope.lastDraftSaveTime = null;
+                $scope.draftRecovery = { entries: [], records: [], busy: false };
+
+                function _validAutosaveInterval(value) {
+                    return Number.isSafeInteger(value) && value >= 0;
+                }
+
+                $scope.validAutosaveInterval = _validAutosaveInterval;
+
+                function _validDraftRetentionDays(value) {
+                    return Number.isSafeInteger(value) && value >= 1;
+                }
+
+                $scope.validDraftRetentionDays = _validDraftRetentionDays;
+
+                function _draftPrefix() {
+                    return 'we_local_draft:v1:' + $scope.currentUserId + ':' + SYS_ID + ':';
+                }
+
+                function _syncLocalDraftSelection() {
+                    var selected = $scope.localDraftSelection.draft;
+                    $scope.localDraftSelection.draft = $scope.localDrafts.find(function (draft) {
+                        return selected && draft.key === selected.key;
+                    }) || $scope.localDrafts[0] || null;
+                }
+
+                function _localDraftFieldSummary(draft) {
+                    return draft.entries.map(function (entry) {
+                        if (entry.type !== 'widget') {
+                            return { template: 'Angular template', provider: 'Angular provider', script_include: 'Script Include' }[entry.type];
+                        }
+                        var def = $scope.coreEditorDefs.find(function (d) { return d.field === entry.field; }) ||
+                            $scope.additionalWidgetFields.find(function (d) { return d.name === entry.field; });
+                        return (def && def.label) || { name: 'Name', id: 'ID', description: 'Description',
+                            controller_as: 'Controller alias', is_public: 'Public', roles: 'Roles', static: 'Static',
+                            option_schema: 'Option Schema', demo_data: 'Demo Data' }[entry.field] || entry.field.replace(/_/g, ' ');
+                    }).filter(function (label, index, labels) { return labels.indexOf(label) === index; }).join(' · ');
+                }
+
+                function _pruneLocalDrafts() {
+                    if (!_draftRetentionLoaded || !$scope.currentUserId || !_validDraftRetentionDays($scope.userPrefs.draftRetentionDays)) { return; }
+                    var prefix = 'we_local_draft:v1:' + $scope.currentUserId + ':';
+                    var cutoff = Date.now() - $scope.userPrefs.draftRetentionDays * 86400000;
+                    for (var i = localStorage.length - 1; i >= 0; i--) {
+                        var key = localStorage.key(i);
+                        // Keep this tab's working copy even if its content has not changed recently.
+                        if (key.indexOf(prefix) !== 0 || key === _draftPrefix() + _draftPageId) { continue; }
+                        var raw = localStorage.getItem(key);
+                        var draft;
+                        try { draft = JSON.parse(raw); }
+                        catch (e) { continue; }
+                        if (draft && draft.version === 1 && Number.isFinite(draft.updatedAt) &&
+                            Array.isArray(draft.entries) && draft.updatedAt <= cutoff && localStorage.getItem(key) === raw) {
+                            localStorage.removeItem(key);
+                        }
+                    }
+                    $scope.localDrafts = $scope.localDrafts.filter(function (draft) { return draft.updatedAt > cutoff; });
+                    _syncLocalDraftSelection();
+                }
+
+                function _canDraft() {
+                    return !!(!_draftCaptureStopped && SYS_ID && $scope.currentUserId && !$scope.loading && !$scope.loadError &&
+                        !$scope.isNewWidget && !$scope.isVersionView && $scope.canWriteWidget && !$scope.widget.deleted);
+                }
+
+                function _draftWidgetFields() {
+                    return ['name', 'id', 'description', 'controller_as', 'is_public', 'roles', 'static']
+                        .concat($scope.coreEditorDefs.map(function (d) { return d.field; }))
+                        .concat($scope.additionalWidgetFields.map(function (d) { return d.name; }));
+                }
+
+                function _draftPrettyJson(value) {
+                    try { return value.trim() ? JSON.stringify(JSON.parse(value), null, 4) : value; }
+                    catch (e) { return value; }
+                }
+
+                function _collectLocalDraft() {
+                    var entries = [];
+                    function add(type, id, key, field, base, value) {
+                        base = base == null ? '' : base;
+                        value = value == null ? '' : value;
+                        if (value !== base) {
+                            entries.push({ type: type, id: id, key: key, field: field,
+                                base: base, value: value });
+                        }
+                    }
+                    _draftWidgetFields().forEach(function (field) {
+                        var def = $scope.coreEditorDefs.find(function (d) { return d.field === field; });
+                        var extra = $scope.additionalWidgetFields.find(function (d) { return d.name === field; });
+                        var base = def ? originalValues[field] : originalHeader[field];
+                        var value = def && monacoEditors[def.key] ? monacoEditors[def.key].getValue() :
+                            field === 'roles' ? $scope.rolesList.join(',') : $scope.widget[field];
+                        if (extra) { value = _normaliseExtraWidgetFieldValue(extra, value); }
+                        add('widget', SYS_ID, def ? def.key : '', field, base, value);
+                    });
+                    extraPanes.forEach(function (pane) {
+                        if (pane.readOnly) { return; }
+                        var editor = monacoEditors[pane.key];
+                        add(pane.recordType, pane.sys_id || '', pane.key, 'content',
+                            pane.lastServerContent, editor ? editor.getValue() : pane.content);
+                        if (pane.hasIdInput) {
+                            add(pane.recordType, pane.sys_id || '', pane.key, 'recordId', pane._draftOriginalId, pane.recordId);
+                            if (pane.recordType === 'provider') {
+                                add('provider', pane.sys_id || '', pane.key, 'providerType', pane._draftOriginalType, pane.providerType);
+                            }
+                        }
+                    });
+                    Object.keys(_draftJson).forEach(function (field) {
+                        var json = _draftJson[field];
+                        add('widget', SYS_ID, '', field, json.base, json.value);
+                    });
+                    return { version: 1, updatedAt: Date.now(), entries: entries };
+                }
+
+                function _writeLocalDraft(cleanup) {
+                    if (!_canDraft() || (!cleanup && !$scope.userPrefs.autosaveInterval)) { return; }
+                    try {
+                        _pruneLocalDrafts();
+                        var key = _draftPrefix() + _draftPageId;
+                        // Saving with autosave off may clean up an existing draft, but must not create one.
+                        if (cleanup && !$scope.userPrefs.autosaveInterval && !localStorage.getItem(key)) { return; }
+                        var draft = _collectLocalDraft();
+                        if (!draft.entries.length) {
+                            localStorage.removeItem(key);
+                            $scope.lastDraftSaveTime = null;
+                        } else {
+                            var old = localStorage.getItem(key);
+                            var saved = old ? JSON.parse(old) : null;
+                            if (!saved || JSON.stringify(saved.entries) !== JSON.stringify(draft.entries)) {
+                                localStorage.setItem(key, JSON.stringify(draft));
+                                saved = draft;
+                            }
+                            $scope.lastDraftSaveTime = new Date(saved.updatedAt);
+                        }
+                        $scope.localDraftError = null;
+                    } catch (e) {
+                        $scope.localDraftError = 'Local drafts could not be saved. Check browser storage settings or available space.';
+                    }
+                }
+
+                function _discardPageDraft() {
+                    _draftCaptureStopped = true;
+                    try {
+                        localStorage.removeItem(_draftPrefix() + _draftPageId);
+                        $scope.lastDraftSaveTime = null;
+                    }
+                    catch (e) { $scope.localDraftError = 'The local draft could not be discarded.'; }
+                }
+
+                function _clearWidgetDrafts() {
+                    if (!SYS_ID || !$scope.currentUserId) { return; }
+                    try {
+                        for (var i = localStorage.length - 1; i >= 0; i--) {
+                            var key = localStorage.key(i);
+                            if (key.indexOf(_draftPrefix()) === 0) { localStorage.removeItem(key); }
+                        }
+                        $scope.localDrafts = [];
+                        $scope.localDraftSelection.draft = null;
+                        $scope.lastDraftSaveTime = null;
+                        if ($scope.versionDiffModal.localDraft) { $scope.closeVersionDiffModal(); }
+                        $scope.draftRecovery = { entries: [], records: [], busy: false };
+                        $scope.localDraftError = null;
+                    } catch (e) { $scope.localDraftError = 'The widget was saved, but its local drafts could not be removed.'; }
+                }
+
+                function _validLocalDraft(draft) {
+                    return draft && draft.version === 1 && Number.isFinite(draft.updatedAt) &&
+                        Array.isArray(draft.entries) && draft.entries.length && draft.entries.every(function (entry) {
+                            if (!entry || typeof entry.key !== 'string' || !/^[\w-]*$/.test(entry.key) ||
+                                typeof entry.id !== 'string' || (entry.id && !/^[a-f0-9]{32}$/.test(entry.id)) ||
+                                !['string', 'boolean'].includes(typeof entry.value) ||
+                                !['string', 'boolean'].includes(typeof entry.base)) { return false; }
+                            if (entry.type === 'widget') {
+                                var booleanField = ['is_public', 'static'].includes(entry.field) ||
+                                    $scope.additionalWidgetFields.some(function (d) { return d.name === entry.field && d.type === 'boolean'; });
+                                var valueType = booleanField ? 'boolean' : 'string';
+                                return typeof entry.value === valueType && typeof entry.base === valueType &&
+                                    entry.id === SYS_ID && _draftWidgetFields().concat(['option_schema', 'demo_data']).includes(entry.field);
+                            }
+                            return typeof entry.value === 'string' && typeof entry.base === 'string' &&
+                                ['template', 'provider', 'script_include'].includes(entry.type) &&
+                                (entry.type !== 'script_include' || !!entry.id) &&
+                                (entry.field === 'content' || (entry.type !== 'script_include' && entry.field === 'recordId') ||
+                                    (entry.type === 'provider' && entry.field === 'providerType'));
+                        });
+                }
+
+                function _findLocalDrafts(onLoad) {
+                    try {
+                        _pruneLocalDrafts();
+                        if (!_canDraft()) { return; }
+                        $scope.localDrafts = [];
+                        for (var i = 0; i < localStorage.length; i++) {
+                            var key = localStorage.key(i);
+                            if (key.indexOf(_draftPrefix()) !== 0 || key === _draftPrefix() + _draftPageId) { continue; }
+                            try {
+                                var raw = localStorage.getItem(key);
+                                var draft = JSON.parse(raw);
+                                if (_validLocalDraft(draft)) {
+                                    $scope.localDrafts.push({ key: key, raw: raw, updatedAt: draft.updatedAt,
+                                        entries: draft.entries, fieldsLabel: _localDraftFieldSummary(draft) });
+                                }
+                            } catch (e) { /* Leave unreadable drafts untouched. */ }
+                        }
+                        $scope.localDrafts.sort(function (a, b) { return b.updatedAt - a.updatedAt; });
+                        _syncLocalDraftSelection();
+                        if (onLoad) {
+                            var previousKey;
+                            try {
+                                previousKey = sessionStorage.getItem(_draftPrefix());
+                                sessionStorage.setItem(_draftPrefix(), _draftPrefix() + _draftPageId);
+                            } catch (e) { /* Manual recovery still works when tab storage is unavailable. */ }
+                            if (document.wasDiscarded === true) {
+                                var previousDraft = $scope.localDrafts.find(function (draft) { return draft.key === previousKey; });
+                                if (!previousKey && $scope.localDrafts.length === 1) { previousDraft = $scope.localDrafts[0]; }
+                                if (previousDraft) { return $scope.restoreLocalDraft(previousDraft); }
+                            }
+                        }
+                    } catch (e) {
+                        $scope.localDraftError = 'Local drafts are unavailable. Check browser storage settings.';
+                    }
+                }
+
+                function _loadDraftRecovery(draft) {
+                    if (!_canDraft() || $scope.draftRecovery.busy) { return $q.reject('Draft recovery is unavailable.'); }
+                    $scope.draftRecovery.busy = true;
+                    $scope.localDraftError = null;
+                    var requests = Object.create(null);
+                    function request(action, params) {
+                        var key = action + ':' + (params.sys_id || '');
+                        if (!requests[key]) {
+                            requests[key] = ajax(action, params).then(function (data) {
+                                if (!data.success) { throw new Error(data.error || 'Could not load saved content.'); }
+                                return data;
+                            });
+                        }
+                        return requests[key];
+                    }
+                    return request('getWidget', { sys_id: SYS_ID }).then(function (data) {
+                        if (data.widget.canWrite === false || data.widget.sys_policy || data.widget.deleted) {
+                            throw new Error('This widget is no longer editable.');
+                        }
+                        return $q.all(draft.entries.map(function (entry) {
+                            var load;
+                            if (entry.type === 'widget') {
+                                var action = entry.field === 'option_schema' ? 'getOptionSchema' : entry.field === 'demo_data' ? 'getDemoData' : 'getWidget';
+                                load = request(action, { sys_id: SYS_ID }).then(function (data) {
+                                    if (action !== 'getWidget') { return { value: _draftPrettyJson(data[entry.field] || '') }; }
+                                    return { value: data.widget[entry.field], record: data.widget };
+                                });
+                            } else if (!entry.id) {
+                                load = $q.resolve({ value: '', record: {} });
+                            } else if (entry.type === 'script_include') {
+                                load = request('getScriptInclude', { sys_id: entry.id }).then(function (data) {
+                                    return { value: data.si.script, record: data.si };
+                                });
+                            } else {
+                                load = request(entry.type === 'template' ? 'getTemplates' : 'getProviders', { sys_id: SYS_ID }).then(function (data) {
+                                    var record = (data.templates || data.providers).find(function (r) { return r.sys_id === entry.id; });
+                                    if (!record) { throw new Error('A draft record was deleted, unlinked or is no longer accessible.'); }
+                                    var field = entry.field === 'content' ? (entry.type === 'template' ? 'template' : 'script') :
+                                        entry.field === 'recordId' ? (entry.type === 'template' ? 'id' : 'name') : 'type';
+                                    return { value: record[field], record: record };
+                                });
+                            }
+                            return load.then(function (loaded) {
+                                if (loaded.record && loaded.record.readOnly) { throw new Error('A draft record is no longer editable.'); }
+                                var current = loaded.value == null ? '' : loaded.value;
+                                if (typeof entry.value === 'boolean') { current = current === true || current === 'true' || current === '1'; }
+                                if (entry.field === 'roles') { current = parseRoles(current).join(','); }
+                                return Object.assign({}, entry, { current: current, record: loaded.record,
+                                    conflict: current !== entry.base && current !== entry.value });
+                            });
+                        }));
+                    }).then(function (entries) {
+                        $scope.draftRecovery = { draft: draft, entries: entries, records: [], busy: false,
+                            conflict: entries.some(function (entry) { return entry.conflict; }) };
+                        return entries;
+                    }).catch(function (err) {
+                        $scope.draftRecovery.busy = false;
+                        $scope.localDraftError = err.message || String(err);
+                        throw err;
+                    });
+                }
+
+                function _openLocalDraftCompare() {
+                    var records = [];
+                    $scope.draftRecovery.entries.forEach(function (entry) {
+                        var key = entry.type + ':' + (entry.id || entry.key);
+                        var record = records.find(function (r) { return r.key === key; });
+                        if (!record) {
+                            var name = entry.type === 'widget' ? $scope.widget.name :
+                                (entry.record && (entry.record.name || entry.record.id)) ||
+                                { template: 'Angular template', provider: 'Angular provider', script_include: 'Script Include' }[entry.type];
+                            record = {
+                                key: key, id: entry.id,
+                                table: { widget: 'sp_widget', template: 'sp_ng_template',
+                                    provider: 'sp_angular_provider', script_include: 'sys_script_include' }[entry.type],
+                                label: name,
+                                snapshot: { _unsaved: true },
+                            };
+                            if (!entry.id) { record.snapshot._newRecord = true; }
+                            records.push(record);
+                        }
+                        var field = entry.field;
+                        if (entry.type !== 'widget') {
+                            field = field === 'content' ? (entry.type === 'template' ? 'template' : 'script') :
+                                field === 'recordId' ? (entry.type === 'template' ? 'id' : 'name') : 'type';
+                        }
+                        record.snapshot[field] = entry.value;
+                        if (!entry.id && entry.field === 'recordId' && entry.value) { record.label = entry.value; }
+                        if (field === 'is_public') { record.snapshot.public = entry.value; }
+                    });
+                    $scope.draftRecovery.records = records;
+                    $scope.draftRecovery.selectedRecord = records[0];
+                    $scope.openDropdown = null;
+                    $scope.showLocalDraftCompare();
+                }
+
+                $scope.showLocalDraftCompare = function () {
+                    var record = $scope.draftRecovery.selectedRecord;
+                    if (record && _openUnsavedSnapshotDiff(record.table, record.id, record.snapshot, 'Local draft')) {
+                        $scope.versionDiffModal.localDraft = $scope.draftRecovery.draft;
+                    }
+                };
+
+                $scope.compareLocalDraft = function (draft) {
+                    return _loadDraftRecovery(draft).then(_openLocalDraftCompare).catch(function () {});
+                };
+
+                function _removeRecoveredDraft(draft) {
+                    // Another tab may have updated this draft since the recovery prompt appeared.
+                    if (localStorage.getItem(draft.key) === draft.raw) { localStorage.removeItem(draft.key); }
+                    $scope.localDrafts = $scope.localDrafts.filter(function (d) { return d !== draft; });
+                    _syncLocalDraftSelection();
+                }
+
+                $scope.discardLocalDraft = function (draft) {
+                    try {
+                        _removeRecoveredDraft(draft);
+                        $scope.openDropdown = null;
+                        if ($scope.versionDiffModal.localDraft === draft) { $scope.closeVersionDiffModal(); }
+                    } catch (e) { $scope.localDraftError = 'The local draft could not be discarded.'; }
+                };
+
+                $scope.restoreLocalDraft = function (draft, reviewed) {
+                    return _loadDraftRecovery(draft).then(function (entries) {
+                        if (!reviewed && ($scope.draftRecovery.conflict || hasUnsavedChanges())) {
+                            _openLocalDraftCompare();
+                            return;
+                        }
+                        var panes = Object.create(null);
+                        entries.forEach(function (entry) {
+                            if (entry.type === 'widget') {
+                                if (entry.field === 'option_schema' || entry.field === 'demo_data') {
+                                    _draftJson[entry.field] = { base: entry.current, value: entry.value };
+                                } else {
+                                    var def = $scope.coreEditorDefs.find(function (d) { return d.field === entry.field; });
+                                    $scope.widget[entry.field] = entry.value;
+                                    if (entry.field === 'roles') { $scope.rolesList = parseRoles(entry.value); }
+                                    if (def) {
+                                        originalValues[entry.field] = lastServerValues[entry.field] = entry.current;
+                                        if (monacoEditors[def.key]) {
+                                            // Monaco callbacks use $apply; run them outside this digest.
+                                            $timeout(function () { monacoEditors[def.key].setValue(entry.value); }, 0, false);
+                                        }
+                                    } else { originalHeader[entry.field] = entry.current; }
+                                }
+                            } else {
+                                var pane = panes[entry.key] || extraPanes.find(function (p) {
+                                    return p.recordType === entry.type && (entry.id ? p.sys_id === entry.id : p.key === entry.key);
+                                });
+                                if (!pane) {
+                                    pane = entry.type === 'template' ? makeTemplatePaneObj(entry.record) :
+                                        entry.type === 'provider' ? makeProviderPaneObj(entry.record) : makeScriptIncludePaneObj(entry.record);
+                                    pane._draftOriginalId = entry.record.id || entry.record.name || '';
+                                    pane._draftOriginalType = entry.record.type || '';
+                                    pane.lastServerContent = entry.record.template || entry.record.script || '';
+                                    openExtraPane(pane);
+                                }
+                                panes[entry.key] = pane;
+                                pane[entry.field] = entry.value;
+                                if (entry.field === 'content') {
+                                    pane.lastServerContent = entry.current;
+                                    pane.dirty = entry.value !== entry.current;
+                                    if (monacoEditors[pane.key]) {
+                                        $timeout(function () { monacoEditors[pane.key].setValue(entry.value); }, 0, false);
+                                    }
+                                } else {
+                                    pane.idDirty = true;
+                                    if (entry.field === 'recordId') {
+                                        pane._draftOriginalId = entry.current;
+                                        $scope.onPaneIdChange(pane);
+                                    } else { pane._draftOriginalType = entry.current; }
+                                }
+                            }
+                        });
+                        $scope.openDropdown = null;
+                        $timeout(function () {
+                            try {
+                                // Explicit recovery also keeps a copy when automatic capture is off.
+                                var copy = _collectLocalDraft();
+                                if (copy.entries.length) {
+                                    localStorage.setItem(_draftPrefix() + _draftPageId, JSON.stringify(copy));
+                                    $scope.lastDraftSaveTime = new Date(copy.updatedAt);
+                                }
+                                _removeRecoveredDraft(draft);
+                            } catch (e) { $scope.localDraftError = 'The recovered draft could not be copied. Its original recovery copy has been retained.'; }
+                        }, 0);
+                        if ($scope.versionDiffModal.localDraft === draft) { $scope.closeVersionDiffModal(); }
+                    }).catch(function () {});
+                };
+
+                $scope.$watch('userPrefs.autosaveInterval', function (seconds) {
+                    if (_draftTimer) { $timeout.cancel(_draftTimer); }
+                    if (!_validAutosaveInterval(seconds) || !seconds) { return; }
+                    var dueAt = Date.now() + seconds * 1000;
+                    function tick() {
+                        if (Date.now() >= dueAt) {
+                            _writeLocalDraft();
+                            dueAt = Date.now() + seconds * 1000;
+                        }
+                        _draftTimer = $timeout(tick, Math.min(dueAt - Date.now(), 2147483647));
+                    }
+                    _draftTimer = $timeout(tick, Math.min(seconds * 1000, 2147483647));
+                });
+                function _flushLocalDraft() {
+                    _writeLocalDraft();
+                    $scope.$applyAsync();
+                }
+                function _draftVisibilityChanged() {
+                    if (document.visibilityState === 'hidden') { _flushLocalDraft(); }
+                }
+                document.addEventListener('visibilitychange', _draftVisibilityChanged);
+                window.addEventListener('pagehide', _flushLocalDraft);
+                $scope.$on('$destroy', function () {
+                    if (_draftTimer) { $timeout.cancel(_draftTimer); }
+                    document.removeEventListener('visibilitychange', _draftVisibilityChanged);
+                    window.removeEventListener('pagehide', _flushLocalDraft);
+                });
+
                 // Unsaved changes guard
                 function hasUnsavedChanges() {
                     if (
@@ -8246,6 +8503,7 @@
                         });
 
                     return (
+                        Object.keys(_draftJson).some(function (field) { return _draftJson[field].value !== _draftJson[field].base; }) ||
                         hasHeaderChanges ||
                         $scope.visibleItems.some(function (item) {
                             return (
@@ -8475,6 +8733,8 @@
                             $scope.userPrefs.insertSpaceBeforeFuncParen,
                         tabSize: $scope.userPrefs.tabSize,
                         remBase: $scope.userPrefs.remBase,
+                        autosaveInterval: $scope.userPrefs.autosaveInterval,
+                        draftRetentionDays: $scope.userPrefs.draftRetentionDays,
                         ctrlSSaveActiveOnly:
                             $scope.userPrefs.ctrlSSaveActiveOnly,
                         flashOnEditorOpen:
@@ -8516,6 +8776,14 @@
                 }
 
                 $scope.saveUserPrefsModal = function () {
+                    if (!_validAutosaveInterval($scope.userPrefsEdit.autosaveInterval) ||
+                        !_validDraftRetentionDays($scope.userPrefsEdit.draftRetentionDays)) {
+                        return;
+                    }
+                    $scope.userPrefs.autosaveInterval = $scope.userPrefsEdit.autosaveInterval;
+                    $scope.userPrefs.draftRetentionDays = $scope.userPrefsEdit.draftRetentionDays;
+                    _draftRetentionLoaded = true;
+                    _findLocalDrafts();
                     // Apply order and visibility from modal back to coreEditorDefs
                     var orderedDefs = [];
                     $scope.userPrefsEdit.editors.forEach(function (e) {
@@ -8809,6 +9077,8 @@
                     $scope.userPrefsEdit.linkedEditing = true;
                     $scope.userPrefsEdit.insertSpaceBeforeFuncParen = false;
                     $scope.userPrefsEdit.tabSize = 4;
+                    $scope.userPrefsEdit.autosaveInterval = 30;
+                    $scope.userPrefsEdit.draftRetentionDays = 7;
                     $scope.userPrefsEdit.ctrlSSaveActiveOnly = true;
                     $scope.userPrefsEdit.flashOnEditorOpen = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
                     $scope.userPrefsEdit.showOpenInVsCode = true;
@@ -8903,6 +9173,12 @@
                         $scope.userPrefsEdit.contextMenuMode = p.contextMenuMode;
                     } else if (p.hasOwnProperty('contextMenuMode')) {
                         $scope.userPrefsEdit.contextMenuMode = 'enhanced';
+                    }
+                    if (_validAutosaveInterval(p.autosaveInterval)) {
+                        $scope.userPrefsEdit.autosaveInterval = p.autosaveInterval;
+                    }
+                    if (_validDraftRetentionDays(p.draftRetentionDays)) {
+                        $scope.userPrefsEdit.draftRetentionDays = p.draftRetentionDays;
                     }
                     if (p.hasOwnProperty('fontSize')) {
                         var fs = parseInt(p.fontSize, 10);
@@ -9219,6 +9495,9 @@
                                         4
                                     );
                             } catch (e) {}
+                            var pendingDraft = _draftJson.option_schema;
+                            _draftJson.option_schema = { base: value, value: pendingDraft ? pendingDraft.value : value };
+                            value = _draftJson.option_schema.value;
                             _ensureMonacoThemes();
                             _ensureWeJsonLanguage();
                             function _create() {
@@ -9247,6 +9526,7 @@
                                 function _validateJson() {
                                     var content =
                                         _optionSchemaEditor.getValue();
+                                    _draftJson.option_schema.value = content;
                                     var invalid = !!content.trim();
                                     if (invalid) {
                                         try {
@@ -9300,13 +9580,19 @@
                         }
                         $scope.widget.option_schema_has_value =
                             _hasProperJsonObjectValue(newValue);
-                        $scope.closeOptionSchemaModal();
+                        if (_draftJson.option_schema) { _draftJson.option_schema.base = newValue; }
+                        _writeLocalDraft(true);
+                        if (_optionSchemaEditor && _optionSchemaEditor.getValue() === newValue) {
+                            $scope.closeOptionSchemaModal();
+                        }
                     });
                 };
 
                 $scope.closeOptionSchemaModal = function () {
                     _closeModal(function () {
                         $scope.showOptionSchemaModal = false;
+                        delete _draftJson.option_schema;
+                        _writeLocalDraft(true);
                         if (_optionSchemaEditor) {
                             try {
                                 _optionSchemaEditor.dispose();
@@ -9377,6 +9663,9 @@
                                         4
                                     );
                             } catch (e) {}
+                            var pendingDraft = _draftJson.demo_data;
+                            _draftJson.demo_data = { base: value, value: pendingDraft ? pendingDraft.value : value };
+                            value = _draftJson.demo_data.value;
                             _ensureMonacoThemes();
                             _ensureWeJsonLanguage();
                             function _create() {
@@ -9405,6 +9694,7 @@
                                 function _validateJson() {
                                     var content =
                                         _demoDataEditor.getValue();
+                                    _draftJson.demo_data.value = content;
                                     var invalid = !!content.trim();
                                     if (invalid) {
                                         try {
@@ -9458,13 +9748,19 @@
                         }
                         $scope.widget.demo_data_has_value =
                             _hasProperJsonObjectValue(newValue);
-                        $scope.closeDemoDataModal();
+                        if (_draftJson.demo_data) { _draftJson.demo_data.base = newValue; }
+                        _writeLocalDraft(true);
+                        if (_demoDataEditor && _demoDataEditor.getValue() === newValue) {
+                            $scope.closeDemoDataModal();
+                        }
                     });
                 };
 
                 $scope.closeDemoDataModal = function () {
                     _closeModal(function () {
                         $scope.showDemoDataModal = false;
+                        delete _draftJson.demo_data;
+                        _writeLocalDraft(true);
                         if (_demoDataEditor) {
                             try {
                                 _demoDataEditor.dispose();

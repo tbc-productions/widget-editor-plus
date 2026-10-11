@@ -2036,20 +2036,290 @@ Registers as window.MONACO_LANGUAGE_HTML.`,
         return found;
     }
 
-    // Lazily creates a standalone AngularJS $parse (no app bootstrap needed) for expression syntax validation.
+    function _normaliseAngularName(name) {
+        return name.toLowerCase().replace(/^(data|x)[:_-]/, '').replace(/[:_]/g, '-');
+    }
+
+    // Keep decoded character boundaries mapped to the original template for diagnostic ranges.
+    function _templateValue(raw, start, attribute) {
+        var value = '', offsets = [], cursor = 0;
+        var entities = /&(?:#x[\\da-f]+;?|#\\d+;?|[a-z][a-z\\d]*;?)/ig;
+        var match;
+        function append(text, from, entity) {
+            for (var i = 0; i < text.length; i++) {
+                offsets.push(start + from + (entity ? 0 : i));
+            }
+            value += text;
+        }
+        while ((match = entities.exec(raw))) {
+            append(raw.slice(cursor, match.index), cursor, false);
+            var decoded = match[0];
+            if (!(attribute && /^&[a-z]/i.test(decoded) && !/;$/.test(decoded) && raw.charAt(entities.lastIndex) === '=')) {
+                var element = document.createElement(attribute ? 'template' : 'textarea');
+                element.innerHTML = attribute ? '<i title="' + decoded + '"></i>' : decoded;
+                decoded = attribute ? element.content.firstChild.getAttribute('title') : element.value;
+            }
+            append(decoded, match.index, decoded !== match[0]);
+            cursor = entities.lastIndex;
+        }
+        append(raw.slice(cursor), cursor, false);
+        offsets.push(start + raw.length);
+        return { value: value, offsets: offsets, start: start, length: raw.length };
+    }
+
+    function _templateExpression(value, from, to, forcedError) {
+        return {
+            expr: value.value.slice(from, to),
+            exprStart: value.offsets[from],
+            length: value.offsets[to] - value.offsets[from],
+            forcedError: forcedError
+        };
+    }
+
+    function _templateInterpolations(value, out) {
+        var re = /\\{\\{([\\s\\S]*?)\\}\\}/g, match;
+        while ((match = re.exec(value.value))) {
+            out.push(_templateExpression(value, match.index + 2, re.lastIndex - 2));
+        }
+    }
+
+    // Read actual attributes and text nodes; comments and non-bindable subtrees are inactive.
+    function _scanAngularTemplate(text) {
+        var tags = [], interpolations = [], stack = [], cursor = 0;
+        var tokens = /\\{\\{[\\s\\S]*?\\}\\}|<!--[\\s\\S]*?(?:-->|$)|<![^>]*>|<(\\/?)([a-z][\\w:-]*)((?:[^"'<>]|"[^"]*(?:"|$)|'[^']*(?:'|$))*)(?:>|$)/ig;
+        var match;
+        function disabled() { return stack.length && stack[stack.length - 1].disabled; }
+        function textBindings(from, to) {
+            if (!disabled()) {
+                _templateInterpolations(_templateValue(text.slice(from, to), from, false), interpolations);
+            }
+        }
+        while ((match = tokens.exec(text))) {
+            if (match[0].slice(0, 2) === '{{') { continue; }
+            textBindings(cursor, match.index);
+            cursor = tokens.lastIndex;
+            if (!match[2]) { continue; }
+            var tagName = match[2].toLowerCase();
+            if (match[1]) {
+                for (var i = stack.length - 1; i >= 0; i--) {
+                    if (stack[i].name === tagName) { stack.length = i; break; }
+                }
+                continue;
+            }
+            var attrs = [], attr;
+            var attrRe = /\\s+([^\\s"'<>/=]+)(?:\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>\`]+)))?/gd;
+            while ((attr = attrRe.exec(match[3]))) {
+                var group = attr[2] !== undefined ? 2 : attr[3] !== undefined ? 3 : attr[4] !== undefined ? 4 : 0;
+                var value = group ? _templateValue(attr[group], match.index + 1 + match[2].length + attr.indices[group][0], true) : null;
+                attrs.push({ name: _normaliseAngularName(attr[1]), value: value });
+            }
+            var inactive = disabled() || attrs.some(function (a) { return a.name === 'ng-non-bindable'; });
+            if (!inactive) {
+                tags.push({ tagName: _normaliseAngularName(tagName), attrs: attrs });
+                attrs.forEach(function (a) { if (a.value) { _templateInterpolations(a.value, interpolations); } });
+            }
+            if (/^(script|style|textarea|title)$/.test(tagName) && !(tagName === 'script' && attrs.some(function (a) {
+                return a.name === 'type' && a.value && a.value.value === 'text/ng-template';
+            }))) {
+                var closeRe = new RegExp('</' + tagName + '\\\\s*>', 'ig');
+                closeRe.lastIndex = cursor;
+                var close = closeRe.exec(text);
+                var end = close ? close.index : text.length;
+                if (!inactive && tagName !== 'script') { textBindings(cursor, end); }
+                cursor = tokens.lastIndex = close ? closeRe.lastIndex : text.length;
+            } else if (!VOID_ELEMENTS[tagName] && !/\\/\\s*>$/.test(match[0])) {
+                stack.push({ name: tagName, disabled: inactive });
+            }
+        }
+        textBindings(cursor, text.length);
+        return { tags: tags, interpolations: interpolations };
+    }
+
     function _getAngularParse() {
         if (_angularParse) {
             return _angularParse;
         }
+        if (!window.angular || !window.angular.injector) {
+            return null;
+        }
         try {
-            if (typeof angular !== 'undefined' && angular.injector) {
-                _angularParse = angular.injector(['ng']).get('$parse');
-            }
-        } catch (e) {}
+            var angular = window.angular;
+            // Widget-defined filters aren't registered in this bare injector, so make $filter a no-op for unknown names.
+            angular
+                .module('weExprLintPermissiveFilters', [])
+                .config([
+                    '$provide',
+                    function ($provide) {
+                        $provide.decorator('$filter', [
+                            '$delegate',
+                            function ($delegate) {
+                                return function (name) {
+                                    try {
+                                        return $delegate(name);
+                                    } catch (e) {
+                                        return angular.identity;
+                                    }
+                                };
+                            },
+                        ]);
+                    },
+                ]);
+            _angularParse = angular
+                .injector(['ng', 'weExprLintPermissiveFilters'])
+                .get('$parse');
+        } catch (e) {
+            _angularParse = null;
+        }
         return _angularParse;
     }
 
-    // Validates one data-<prop> attribute's value against its binding type; returns an error message, or null if valid.
+    // Validates via AngularJS's own $parse, not a hand-rolled grammar.
+
+    // Mirrors Angular's own ngRepeat split regex, since the full attribute value isn't valid expression syntax for $parse.
+    var NG_REPEAT_REGEXP =
+        /^\\s*([\\s\\S]+?)\\s+in\\s+([\\s\\S]+?)(?:\\s+as\\s+([\\s\\S]+?))?(?:\\s+track\\s+by\\s+([\\s\\S]+?))?\\s*$/d;
+
+    // Mirrors Angular's ngOptions split regex.
+    var NG_OPTIONS_REGEXP =
+        /^\\s*([\\s\\S]+?)(?:\\s+as\\s+([\\s\\S]+?))?(?:\\s+group\\s+by\\s+([\\s\\S]+?))?(?:\\s+disable\\s+when\\s+([\\s\\S]+?))?\\s+for\\s+(?:([\\$\\w][\\$\\w]*)|(?:\\(\\s*([\\$\\w][\\$\\w]*)\\s*,\\s*([\\$\\w][\\$\\w]*)\\s*\\)))\\s+in\\s+([\\s\\S]+?)(?:\\s+track\\s+by\\s+([\\s\\S]+?))?\\s*$/d;
+
+    // ngPattern accepts a scope expression or a bare regex literal (e.g. /^\\d+$/); validate literal shapes as RegExp, not via $parse.
+    var NG_PATTERN_REGEXP = /^\\/(.*)\\/([a-zA-Z]*)$/;
+
+    // Attributes whose value is a plain identifier/string, not an Angular expression.
+    var NG_NON_EXPRESSION_ATTRS = {
+        'ng-app': true,
+        'ng-controller': true,
+        'ng-non-bindable': true,
+        'ng-message': true,
+        'ng-message-default': true,
+        'ng-messages-multiple': true,
+        'ng-transclude': true,
+        'ng-transclude-slot': true,
+        'ng-csp': true,
+        'ng-jq': true,
+        'ng-cloak': true,
+        'ng-strict-di': true,
+        'ng-repeat-end': true,
+        'ng-switch-default': true,
+        'ng-view': true,
+        'ng-pluralize': true,
+        // ng-list's value is a literal delimiter string, not an expression.
+        'ng-list': true,
+        // ng-switch-when compares its value as a raw (optionally comma-separated) string.
+        'ng-switch-when': true,
+        // ng-switch-when-separator is a literal separator string, not an expression.
+        'ng-switch-when-separator': true,
+    };
+
+    // Attributes holding interpolated text (e.g. {{ }} in a URL), not a standalone expression.
+    var NG_INTERPOLATE_ONLY_ATTRS = {
+        'ng-href': true,
+        'ng-src': true,
+        'ng-srcset': true,
+        'ng-bind-template': true,
+        'ng-messages-include': true,
+        'ng-form': true,
+    };
+
+    // Attribute grammars are applied only after HTML scanning and entity decoding.
+    function _extractNgExpressions(text) {
+        var scanned = _scanAngularTemplate(text);
+        var out = scanned.interpolations;
+        scanned.tags.forEach(function (tag) {
+            tag.attrs.forEach(function (attr) {
+                var attrName = attr.name;
+                if (!attr.value || attrName.indexOf('ng-') !== 0 ||
+                    NG_NON_EXPRESSION_ATTRS[attrName] || NG_INTERPOLATE_ONLY_ATTRS[attrName] ||
+                    attrName.indexOf('ng-attr-') === 0) { return; }
+                var value = attr.value.value;
+                if (attrName === 'ng-repeat' || attrName === 'ng-repeat-start') {
+                    var parts = NG_REPEAT_REGEXP.exec(value);
+                    if (!parts) {
+                        out.push(_templateExpression(attr.value, 0, value.length,
+                            'Expected "item in collection" (optionally "as alias" / "track by expr")'));
+                        return;
+                    }
+                    out.push(_templateExpression(attr.value, parts.indices[2][0], parts.indices[2][1]));
+                    if (parts[4]) {
+                        out.push(_templateExpression(attr.value, parts.indices[4][0], parts.indices[4][1]));
+                    }
+                    return;
+                }
+
+                if (attrName === 'ng-options') {
+                    var optParts = NG_OPTIONS_REGEXP.exec(value);
+                    if (!optParts) {
+                        out.push(_templateExpression(attr.value, 0, value.length,
+                            'Expected "label for value in collection" (optionally "select as label", "group by group", "disable when disable", "for (key, value) in", "track by expr")'));
+                        return;
+                    }
+                    // Groups 1,2,3,4,8,9 are Angular expressions; 5/6/7 are bare loop variable names.
+                    [1, 2, 3, 4, 8, 9].forEach(function (g) {
+                        if (optParts[g] === undefined) {
+                            return;
+                        }
+                        out.push(_templateExpression(attr.value, optParts.indices[g][0], optParts.indices[g][1]));
+                    });
+                    return;
+                }
+
+                if (attrName === 'ng-pattern') {
+                    var patParts = NG_PATTERN_REGEXP.exec(value);
+                    if (patParts) {
+                        try {
+                            new RegExp(patParts[1], patParts[2]);
+                        } catch (e) {
+                            out.push(_templateExpression(attr.value, 0, value.length,
+                                e.message || 'Invalid regular expression'));
+                        }
+                        return;
+                    }
+                }
+
+                out.push(_templateExpression(attr.value, 0, value.length));
+            });
+        });
+
+        return out;
+    }
+
+    function _computeNgExpressionMarkers(model, monaco) {
+        var $parse = _getAngularParse();
+        if (!$parse) {
+            return [];
+        }
+        var expressions = _extractNgExpressions(model.getValue());
+        var markers = [];
+        expressions.forEach(function (item) {
+            var message = item.forcedError;
+            if (!message && item.expr && item.expr.trim() !== '') {
+                try {
+                    $parse(item.expr);
+                } catch (e) {
+                    message = e.message || 'Invalid Angular expression';
+                }
+            }
+            if (!message) {
+                return;
+            }
+            var startPos = model.getPositionAt(item.exprStart);
+            var endPos = model.getPositionAt(
+                item.exprStart + item.length
+            );
+            markers.push({
+                startLineNumber: startPos.lineNumber,
+                startColumn: startPos.column,
+                endLineNumber: endPos.lineNumber,
+                endColumn: endPos.column,
+                message: 'AngularJS: ' + message,
+                severity: monaco.MarkerSeverity.Error,
+            });
+        });
+        return markers;
+    }
+
+    // Validates one directive attribute's value against its binding type; returns an error message, or null if valid.
     function _validateBindingValue(prop, value, $parse) {
         if (value === '') {
             return null;
@@ -2078,7 +2348,7 @@ Registers as window.MONACO_LANGUAGE_HTML.`,
         return null;
     }
 
-    // Scans all tags for active directives and validates their data-<prop> attribute values, appending to markers.
+    // Validate bindings only on active directives, using the same HTML context and parser as expressions.
     function _validateProviderBindings(model, text, markers, monacoRef) {
         if (!Object.keys(_providerDirectives).length) {
             return;
@@ -2087,57 +2357,24 @@ Registers as window.MONACO_LANGUAGE_HTML.`,
         if (!$parse) {
             return;
         }
-        var tagRe = /<([\\w:-]+)((?:[^"'>]|"[^"]*"|'[^']*')*?)\\/?>/g;
-        var tagMatch;
-        while ((tagMatch = tagRe.exec(text)) !== null) {
-            var tagName = tagMatch[1].toLowerCase();
-            var attrsText = tagMatch[2];
-            var attrOffsetBase = tagMatch.index + 1 + tagMatch[1].length;
-
-            var occurrences = [];
-            var attrValRe = /([\\w-]+)\\s*=\\s*("([^"]*)"|'([^']*)')/g;
-            var am;
-            while ((am = attrValRe.exec(attrsText)) !== null) {
-                var value = am[3] !== undefined ? am[3] : am[4];
-                var valueStart = attrOffsetBase + am.index + am[0].indexOf(am[2]) + 1;
-                occurrences.push({
-                    rawName: am[1],
-                    kebabName: am[1].toLowerCase().replace(/^data-/, ''),
-                    value: value,
-                    valueStart: valueStart
-                });
-            }
-
+        _scanAngularTemplate(text).tags.forEach(function (tag) {
             var activeDirectives = _getActiveDirectivesForTag({
-                tagName: tagName,
-                attrNames: _extractAttrNames(attrsText)
+                tagName: tag.tagName,
+                attrNames: tag.attrs.map(function (attr) { return attr.name; })
             });
-            if (!activeDirectives.length) {
-                continue;
-            }
-
-            occurrences.forEach(function (occ) {
-                if (occ.rawName.toLowerCase().indexOf('data-') !== 0) {
-                    return;
-                }
+            if (!activeDirectives.length) { return; }
+            tag.attrs.forEach(function (attr) {
+                if (!attr.value) { return; }
                 var match = null;
                 activeDirectives.some(function (dir) {
-                    var p = dir.scopeProps.filter(function (sp) { return sp.kebabAttrName === occ.kebabName; })[0];
-                    if (p) {
-                        match = p;
-                        return true;
-                    }
-                    return false;
+                    match = dir.scopeProps.filter(function (prop) { return prop.kebabAttrName === attr.name; })[0];
+                    return !!match;
                 });
-                if (!match) {
-                    return;
-                }
-                var errorMsg = _validateBindingValue(match, occ.value, $parse);
-                if (!errorMsg) {
-                    return;
-                }
-                var sPos = model.getPositionAt(occ.valueStart);
-                var ePos = model.getPositionAt(occ.valueStart + occ.value.length);
+                if (!match) { return; }
+                var errorMsg = _validateBindingValue(match, attr.value.value, $parse);
+                if (!errorMsg) { return; }
+                var sPos = model.getPositionAt(attr.value.start);
+                var ePos = model.getPositionAt(attr.value.start + attr.value.length);
                 markers.push({
                     severity: monacoRef.MarkerSeverity.Error,
                     message: errorMsg,
@@ -2147,7 +2384,7 @@ Registers as window.MONACO_LANGUAGE_HTML.`,
                     endColumn: ePos.column
                 });
             });
-        }
+        });
     }
 
     // Debounced tag-stack walk reporting mismatched/unclosed tags via monaco.editor.setModelMarkers('LINT_MARKER').
@@ -3385,6 +3622,7 @@ Registers as window.MONACO_LANGUAGE_HTML.`,
 
         /** Rebuilds Angular Provider directive scope-property completions/hover/validation. @param {Array} providers - {sys_id, name, type, script}[] */
         setProviders: setProviders,
+        getExpressionMarkers: _computeNgExpressionMarkers,
 
         /**
          * Enable or disable HTML tag validation (mismatched/unclosed tag diagnostics).
