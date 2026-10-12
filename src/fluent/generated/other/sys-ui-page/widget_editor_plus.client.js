@@ -5455,6 +5455,7 @@
                     _captureAdditionalHeaderValues(payload);
                     Object.keys(originalHeader).forEach(function (field) {
                         var current = field === 'roles' ? $scope.rolesList.join(',') : $scope.widget[field];
+                        current = typeof originalHeader[field] === 'boolean' ? !!current : current || (field === 'controller_as' ? 'c' : '');
                         $scope.headerDirty[field] = current !== originalHeader[field];
                     });
                     _clearWidgetDrafts();
