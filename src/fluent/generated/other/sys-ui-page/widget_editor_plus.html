@@ -3511,7 +3511,7 @@
 
                         <button class="btn btn-default we-pane-save-btn" ng-if="(item.dirty || item.idDirty) &amp;&amp; !isVersionView &amp;&amp; canWriteWidget &amp;&amp; (!isNewWidget || item.hasIdInput) &amp;&amp; !item.readOnly" ng-click="savePaneField(item)" title="Save {{item.label}}">Save</button>
                         <span class="we-pane-saved-text" ng-if="item.savedAt &amp;&amp; !item.dirty &amp;&amp; !item.idDirty" style="margin-left: 0.3125rem;" ng-bind="getPaneSavedLabel(item)"></span>
-                        <span class="we-pane-save-error" ng-if="item.saveError &amp;&amp; !item.dirty" title="{{item.saveError}}">
+                        <span class="we-pane-save-error" ng-if="item.saveError" title="{{item.saveError}}">
                             <span class="icon-warning-circle"></span> {{item.saveError}}
                         </span>
                         <span class="we-pane-viewers" ng-if="item.viewingUsers &amp;&amp; item.viewingUsers.length > 1" title="Viewing: {{viewersTitle(item)}}" aria-label="{{item.viewingUsers.length - 1}} other user(s) viewing">

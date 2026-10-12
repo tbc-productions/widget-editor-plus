@@ -10,7 +10,10 @@
     function visit(nodes) {
         nodes.forEach(function (node) {
             var children = node.children || [];
-            if (children.length) configs[node.table] = children.map(function (child) { return child.table; });
+            if (children.length)
+                configs[node.table] = children.map(function (child) {
+                    return child.table;
+                });
             visit(children);
         });
     }
@@ -20,9 +23,12 @@
         if (!configs[table]) configs[table] = [];
     });
     Object.keys(configs).forEach(function (table) {
-        if (!/^[a-z][a-z0-9_]*$/i.test(table) || configs[table].some(function (child) {
-            return !/^[a-z][a-z0-9_]*$/i.test(child);
-        })) {
+        if (
+            !/^[a-z][a-z0-9_]*$/i.test(table) ||
+            configs[table].some(function (child) {
+                return !/^[a-z][a-z0-9_]*$/i.test(child);
+            })
+        ) {
             throw new Error('Cannot migrate Markdown configuration for ' + table);
         }
     });

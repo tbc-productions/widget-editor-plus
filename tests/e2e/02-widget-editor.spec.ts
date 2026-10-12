@@ -1,29 +1,18 @@
 import { test, expect, Page } from '@playwright/test';
+import { expectSavedWidgetField, getTestWidgetSysId } from '../helpers/widget-save';
+import { instanceAuthHeaders } from '../helpers/instance-auth';
 
 const EDITOR_PAGE_SYS_ID = '8b2e70458373fe1070b8b5dfeeaad35e';
 const DIFF_PAGE_SYS_ID = '51ec3d258363b61070b8b5dfeeaad36b';
 
-async function getTestWidgetSysId(request: any, baseURL: string): Promise<string> {
-  const username = process.env.SN_USERNAME;
-  const password = process.env.SN_PASSWORD;
-  if (!username || !password) return '';
-
-  const authHeader = 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64');
-  const res = await request.get(`${baseURL}/api/now/table/sp_widget?sysparm_query=id=e2e_test_widget&sysparm_fields=sys_id`, {
-    headers: { Authorization: authHeader }
-  });
-  const data = await res.json();
-  return data.result?.[0]?.sys_id || '';
-}
 
 async function getTestWidgetVersionSysId(request: any, baseURL: string, widgetSysId: string): Promise<string> {
   const username = process.env.SN_USERNAME;
   const password = process.env.SN_PASSWORD;
   if (!username || !password || !widgetSysId) return '';
 
-  const authHeader = 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64');
   const res = await request.get(`${baseURL}/api/now/table/sys_update_version?sysparm_query=name=sp_widget_${widgetSysId}&sysparm_fields=sys_id&sysparm_limit=1`, {
-    headers: { Authorization: authHeader }
+    headers: instanceAuthHeaders()
   });
   const data = await res.json();
   return data.result?.[0]?.sys_id || '';
@@ -38,27 +27,20 @@ function getScopedLocator(page: Page, selector: string) {
   return iframeLocator.or(topLocator);
 }
 
-/**
- * Specifically targets the Client Controller editor textarea (index 2: HTML=0, CSS=1, Client=2, Server=3)
- */
-async function getClientControllerTextArea(page: Page) {
-  const paneHeader = getScopedLocator(page, '.we-pane-header, div')
-    .filter({ hasText: /Client controller/i })
-    .first();
-
-  if (await paneHeader.isVisible({ timeout: 5000 }).catch(() => false)) {
-    const parentContainer = paneHeader.locator('xpath=..');
-    const textarea = parentContainer.locator('.monaco-editor textarea').first();
-    if (await textarea.isVisible().catch(() => false)) {
-      return textarea;
-    }
-  }
-
-  // Index 2 corresponds to Client Controller (HTML = 0, CSS = 1, Client Controller = 2, Server Script = 3)
-  return getScopedLocator(page, '.monaco-editor textarea').nth(2);
-}
-
 test.describe('Widget Editor+ Monaco Sub-Editors & Capabilities', () => {
+
+  test('should list, search and open an existing widget from the picker', async ({ page, baseURL }) => {
+    await page.goto(`${baseURL}/ui_page.do?sys_id=${EDITOR_PAGE_SYS_ID}`);
+    const search = getScopedLocator(page, 'input[ng-model="picker.search"]');
+    await expect(search).toBeVisible();
+    const items = getScopedLocator(page, '.we-picker-col-main [ng-click="openWidget(w)"]');
+    await expect(items.first()).toBeVisible();
+    await search.fill('e2e_test_widget');
+    await expect(items).toHaveCount(1);
+    await expect(items.first()).toContainText('[E2E] Widget Editor+ Test Widget');
+    await items.first().click();
+    await expect(getScopedLocator(page, '#pane-template .monaco-editor')).toBeVisible();
+  });
 
   test('should fully load Widget Editor+ page without critical errors', async ({ page, request, baseURL }) => {
     const widgetSysId = await getTestWidgetSysId(request, baseURL || '');
@@ -85,14 +67,17 @@ test.describe('Widget Editor+ Monaco Sub-Editors & Capabilities', () => {
     const monacoInput = getScopedLocator(page, '.monaco-editor textarea').first();
     await expect(monacoInput).toBeVisible({ timeout: 30000 });
     await monacoInput.focus();
-    await page.keyboard.type('\n// E2E Test Save Version Check\n');
+    const marker = `<!-- E2E save ${Date.now()} -->`;
+    await page.keyboard.press('ControlOrMeta+End');
+    await page.keyboard.type(`\n${marker}\n`);
 
     // Locate Save button in header
-    const saveButton = getScopedLocator(page, 'button').filter({ hasText: /save/i }).first();
+    const saveButton = getScopedLocator(page, 'button[ng-click="saveAll()"]:visible').first();
     await expect(saveButton).toBeVisible({ timeout: 20000 });
 
     // Click Save button
     await saveButton.click();
+    await expectSavedWidgetField(request, baseURL || '', widgetSysId, 'template', marker);
 
     // Verify no critical alert occurs after saving
     const criticalAlert = getScopedLocator(page, '.we-alert-bar--critical').first();
@@ -112,7 +97,7 @@ test.describe('Widget Editor+ Monaco Sub-Editors & Capabilities', () => {
     await page.keyboard.type('\n// E2E Diff UI Page Validation Change\n');
 
     // 2. Save the edit to ensure an update version entry exists
-    const saveButton = getScopedLocator(page, 'button').filter({ hasText: /save/i }).first();
+    const saveButton = getScopedLocator(page, 'button[ng-click="saveAll()"]:visible').first();
     await expect(saveButton).toBeVisible({ timeout: 20000 });
     await saveButton.click();
 
@@ -142,8 +127,8 @@ test.describe('Widget Editor+ Monaco Sub-Editors & Capabilities', () => {
     await page.goto(`${baseURL}/ui_page.do?sys_id=${EDITOR_PAGE_SYS_ID}&widget_id=${widgetSysId}`);
     await page.waitForLoadState('domcontentloaded');
 
-    // Target the Client Controller editor specifically (index 2: HTML=0, CSS=1, Client=2, Server=3)
-    const clientEditorInput = await getClientControllerTextArea(page);
+    // Target the Client Controller pane regardless of pane order.
+    const clientEditorInput = getScopedLocator(page, '#pane-client_script .monaco-editor textarea');
 
     await expect(clientEditorInput).toBeVisible({ timeout: 30000 });
     await clientEditorInput.focus();
@@ -174,22 +159,26 @@ test.describe('Widget Editor+ Monaco Sub-Editors & Capabilities', () => {
     // straight from the language service backing the popup tests the real behavior
     // deterministically, while still exercising the same worker + extra-lib pipeline.
     await expect(async () => {
-      const suggestionNames: string[] = await clientEditorInput.evaluate(async () => {
+      const result = await clientEditorInput.evaluate(async () => {
         const w = window as any;
         const model = w.monaco.editor
           .getModels()
           .find((m: any) => m.getLanguageId() === 'javascript' && m.getValue().indexOf('clientController') !== -1);
-        if (!model) {
-          return [];
-        }
+        if (!model) throw new Error('The client JavaScript model is missing.');
         const text = model.getValue();
         const offset = text.indexOf('g_form.') + 'g_form.'.length;
         const worker = await w.monaco.languages.typescript.getJavaScriptWorker();
         const client = await worker(model.uri);
         const info = await client.getCompletionsAtPosition(model.uri.toString(), offset);
-        return info && info.entries ? info.entries.map((e: any) => e.name) : [];
+        const libs = w.monaco.languages.typescript.javascriptDefaults.getExtraLibs();
+        return {
+          names: info && info.entries ? info.entries.map((e: any) => e.name) : [],
+          modelUri: model.uri.toString(),
+          models: w.monaco.editor.getModels().map((m: any) => ({ id: m.id, language: m.getLanguageId(), hasGForm: m.getValue().includes('g_form.') })),
+          libraries: Object.keys(libs).filter(key => libs[key].content).map(key => ({ key, hasGForm: libs[key].content.includes('declare var g_form') })),
+        };
       });
-      expect(suggestionNames).toContain('addDecoration');
+      expect(result.names, JSON.stringify(result)).toContain('addDecoration');
     }).toPass({ timeout: 30000, intervals: [250, 500, 1000] });
   });
 

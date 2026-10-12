@@ -18,10 +18,7 @@
                 .trim();
             var p = bg.split(/[\s,]+/).map(Number);
             if (p.length >= 3) {
-                document.documentElement.classList.toggle(
-                    'we-light',
-                    (p[0] + p[1] + p[2]) / 3 >= 128
-                );
+                document.documentElement.classList.toggle('we-light', (p[0] + p[1] + p[2]) / 3 >= 128);
             }
         } catch (e) {}
     })();
@@ -30,49 +27,34 @@
         return;
     }
 
-    var AJAX_SCRIPT =
-        (window.WE_CONFIG && window.WE_CONFIG.ajaxScript) || 'WidgetEditorAjax';
+    var AJAX_SCRIPT = (window.WE_CONFIG && window.WE_CONFIG.ajaxScript) || 'WidgetEditorAjax';
     var WE_UI_SCRIPTS = (window.WE_CONFIG && window.WE_CONFIG.uiScripts) || {};
-    var DIFF_PAGE_SYS_ID =
-        (window.WE_CONFIG && window.WE_CONFIG.diffPageSysId) || '';
+    var DIFF_PAGE_SYS_ID = (window.WE_CONFIG && window.WE_CONFIG.diffPageSysId) || '';
 
     /** Builds a UI page nav URL; uses sys_id-based nav when known so it survives page renames. */
     function _diffNavUrl(params) {
         var qs = Object.keys(params)
             .map(function (k) {
-                return (
-                    encodeURIComponent(k) + '=' + encodeURIComponent(params[k])
-                );
+                return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
             })
             .join('&');
         if (DIFF_PAGE_SYS_ID) {
-            return (
-                '/nav_to.do?uri=' +
-                encodeURIComponent(
-                    'ui_page.do?sys_id=' + DIFF_PAGE_SYS_ID + '&' + qs
-                )
-            );
+            return '/nav_to.do?uri=' + encodeURIComponent('ui_page.do?sys_id=' + DIFF_PAGE_SYS_ID + '&' + qs);
         }
-        return (
-            '/' + (WE_UI_SCRIPTS.diffPage || 'widget_editor_diff') + '.do?' + qs
-        );
+        return '/' + (WE_UI_SCRIPTS.diffPage || 'widget_editor_diff') + '.do?' + qs;
     }
 
     /** Build a same-frame / iframe URL for the diff page. */
     function _diffIframeUrl(params) {
         var qs = Object.keys(params)
             .map(function (k) {
-                return (
-                    encodeURIComponent(k) + '=' + encodeURIComponent(params[k])
-                );
+                return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
             })
             .join('&');
         if (DIFF_PAGE_SYS_ID) {
             return '/ui_page.do?sys_id=' + DIFF_PAGE_SYS_ID + '&' + qs;
         }
-        return (
-            '/' + (WE_UI_SCRIPTS.diffPage || 'widget_editor_diff') + '.do?' + qs
-        );
+        return '/' + (WE_UI_SCRIPTS.diffPage || 'widget_editor_diff') + '.do?' + qs;
     }
 
     angular
@@ -83,7 +65,7 @@
             '$sce',
             function ($sce) {
                 function escapeRegex(s) {
-                    return s.replace(/[-/\^$*+?.()|[]{}]/g, '\$&');
+                    return s.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
                 }
                 function escapeHtml(s) {
                     if (!s) {
@@ -136,10 +118,7 @@
                             element.on('mousedown', function (event) {
                                 event.preventDefault();
                                 scope.$apply(function () {
-                                    scope.startSplitterDrag(
-                                        parseInt(val, 10),
-                                        event.originalEvent || event
-                                    );
+                                    scope.startSplitterDrag(parseInt(val, 10), event.originalEvent || event);
                                 });
                             });
                         });
@@ -183,11 +162,7 @@
                         });
 
                         element[0].addEventListener('dragover', function (e) {
-                            if (
-                                !_activeDragKey ||
-                                _activeDragKey === key ||
-                                !key
-                            ) {
+                            if (!_activeDragKey || _activeDragKey === key || !key) {
                                 return;
                             }
                             e.preventDefault();
@@ -258,12 +233,7 @@
                     // No isolated scope, so rolesList must be mutated in-place — replacing it would shadow the controller-scope array on the ng-if child scope.
                     link: function (scope, el) {
                         $timeout(function () {
-                            var $jq =
-                                typeof $j !== 'undefined'
-                                    ? $j
-                                    : typeof jQuery !== 'undefined'
-                                      ? jQuery
-                                      : null;
+                            var $jq = typeof $j !== 'undefined' ? $j : typeof jQuery !== 'undefined' ? jQuery : null;
                             if (!$jq || !$jq.fn || !$jq.fn.select2) {
                                 return;
                             }
@@ -297,25 +267,16 @@
                                     _queryTimer = setTimeout(function () {
                                         var current = $el.select2('val') || [];
                                         var ga = new GlideAjax(AJAX_SCRIPT);
-                                        ga.addParam(
-                                            'sysparm_name',
-                                            'searchRoles'
-                                        );
+                                        ga.addParam('sysparm_name', 'searchRoles');
                                         ga.addParam('term', query.term || '');
                                         ga.getXML(function (response) {
                                             try {
                                                 var answer =
-                                                    response.responseXML.documentElement.getAttribute(
-                                                        'answer'
-                                                    );
+                                                    response.responseXML.documentElement.getAttribute('answer');
                                                 var data = JSON.parse(answer);
                                                 var results = (data.roles || [])
                                                     .filter(function (r) {
-                                                        return (
-                                                            current.indexOf(
-                                                                r
-                                                            ) === -1
-                                                        );
+                                                        return current.indexOf(r) === -1;
                                                     })
                                                     .map(function (r) {
                                                         return {
@@ -355,9 +316,7 @@
                             });
 
                             $el.on('change', function () {
-                                var vals = Array.isArray($el.select2('val'))
-                                    ? $el.select2('val').filter(Boolean)
-                                    : [];
+                                var vals = Array.isArray($el.select2('val')) ? $el.select2('val').filter(Boolean) : [];
                                 ownerScope.$apply(function () {
                                     // Mutate in-place so the controller-scope array reference is updated,
                                     // not shadowed by a new array on the ng-if child scope.
@@ -391,22 +350,12 @@
                             return;
                         }
 
-                        var startX,
-                            startY,
-                            startTx,
-                            startTy,
-                            naturalLeft,
-                            naturalTop,
-                            dragging;
+                        var startX, startY, startTx, startTy, naturalLeft, naturalTop, dragging;
 
                         /* Parse the current translate() values from the modal's inline transform style. */
                         function getTranslate(el) {
-                            var m = (el.style.transform || '').match(
-                                /translate\(([-\d.]+)px,\s*([-\d.]+)px\)/
-                            );
-                            return m
-                                ? [parseFloat(m[1]), parseFloat(m[2])]
-                                : [0, 0];
+                            var m = (el.style.transform || '').match(/translate\(([-\d.]+)px,\s*([-\d.]+)px\)/);
+                            return m ? [parseFloat(m[1]), parseFloat(m[2])] : [0, 0];
                         }
 
                         function onMouseMove(e) {
@@ -419,41 +368,21 @@
                             /* Clamp so the modal stays fully within the viewport. */
                             var mW = modal.offsetWidth;
                             var mH = modal.offsetHeight;
-                            dx = Math.max(
-                                -naturalLeft,
-                                Math.min(
-                                    window.innerWidth - mW - naturalLeft,
-                                    dx
-                                )
-                            );
-                            dy = Math.max(
-                                -naturalTop,
-                                Math.min(
-                                    window.innerHeight - mH - naturalTop,
-                                    dy
-                                )
-                            );
+                            dx = Math.max(-naturalLeft, Math.min(window.innerWidth - mW - naturalLeft, dx));
+                            dy = Math.max(-naturalTop, Math.min(window.innerHeight - mH - naturalTop, dy));
 
-                            modal.style.transform =
-                                'translate(' + dx + 'px, ' + dy + 'px)';
+                            modal.style.transform = 'translate(' + dx + 'px, ' + dy + 'px)';
                         }
 
                         function onMouseUp() {
                             dragging = false;
                             modal.classList.remove('we-modal--dragging');
-                            document.removeEventListener(
-                                'mousemove',
-                                onMouseMove
-                            );
+                            document.removeEventListener('mousemove', onMouseMove);
                             document.removeEventListener('mouseup', onMouseUp);
                         }
 
                         element[0].addEventListener('mousedown', function (e) {
-                            if (
-                                e.target.closest(
-                                    'button, a, input, select, [role="button"]'
-                                )
-                            ) {
+                            if (e.target.closest('button, a, input, select, [role="button"]')) {
                                 return;
                             }
                             e.preventDefault();
@@ -473,10 +402,7 @@
                         });
 
                         scope.$on('$destroy', function () {
-                            document.removeEventListener(
-                                'mousemove',
-                                onMouseMove
-                            );
+                            document.removeEventListener('mousemove', onMouseMove);
                             document.removeEventListener('mouseup', onMouseUp);
                         });
                     },
@@ -490,25 +416,28 @@
                 // Ensure Bootstrap tooltips for elements inside any <dialog> are placed inside that <dialog> in the Top Layer
                 if (window.jQuery && !window._weDialogTooltipHookInstalled) {
                     window._weDialogTooltipHookInstalled = true;
-                    window.jQuery(document).on('show.bs.tooltip.weDialog', function (e) {
-                        var target = e.target;
-                        var dlg = target && target.closest && target.closest('dialog');
-                        if (dlg) {
-                            var tip = window.jQuery(target).data('bs.tooltip');
-                            if (tip) {
-                                tip.options.container = dlg;
+                    window
+                        .jQuery(document)
+                        .on('show.bs.tooltip.weDialog', function (e) {
+                            var target = e.target;
+                            var dlg = target && target.closest && target.closest('dialog');
+                            if (dlg) {
+                                var tip = window.jQuery(target).data('bs.tooltip');
+                                if (tip) {
+                                    tip.options.container = dlg;
+                                }
                             }
-                        }
-                    }).on('inserted.bs.tooltip.weDialog', function (e) {
-                        var target = e.target;
-                        var dlg = target && target.closest && target.closest('dialog');
-                        if (dlg) {
-                            var tip = window.jQuery(target).data('bs.tooltip');
-                            if (tip && tip.$tip && tip.$tip[0] && tip.$tip[0].parentElement !== dlg) {
-                                dlg.appendChild(tip.$tip[0]);
+                        })
+                        .on('inserted.bs.tooltip.weDialog', function (e) {
+                            var target = e.target;
+                            var dlg = target && target.closest && target.closest('dialog');
+                            if (dlg) {
+                                var tip = window.jQuery(target).data('bs.tooltip');
+                                if (tip && tip.$tip && tip.$tip[0] && tip.$tip[0].parentElement !== dlg) {
+                                    dlg.appendChild(tip.$tip[0]);
+                                }
                             }
-                        }
-                    });
+                        });
                 }
 
                 return {
@@ -604,10 +533,7 @@
                 return {
                     restrict: 'A',
                     link: function (scope, element, attrs) {
-                        var container =
-                            element[0].closest('dialog') ||
-                            element[0].closest('.we-modal') ||
-                            'body';
+                        var container = element[0].closest('dialog') || element[0].closest('.we-modal') || 'body';
                         element.tooltip({
                             container: container,
                             placement: 'bottom',
@@ -694,19 +620,16 @@
                             }
                             positionThenShow();
                         });
-                        scope.$watch(
-                            'openCompactSubmenu',
-                            function (newVal, oldVal) {
-                                if (newVal === oldVal) {
-                                    return;
-                                }
-                                // The compact menu panel is already visible; just re-check the
-                                // vertical position after the submenu height change, no hide needed.
-                                $timeout(function () {
-                                    reposition();
-                                }, 0);
+                        scope.$watch('openCompactSubmenu', function (newVal, oldVal) {
+                            if (newVal === oldVal) {
+                                return;
                             }
-                        );
+                            // The compact menu panel is already visible; just re-check the
+                            // vertical position after the submenu height change, no hide needed.
+                            $timeout(function () {
+                                reposition();
+                            }, 0);
+                        });
                     },
                 };
             },
@@ -736,7 +659,13 @@
                             var trigger = el.parentElement && el.parentElement.querySelector('.btn');
                             var triggerRect = trigger
                                 ? trigger.getBoundingClientRect()
-                                : { bottom: 0, left: 0, right: 0, top: 0, width: 0 };
+                                : {
+                                      bottom: 0,
+                                      left: 0,
+                                      right: 0,
+                                      top: 0,
+                                      width: 0,
+                                  };
 
                             var vw = window.innerWidth;
                             var vh = window.innerHeight;
@@ -758,10 +687,10 @@
 
                             // Clamp to viewport edges
                             left = Math.max(0, Math.min(left, vw - rect.width));
-                            top  = Math.max(0, Math.min(top,  vh - rect.height));
+                            top = Math.max(0, Math.min(top, vh - rect.height));
 
                             el.style.position = 'fixed';
-                            el.style.top  = top  + 'px';
+                            el.style.top = top + 'px';
                             el.style.left = left + 'px';
                         }
 
@@ -776,7 +705,9 @@
                         positionThenShow();
 
                         scope.$watch('openDropdown', function (newVal, oldVal) {
-                            if (newVal === oldVal) { return; }
+                            if (newVal === oldVal) {
+                                return;
+                            }
                             positionThenShow();
                         });
                     },
@@ -799,7 +730,9 @@
                         function check() {
                             var typeRow = el.querySelector('.we-pane-subheader-type-row');
                             var nameRow = el.querySelector('.we-pane-subheader-name-row');
-                            if (!typeRow || !nameRow) { return; }
+                            if (!typeRow || !nameRow) {
+                                return;
+                            }
 
                             // Temporarily restores display so layout can be re-measured for a switch back.
                             var wasOverflow = !!(scope.item && scope.item.subheaderTypeOverflow);
@@ -827,12 +760,16 @@
                         $timeout(check, 50);
 
                         if (window.ResizeObserver) {
-                            ro = new ResizeObserver(function () { check(); });
+                            ro = new ResizeObserver(function () {
+                                check();
+                            });
                             ro.observe(el);
                         }
 
                         scope.$on('$destroy', function () {
-                            if (ro) { ro.disconnect(); }
+                            if (ro) {
+                                ro.disconnect();
+                            }
                         });
                     },
                 };
@@ -852,7 +789,9 @@
                                 return;
                             }
                             scope.$apply(function () {
-                                scope.$eval(attrs.weFileChange, { $file: file });
+                                scope.$eval(attrs.weFileChange, {
+                                    $file: file,
+                                });
                             });
                         });
                     },
@@ -893,25 +832,13 @@
             '$q',
             '$injector',
             '$window',
-            function (
-                $scope,
-                $http,
-                $timeout,
-                $interval,
-                $q,
-                $injector,
-                $window
-            ) {
+            function ($scope, $http, $timeout, $interval, $q, $injector, $window) {
                 // The Angular 'amb' service only exists on full form pages; falls back to window.amb.getClient().
                 var amb = null;
                 try {
                     if ($injector.has('amb')) amb = $injector.get('amb');
                 } catch (e) {}
-                if (
-                    !amb &&
-                    window.amb &&
-                    typeof window.amb.getClient === 'function'
-                ) {
+                if (!amb && window.amb && typeof window.amb.getClient === 'function') {
                     try {
                         amb = window.amb.getClient();
                     } catch (e) {}
@@ -922,22 +849,13 @@
                 var _weConfig = window.WE_CONFIG || {};
                 var SYS_ID = _weConfig.sys_id || _params.get('widget_id') || '';
                 var VERSION_ID = _weConfig.version_id || _params.get('version_id') || '';
-                var IS_NEW =
-                    _weConfig.is_new !== undefined
-                        ? !!_weConfig.is_new
-                        : _params.get('new') === '1';
+                var IS_NEW = _weConfig.is_new !== undefined ? !!_weConfig.is_new : _params.get('new') === '1';
                 var APP_TITLE = 'Widget Editor+';
-                var SITE_TITLE =
-                    (window.WE_CONFIG && window.WE_CONFIG.siteTitle) ||
-                    'ServiceNow';
+                var SITE_TITLE = (window.WE_CONFIG && window.WE_CONFIG.siteTitle) || 'ServiceNow';
 
                 var _titleTimer = null;
                 $scope.$watch('widget.name', function (name) {
-                    var _title =
-                        (name ? name + ' - ' : '') +
-                        APP_TITLE +
-                        ' - ' +
-                        SITE_TITLE;
+                    var _title = (name ? name + ' - ' : '') + APP_TITLE + ' - ' + SITE_TITLE;
                     document.title = _title;
                     if (_titleTimer) {
                         $timeout.cancel(_titleTimer);
@@ -955,31 +873,25 @@
                             title: APP_TITLE,
                         });
                     }
-                    $scope.headerDirty.name =
-                        (name || '') !== originalHeader.name;
+                    $scope.headerDirty.name = (name || '') !== originalHeader.name;
                 });
                 $scope.$watch('widget.id', function (v) {
                     $scope.headerDirty.id = (v || '') !== originalHeader.id;
                 });
                 $scope.$watch('widget.description', function (v) {
-                    $scope.headerDirty.description =
-                        (v || '') !== originalHeader.description;
+                    $scope.headerDirty.description = (v || '') !== originalHeader.description;
                 });
                 $scope.$watch('widget.controller_as', function (v) {
-                    $scope.headerDirty.controller_as =
-                        (v || 'c') !== originalHeader.controller_as;
+                    $scope.headerDirty.controller_as = (v || 'c') !== originalHeader.controller_as;
                 });
                 $scope.$watch('widget.is_public', function (v) {
-                    $scope.headerDirty.is_public =
-                        !!v !== originalHeader.is_public;
+                    $scope.headerDirty.is_public = !!v !== originalHeader.is_public;
                 });
                 $scope.$watch('widget.static', function (v) {
-                    $scope.headerDirty.static =
-                        !!v !== originalHeader.static;
+                    $scope.headerDirty.static = !!v !== originalHeader.static;
                 });
                 $scope.$watchCollection('rolesList', function (v) {
-                    $scope.headerDirty.roles =
-                        (v || []).join(',') !== originalHeader.roles;
+                    $scope.headerDirty.roles = (v || []).join(',') !== originalHeader.roles;
                 });
                 $scope.$watch(
                     function () {
@@ -988,28 +900,17 @@
                                 return (
                                     fieldDef.name +
                                     '=' +
-                                    _normaliseExtraWidgetFieldValue(
-                                        fieldDef,
-                                        $scope.widget[fieldDef.name]
-                                    )
+                                    _normaliseExtraWidgetFieldValue(fieldDef, $scope.widget[fieldDef.name])
                                 );
                             })
                             .join('|');
                     },
                     function () {
-                        ($scope.additionalWidgetFields || []).forEach(
-                            function (fieldDef) {
-                                $scope.headerDirty[fieldDef.name] =
-                                    _normaliseExtraWidgetFieldValue(
-                                        fieldDef,
-                                        $scope.widget[fieldDef.name]
-                                    ) !==
-                                    _normaliseExtraWidgetFieldValue(
-                                        fieldDef,
-                                        originalHeader[fieldDef.name]
-                                    );
-                            }
-                        );
+                        ($scope.additionalWidgetFields || []).forEach(function (fieldDef) {
+                            $scope.headerDirty[fieldDef.name] =
+                                _normaliseExtraWidgetFieldValue(fieldDef, $scope.widget[fieldDef.name]) !==
+                                _normaliseExtraWidgetFieldValue(fieldDef, originalHeader[fieldDef.name]);
+                        });
                     }
                 );
 
@@ -1017,11 +918,9 @@
                 $scope.loading = true;
                 $scope.loadingWidgetName = '';
                 if (SYS_ID) {
-                    ajax('getWidgetName', { sys_id: SYS_ID }).then(
-                        function (data) {
-                            $scope.loadingWidgetName = data.name || '';
-                        }
-                    );
+                    ajax('getWidgetName', { sys_id: SYS_ID }).then(function (data) {
+                        $scope.loadingWidgetName = data.name || '';
+                    });
                 }
                 $scope.loadError = null;
                 $scope.widget = {};
@@ -1029,18 +928,23 @@
 
                 // SN Utils "Edit in VS Code" integration
                 function checkSnUtilsInstalled() {
-                    var installed = (
+                    var installed =
                         typeof window.snusettings !== 'undefined' ||
                         typeof window.SNUtilsInject !== 'undefined' ||
                         typeof window.snuPostRequestToScriptSync === 'function' ||
                         !!document.querySelector('snu-presence') ||
-                        !!document.querySelector('script[src*="snutils"], script[src*="lfabkiipmidkmhplochgpbaeekjjfbch"]')
-                    );
+                        !!document.querySelector(
+                            'script[src*="snutils"], script[src*="lfabkiipmidkmhplochgpbaeekjjfbch"]'
+                        );
                     if (!installed) {
                         return false;
                     }
                     // Only hide if snusettings has been injected AND vsscriptsync is explicitly false
-                    if (typeof window.snusettings !== 'undefined' && window.snusettings && window.snusettings.vsscriptsync === false) {
+                    if (
+                        typeof window.snusettings !== 'undefined' &&
+                        window.snusettings &&
+                        window.snusettings.vsscriptsync === false
+                    ) {
                         return false;
                     }
                     return true;
@@ -1062,7 +966,9 @@
                 var origSnuSettingsAdded = window.snuSettingsAdded;
                 window.snuSettingsAdded = function () {
                     if (typeof origSnuSettingsAdded === 'function') {
-                        try { origSnuSettingsAdded.apply(this, arguments); } catch (e) {}
+                        try {
+                            origSnuSettingsAdded.apply(this, arguments);
+                        } catch (e) {}
                     }
                     updateSnUtilsState();
                 };
@@ -1086,30 +992,53 @@
                 }, 10000);
 
                 $scope.c = $scope.c || {};
-                $scope.$watch('widget', function (w) {
-                    if (!w) return;
-                    $scope.c.readOnly = !$scope.canWriteWidget;
-                    $scope.data = $scope.data || {};
-                    $scope.data.title = w.name || '';
-                    $scope.data.sys_id = w.sys_id || '';
-                    var scopeVal = typeof w.sys_scope === 'object' && w.sys_scope ? w.sys_scope.value || 'global' : (w.sys_scope || 'global');
-                    var scopeDisp = typeof w.sys_scope === 'object' && w.sys_scope ? w.sys_scope.displayValue || scopeVal : scopeVal;
-                    $scope.data.f = {
-                        _fields: {
-                            name: { value: w.name || '', displayValue: w.name || '' },
-                            id: { value: w.id || '', displayValue: w.id || '' },
-                            template: { value: w.template || '' },
-                            css: { value: w.css || '' },
-                            client_script: { value: w.client_script || '' },
-                            script: { value: w.script || '' },
-                            link: { value: w.link || '' },
-                            option_schema: { value: w.option_schema || '' },
-                            demo_data: { value: w.demo_data || '' },
-                            sys_scope: { value: scopeVal, displayValue: scopeDisp },
-                            data_table: { value: 'sp_widget', displayValue: 'Widget', choices: [] },
-                        },
-                    };
-                }, true);
+                $scope.$watch(
+                    'widget',
+                    function (w) {
+                        if (!w) return;
+                        $scope.c.readOnly = !$scope.canWriteWidget;
+                        $scope.data = $scope.data || {};
+                        $scope.data.title = w.name || '';
+                        $scope.data.sys_id = w.sys_id || '';
+                        var scopeVal =
+                            typeof w.sys_scope === 'object' && w.sys_scope
+                                ? w.sys_scope.value || 'global'
+                                : w.sys_scope || 'global';
+                        var scopeDisp =
+                            typeof w.sys_scope === 'object' && w.sys_scope
+                                ? w.sys_scope.displayValue || scopeVal
+                                : scopeVal;
+                        $scope.data.f = {
+                            _fields: {
+                                name: {
+                                    value: w.name || '',
+                                    displayValue: w.name || '',
+                                },
+                                id: {
+                                    value: w.id || '',
+                                    displayValue: w.id || '',
+                                },
+                                template: { value: w.template || '' },
+                                css: { value: w.css || '' },
+                                client_script: { value: w.client_script || '' },
+                                script: { value: w.script || '' },
+                                link: { value: w.link || '' },
+                                option_schema: { value: w.option_schema || '' },
+                                demo_data: { value: w.demo_data || '' },
+                                sys_scope: {
+                                    value: scopeVal,
+                                    displayValue: scopeDisp,
+                                },
+                                data_table: {
+                                    value: 'sp_widget',
+                                    displayValue: 'Widget',
+                                    choices: [],
+                                },
+                            },
+                        };
+                    },
+                    true
+                );
 
                 $scope.editInVsCode = function () {
                     if (!$scope.widget || !$scope.widget.sys_id) return;
@@ -1121,9 +1050,7 @@
                         return;
                     }
 
-                    var g_ck_val =
-                        window.g_ck ||
-                        (typeof g_ck !== 'undefined' ? g_ck : '');
+                    var g_ck_val = window.g_ck || (typeof g_ck !== 'undefined' ? g_ck : '');
                     var instanceName = window.location.host.split('.')[0];
                     var instanceUrl = window.location.origin;
 
@@ -1133,21 +1060,41 @@
                         g_ck: g_ck_val,
                     };
 
-                    var scopeVal = typeof $scope.widget.sys_scope === 'object' && $scope.widget.sys_scope ? $scope.widget.sys_scope.value || 'global' : ($scope.widget.sys_scope || 'global');
-                    var scopeDisp = typeof $scope.widget.sys_scope === 'object' && $scope.widget.sys_scope ? $scope.widget.sys_scope.displayValue || scopeVal : scopeVal;
+                    var scopeVal =
+                        typeof $scope.widget.sys_scope === 'object' && $scope.widget.sys_scope
+                            ? $scope.widget.sys_scope.value || 'global'
+                            : $scope.widget.sys_scope || 'global';
+                    var scopeDisp =
+                        typeof $scope.widget.sys_scope === 'object' && $scope.widget.sys_scope
+                            ? $scope.widget.sys_scope.displayValue || scopeVal
+                            : scopeVal;
 
                     var fields = {
-                        name: { value: $scope.widget.name || '', displayValue: $scope.widget.name || '' },
-                        id: { value: $scope.widget.id || '', displayValue: $scope.widget.id || '' },
+                        name: {
+                            value: $scope.widget.name || '',
+                            displayValue: $scope.widget.name || '',
+                        },
+                        id: {
+                            value: $scope.widget.id || '',
+                            displayValue: $scope.widget.id || '',
+                        },
                         template: { value: $scope.widget.template || '' },
                         css: { value: $scope.widget.css || '' },
-                        client_script: { value: $scope.widget.client_script || '' },
+                        client_script: {
+                            value: $scope.widget.client_script || '',
+                        },
                         script: { value: $scope.widget.script || '' },
                         link: { value: $scope.widget.link || '' },
-                        option_schema: { value: $scope.widget.option_schema || '' },
+                        option_schema: {
+                            value: $scope.widget.option_schema || '',
+                        },
                         demo_data: { value: $scope.widget.demo_data || '' },
                         sys_scope: { value: scopeVal, displayValue: scopeDisp },
-                        data_table: { value: 'sp_widget', displayValue: 'Widget', choices: [] },
+                        data_table: {
+                            value: 'sp_widget',
+                            displayValue: 'Widget',
+                            choices: [],
+                        },
                     };
 
                     var data = {
@@ -1162,14 +1109,26 @@
                     // Trigger SN Utils ScriptSync once (prefer extension functions if exposed, otherwise dispatch custom event)
                     if (typeof window.snuScriptSyncPostData === 'function') {
                         if (typeof window.snuScriptSync === 'function') {
-                            try { window.snuScriptSync(); } catch (e) {}
+                            try {
+                                window.snuScriptSync();
+                            } catch (e) {}
                         }
-                        try { window.snuScriptSyncPostData(data); } catch (e) {}
-                    } else if (window.SNUtilsInject && window.SNUtilsInject.IDEBridge && typeof window.SNUtilsInject.IDEBridge.scriptSyncPostData === 'function') {
+                        try {
+                            window.snuScriptSyncPostData(data);
+                        } catch (e) {}
+                    } else if (
+                        window.SNUtilsInject &&
+                        window.SNUtilsInject.IDEBridge &&
+                        typeof window.SNUtilsInject.IDEBridge.scriptSyncPostData === 'function'
+                    ) {
                         if (typeof window.SNUtilsInject.IDEBridge.scriptSync === 'function') {
-                            try { window.SNUtilsInject.IDEBridge.scriptSync(); } catch (e) {}
+                            try {
+                                window.SNUtilsInject.IDEBridge.scriptSync();
+                            } catch (e) {}
                         }
-                        try { window.SNUtilsInject.IDEBridge.scriptSyncPostData(data); } catch (e) {}
+                        try {
+                            window.SNUtilsInject.IDEBridge.scriptSyncPostData(data);
+                        } catch (e) {}
                     } else {
                         try {
                             var evtSync = new CustomEvent('snutils-event', {
@@ -1180,7 +1139,10 @@
 
                         try {
                             var evtPost = new CustomEvent('snutils-event', {
-                                detail: { event: 'scriptsyncpostdata', command: data },
+                                detail: {
+                                    event: 'scriptsyncpostdata',
+                                    command: data,
+                                },
                             });
                             (window.top || window).document.dispatchEvent(evtPost);
                         } catch (e) {}
@@ -1425,10 +1387,7 @@
                     ga.addParam('sysparm_name', action);
                     if (params) {
                         Object.keys(params).forEach(function (k) {
-                            ga.addParam(
-                                k,
-                                params[k] != null ? String(params[k]) : ''
-                            );
+                            ga.addParam(k, params[k] != null ? String(params[k]) : '');
                         });
                     }
                     ga.getXML(function (response) {
@@ -1439,10 +1398,7 @@
                             });
                             return;
                         }
-                        var answer =
-                            response.responseXML.documentElement.getAttribute(
-                                'answer'
-                            );
+                        var answer = response.responseXML.documentElement.getAttribute('answer');
                         if (answer == null || answer === '') {
                             deferred.resolve({
                                 success: false,
@@ -1483,9 +1439,10 @@
                         });
                     }
                     ga.getXML(function (response) {
-                        var answer = response && response.responseXML && response.responseXML.documentElement
-                            ? response.responseXML.documentElement.getAttribute('answer')
-                            : null;
+                        var answer =
+                            response && response.responseXML && response.responseXML.documentElement
+                                ? response.responseXML.documentElement.getAttribute('answer')
+                                : null;
                         try {
                             deferred.resolve(answer ? JSON.parse(answer) : { success: false });
                         } catch (e) {
@@ -1504,8 +1461,7 @@
                 function _buildSavePayload() {
                     $scope.coreEditorDefs.forEach(function (def) {
                         if (monacoEditors[def.key]) {
-                            $scope.widget[def.field] =
-                                monacoEditors[def.key].getValue();
+                            $scope.widget[def.field] = monacoEditors[def.key].getValue();
                         }
                     });
                     if ($scope.widget.is_public) {
@@ -1527,9 +1483,7 @@
                         link: $scope.widget.link || '',
                     };
 
-                    ($scope.additionalWidgetFields || []).forEach(function (
-                        fieldDef
-                    ) {
+                    ($scope.additionalWidgetFields || []).forEach(function (fieldDef) {
                         payload[fieldDef.name] =
                             fieldDef.type === 'boolean'
                                 ? !!$scope.widget[fieldDef.name]
@@ -1553,15 +1507,13 @@
                             $scope.pickerActiveSearch = search;
                             $scope.pickerWidgets =
                                 d.success && d.widgets
-                                        ? d.widgets.map(function (w) {
-                                              w.widgetEditorUrl =
-                                                  buildWidgetEditorUrl(w.sys_id);
-                                              return w;
-                                          })
-                                        : [];
+                                    ? d.widgets.map(function (w) {
+                                          w.widgetEditorUrl = buildWidgetEditorUrl(w.sys_id);
+                                          return w;
+                                      })
+                                    : [];
                             $scope.pickerTotal = d.success ? d.total || 0 : 0;
-                            $scope.pickerHasMore =
-                                $scope.pickerWidgets.length < $scope.pickerTotal;
+                            $scope.pickerHasMore = $scope.pickerWidgets.length < $scope.pickerTotal;
                             $scope.pickerLoading = false;
                         },
                         function () {
@@ -1602,8 +1554,7 @@
                                     : [];
                             $scope.pickerWidgets = $scope.pickerWidgets.concat(more);
                             $scope.pickerTotal = d.success ? d.total || 0 : $scope.pickerTotal;
-                            $scope.pickerHasMore =
-                                $scope.pickerWidgets.length < $scope.pickerTotal;
+                            $scope.pickerHasMore = $scope.pickerWidgets.length < $scope.pickerTotal;
                         },
                         function () {
                             $scope.pickerLoadingMore = false;
@@ -1646,7 +1597,9 @@
                             if (lastItem && lastItem.focus) {
                                 lastItem.focus();
                                 if (typeof lastItem.scrollIntoView === 'function') {
-                                    lastItem.scrollIntoView({ block: 'nearest' });
+                                    lastItem.scrollIntoView({
+                                        block: 'nearest',
+                                    });
                                 }
                             }
                         }
@@ -1701,7 +1654,9 @@
                             if (lastItem && lastItem.focus) {
                                 lastItem.focus();
                                 if (typeof lastItem.scrollIntoView === 'function') {
-                                    lastItem.scrollIntoView({ block: 'nearest' });
+                                    lastItem.scrollIntoView({
+                                        block: 'nearest',
+                                    });
                                 }
                             }
                         }
@@ -1717,13 +1672,7 @@
                     var key = event && event.key;
                     var keyCode = event && event.keyCode;
 
-                    if (
-                        key === 'Enter' ||
-                        keyCode === 13 ||
-                        key === ' ' ||
-                        key === 'Spacebar' ||
-                        keyCode === 32
-                    ) {
+                    if (key === 'Enter' || keyCode === 13 || key === ' ' || key === 'Spacebar' || keyCode === 32) {
                         if (event.target && event.target.closest && event.target.closest('.we-picker-action-btn')) {
                             return;
                         }
@@ -1747,7 +1696,7 @@
                         if (idx === items.length - 1 && noWrap) {
                             return;
                         }
-                        var nextIdx = (idx >= 0 && idx < items.length - 1) ? (idx + 1) : 0;
+                        var nextIdx = idx >= 0 && idx < items.length - 1 ? idx + 1 : 0;
                         var nextItem = items[nextIdx];
                         if (nextItem && nextItem.focus) {
                             nextItem.focus();
@@ -1767,7 +1716,7 @@
                         if (idx === 0 && noWrap) {
                             return;
                         }
-                        var prevIdx = (idx > 0) ? (idx - 1) : (items.length - 1);
+                        var prevIdx = idx > 0 ? idx - 1 : items.length - 1;
                         var prevItem = items[prevIdx];
                         if (prevItem && prevItem.focus) {
                             prevItem.focus();
@@ -1784,11 +1733,15 @@
                     $scope.onLinkDependencySearch();
                 };
                 $scope.onLinkDepSearchKeydown = function (event) {
-                    _handleListSearchKeydown(event, '[we-modal-dialog="showLinkDependencyModal"] .we-picker-item', function () {
-                        if ($scope.linkDependencyResults && $scope.linkDependencyResults.length > 0) {
-                            $scope.selectLinkDependency($scope.linkDependencyResults[0]);
+                    _handleListSearchKeydown(
+                        event,
+                        '[we-modal-dialog="showLinkDependencyModal"] .we-picker-item',
+                        function () {
+                            if ($scope.linkDependencyResults && $scope.linkDependencyResults.length > 0) {
+                                $scope.selectLinkDependency($scope.linkDependencyResults[0]);
+                            }
                         }
-                    });
+                    );
                 };
                 $scope.onLinkDepItemKeydown = function (event, dep) {
                     _handleListItemKeydown(event, function () {
@@ -1802,11 +1755,15 @@
                     $scope.onLinkProviderSearch();
                 };
                 $scope.onLinkProviderSearchKeydown = function (event) {
-                    _handleListSearchKeydown(event, '[we-modal-dialog="showLinkProviderModal"] .we-picker-item', function () {
-                        if ($scope.linkProviderResults && $scope.linkProviderResults.length > 0) {
-                            $scope.selectLinkProvider($scope.linkProviderResults[0]);
+                    _handleListSearchKeydown(
+                        event,
+                        '[we-modal-dialog="showLinkProviderModal"] .we-picker-item',
+                        function () {
+                            if ($scope.linkProviderResults && $scope.linkProviderResults.length > 0) {
+                                $scope.selectLinkProvider($scope.linkProviderResults[0]);
+                            }
                         }
-                    });
+                    );
                 };
                 $scope.onLinkProviderItemKeydown = function (event, p) {
                     _handleListItemKeydown(event, function () {
@@ -1855,8 +1812,12 @@
                             byId[w.sys_id] = w;
                         });
                         $scope.recentWidgetsResolved = ids
-                            .map(function (id) { return byId[id]; })
-                            .filter(function (w) { return !!w; });
+                            .map(function (id) {
+                                return byId[id];
+                            })
+                            .filter(function (w) {
+                                return !!w;
+                            });
                     });
                 }
 
@@ -1867,16 +1828,12 @@
                 };
 
                 $scope.removeRecentWidget = function (w) {
-                    $scope.userPrefs.recentWidgets = $scope.userPrefs.recentWidgets.filter(
-                        function (id) {
-                            return id !== w.sys_id;
-                        }
-                    );
-                    $scope.recentWidgetsResolved = $scope.recentWidgetsResolved.filter(
-                        function (r) {
-                            return r.sys_id !== w.sys_id;
-                        }
-                    );
+                    $scope.userPrefs.recentWidgets = $scope.userPrefs.recentWidgets.filter(function (id) {
+                        return id !== w.sys_id;
+                    });
+                    $scope.recentWidgetsResolved = $scope.recentWidgetsResolved.filter(function (r) {
+                        return r.sys_id !== w.sys_id;
+                    });
                     saveUserPrefs();
                 };
 
@@ -1886,10 +1843,7 @@
                 };
 
                 function navigateToWidget(w) {
-                    var recentWidgets = _mergeRecentWidget(
-                        $scope.userPrefs.recentWidgets,
-                        w.sys_id
-                    );
+                    var recentWidgets = _mergeRecentWidget($scope.userPrefs.recentWidgets, w.sys_id);
                     var go = function () {
                         window.location.href = buildWidgetEditorUrl(w.sys_id);
                     };
@@ -1911,10 +1865,7 @@
 
                 function navigateToNewWidget() {
                     window.location.href =
-                        window.location.pathname +
-                        '?sys_id=' +
-                        window.WE_CONFIG.widgetPageSysId +
-                        '&new=1';
+                        window.location.pathname + '?sys_id=' + window.WE_CONFIG.widgetPageSysId + '&new=1';
                 }
 
                 $scope.newWidget = function () {
@@ -1996,7 +1947,9 @@
 
                 // Initialisation
                 function _snapshotEditorPrefs() {
-                    $scope.userPrefs.editorOrder = $scope.coreEditorDefs.map(function (d) { return d.key; });
+                    $scope.userPrefs.editorOrder = $scope.coreEditorDefs.map(function (d) {
+                        return d.key;
+                    });
                     $scope.userPrefs.editorVisibility = {};
                     $scope.coreEditorDefs.forEach(function (d) {
                         $scope.userPrefs.editorVisibility[d.key] = d.visible;
@@ -2007,11 +1960,9 @@
                     if (p.order && Array.isArray(p.order)) {
                         var ordered = [];
                         p.order.forEach(function (key) {
-                            var def = $scope.coreEditorDefs.filter(
-                                function (d) {
-                                    return d.key === key;
-                                }
-                            )[0];
+                            var def = $scope.coreEditorDefs.filter(function (d) {
+                                return d.key === key;
+                            })[0];
                             if (def) {
                                 ordered.push(def);
                             }
@@ -2052,11 +2003,7 @@
                             $scope.userPrefs[k] = p[k];
                         }
                     });
-                    [
-                        'htmlClassPortalSysId',
-                        'htmlClassPortalUrlSuffix',
-                        'htmlClassThemeSysId',
-                    ].forEach(function (k) {
+                    ['htmlClassPortalSysId', 'htmlClassPortalUrlSuffix', 'htmlClassThemeSysId'].forEach(function (k) {
                         if (p.hasOwnProperty(k)) {
                             $scope.userPrefs[k] = p[k];
                         }
@@ -2124,8 +2071,7 @@
                         _refreshRecentWidgetsResolved();
                     }
                     if (p.hasOwnProperty('ctrlSSaveActiveOnly')) {
-                        $scope.userPrefs.ctrlSSaveActiveOnly =
-                            !!p.ctrlSSaveActiveOnly;
+                        $scope.userPrefs.ctrlSSaveActiveOnly = !!p.ctrlSSaveActiveOnly;
                     } else if (p.hasOwnProperty('ctrlSSaveAll')) {
                         // ctrlSSaveAll is inverted relative to ctrlSSaveActiveOnly.
                         $scope.userPrefs.ctrlSSaveActiveOnly = !p.ctrlSSaveAll;
@@ -2184,50 +2130,32 @@
                                 link: '',
                             };
                             lastServerValues = angular.copy(originalValues);
-                            $q.all([
-                                ajax('getUserPrefs', {}),
-                                ajax('getWidgetDefaults', {}),
-                            ])
+                            $q.all([ajax('getUserPrefs', {}), ajax('getWidgetDefaults', {})])
                                 .then(function (results) {
                                     var prefsData = results[0];
                                     var defaultsData = results[1];
                                     _draftRetentionLoaded = !!(prefsData && prefsData.success);
-                                    if (
-                                        prefsData &&
-                                        prefsData.success &&
-                                        prefsData.value
-                                    ) {
+                                    if (prefsData && prefsData.success && prefsData.value) {
                                         try {
-                                            _applyUserPrefsData(
-                                                JSON.parse(prefsData.value)
-                                            );
-                                        } catch (e) { _draftRetentionLoaded = false; }
+                                            _applyUserPrefsData(JSON.parse(prefsData.value));
+                                        } catch (e) {
+                                            _draftRetentionLoaded = false;
+                                        }
                                     }
                                     if (defaultsData && defaultsData.success) {
-                                        _setAdditionalWidgetFields(
-                                            defaultsData.additional_widget_fields
-                                        );
+                                        _setAdditionalWidgetFields(defaultsData.additional_widget_fields);
                                         _applyAdditionalWidgetFieldDefaults();
 
                                         var d = defaultsData.defaults || {};
-                                        [
-                                            'template',
-                                            'css',
-                                            'client_script',
-                                            'script',
-                                            'link',
-                                        ].forEach(function (f) {
+                                        ['template', 'css', 'client_script', 'script', 'link'].forEach(function (f) {
                                             if (d[f]) {
                                                 $scope.widget[f] = d[f];
                                                 originalValues[f] = d[f];
                                                 lastServerValues[f] = d[f];
                                             }
                                         });
-                                        $scope.widget.application =
-                                            defaultsData.application || '';
-                                        $scope.widget.application_sys_id =
-                                            defaultsData.application_sys_id ||
-                                            '';
+                                        $scope.widget.application = defaultsData.application || '';
+                                        $scope.widget.application_sys_id = defaultsData.application_sys_id || '';
                                     }
                                     $scope.loading = false;
                                     buildVisibleItems();
@@ -2244,10 +2172,7 @@
                                     $scope.providerTypeChoices = d.choices;
                                 }
                             });
-                            $window.addEventListener(
-                                'beforeunload',
-                                stopPresenceSubscription
-                            );
+                            $window.addEventListener('beforeunload', stopPresenceSubscription);
                             return;
                         }
                         $scope.showPicker = true;
@@ -2255,16 +2180,12 @@
                         loadWidgetList('');
                         ajax('getUserPrefs', {}).then(function (prefsData) {
                             _draftRetentionLoaded = !!(prefsData && prefsData.success);
-                            if (
-                                prefsData &&
-                                prefsData.success &&
-                                prefsData.value
-                            ) {
+                            if (prefsData && prefsData.success && prefsData.value) {
                                 try {
-                                    _applyUserPrefsData(
-                                        JSON.parse(prefsData.value)
-                                    );
-                                } catch (e) { _draftRetentionLoaded = false; }
+                                    _applyUserPrefsData(JSON.parse(prefsData.value));
+                                } catch (e) {
+                                    _draftRetentionLoaded = false;
+                                }
                             }
                             _findLocalDrafts();
                         });
@@ -2282,21 +2203,15 @@
                             var data = results[0];
                             var prefsData = results[1];
                             if (!data.success) {
-                                throw new Error(
-                                    data.error || 'Failed to load widget'
-                                );
+                                throw new Error(data.error || 'Failed to load widget');
                             }
 
                             $scope.widget = data.widget;
-                            _setAdditionalWidgetFields(
-                                data.additional_widget_fields
-                            );
+                            _setAdditionalWidgetFields(data.additional_widget_fields);
                             var wo = data.widget.widgetOrigin;
                             if (wo && wo.created_on) {
                                 // SN returns UTC "YYYY-MM-DD HH:MM:SS"; inserting T makes Date() parse it as UTC.
-                                var originDate = new Date(
-                                    wo.created_on.replace(' ', 'T') + 'Z'
-                                );
+                                var originDate = new Date(wo.created_on.replace(' ', 'T') + 'Z');
                                 $scope.widgetOrigin = {
                                     year: originDate.getFullYear(),
                                     founder: wo.founder,
@@ -2305,18 +2220,12 @@
                             } else {
                                 $scope.widgetOrigin = null;
                             }
-                            $scope.canWriteWidget =
-                                data.widget.canWrite !== false;
-                            $scope.widgetSysPolicy =
-                                data.widget.sys_policy || '';
-                            $scope.widgetSysPolicyDisplay =
-                                data.widget.sys_policy_display || '';
-                            $scope.widgetIsServiceNow =
-                                !!data.widget.servicenow;
-                            $scope.widgetVolatilityLevel =
-                                data.widget.volatility_level || '';
-                            $scope.widgetVolatilityDisplay =
-                                data.widget.volatility_level_display || '';
+                            $scope.canWriteWidget = data.widget.canWrite !== false;
+                            $scope.widgetSysPolicy = data.widget.sys_policy || '';
+                            $scope.widgetSysPolicyDisplay = data.widget.sys_policy_display || '';
+                            $scope.widgetIsServiceNow = !!data.widget.servicenow;
+                            $scope.widgetVolatilityLevel = data.widget.volatility_level || '';
+                            $scope.widgetVolatilityDisplay = data.widget.volatility_level_display || '';
                             $scope.snAlertDismissed = false;
                             $scope.volatilityAlertDismissed = false;
                             $scope.updateSetAlertDismissed = false;
@@ -2346,7 +2255,7 @@
                                     return item.type === 'pane' && item.saveError;
                                 });
                                 if (paneWithErr && paneWithErr.saveError) {
-                                    return (paneWithErr.title ? (paneWithErr.title + ': ') : '') + paneWithErr.saveError;
+                                    return (paneWithErr.title ? paneWithErr.title + ': ' : '') + paneWithErr.saveError;
                                 }
                                 return 'Save failed. Check permissions or network connection.';
                             };
@@ -2383,7 +2292,13 @@
                                 if ($scope.isNarrowLayout && $scope.hasUnsavedChanges && $scope.hasUnsavedChanges()) {
                                     return true;
                                 }
-                                if ($scope.isNarrowLayout && $scope.lastSaveTime && !$scope.saveError && $scope.hasUnsavedChanges && !$scope.hasUnsavedChanges()) {
+                                if (
+                                    $scope.isNarrowLayout &&
+                                    $scope.lastSaveTime &&
+                                    !$scope.saveError &&
+                                    $scope.hasUnsavedChanges &&
+                                    !$scope.hasUnsavedChanges()
+                                ) {
                                     return true;
                                 }
                                 if ($scope.updateSetMismatch && !$scope.updateSetAlertDismissed) {
@@ -2394,17 +2309,13 @@
                                 }
                                 return false;
                             };
-                            $scope.updateSetMismatch =
-                                !!data.widget.update_set_mismatch;
-                            $scope.widgetUpdateSetId =
-                                data.widget.widget_update_set_id || '';
-                            $scope.widgetUpdateSetName =
-                                data.widget.widget_update_set_name || '';
+                            $scope.updateSetMismatch = !!data.widget.update_set_mismatch;
+                            $scope.widgetUpdateSetId = data.widget.widget_update_set_id || '';
+                            $scope.widgetUpdateSetName = data.widget.widget_update_set_name || '';
                             if ($scope.widgetSysPolicy) {
                                 $scope.canWriteWidget = false;
                             }
-                            $scope.es12RecordExists =
-                                !!data.widget.es12_record_exists;
+                            $scope.es12RecordExists = !!data.widget.es12_record_exists;
                             _applyEsVersion(!!data.widget.es12);
                             $scope.rolesList = parseRoles(data.widget.roles);
                             originalHeader = {
@@ -2417,20 +2328,16 @@
                                 static: !!data.widget.static,
                             };
                             _captureAdditionalHeaderValues(data.widget);
-                            loadSnTypeDefinitions(
-                                data.widget.application_sys_id
-                            );
+                            loadSnTypeDefinitions(data.widget.application_sys_id);
                             loadHtmlMonarchDts();
                             registerMacroCompletions();
                             loadCodeActions();
                             if (window.SNMonacoPlusBootstrap) {
-                                window.SNMonacoPlusBootstrap.ensureCoreLoaded().then(
-                                    function (api) {
-                                        if (api) {
-                                            api.loadCssEditorSupport();
-                                        }
+                                window.SNMonacoPlusBootstrap.ensureCoreLoaded().then(function (api) {
+                                    if (api) {
+                                        api.loadCssEditorSupport();
                                     }
-                                );
+                                });
                             }
                             originalValues = {
                                 template: data.widget.template,
@@ -2442,16 +2349,12 @@
                             lastServerValues = angular.copy(originalValues);
 
                             _draftRetentionLoaded = !!(prefsData && prefsData.success);
-                            if (
-                                prefsData &&
-                                prefsData.success &&
-                                prefsData.value
-                            ) {
+                            if (prefsData && prefsData.success && prefsData.value) {
                                 try {
-                                    _applyUserPrefsData(
-                                        JSON.parse(prefsData.value)
-                                    );
-                                } catch (e) { _draftRetentionLoaded = false; }
+                                    _applyUserPrefsData(JSON.parse(prefsData.value));
+                                } catch (e) {
+                                    _draftRetentionLoaded = false;
+                                }
                             }
 
                             if (!$scope.isVersionView) {
@@ -2487,8 +2390,7 @@
                             _findLocalDrafts(true);
                         })
                         .catch(function (err) {
-                            $scope.loadError =
-                                'Error: ' + (err.message || String(err));
+                            $scope.loadError = 'Error: ' + (err.message || String(err));
                             $scope.loading = false;
                         });
 
@@ -2543,10 +2445,7 @@
                     if (!$scope.isVersionView) {
                         startRevertListener();
                     }
-                    $window.addEventListener(
-                        'beforeunload',
-                        stopPresenceSubscription
-                    );
+                    $window.addEventListener('beforeunload', stopPresenceSubscription);
                 }
 
                 function overlayVersionFields(fields) {
@@ -2619,11 +2518,9 @@
                             $scope.widget
                         ) {
                             var linkVal = $scope.widget.link || '';
-                            var nonEmptyLines = linkVal
-                                .split('\n')
-                                .filter(function (l) {
-                                    return l.trim() !== '';
-                                }).length;
+                            var nonEmptyLines = linkVal.split('\n').filter(function (l) {
+                                return l.trim() !== '';
+                            }).length;
                             if (nonEmptyLines > 3) {
                                 show = true;
                                 // Persist visibility for this session after initial auto-show.
@@ -2680,11 +2577,7 @@
                 var _scssTokenizerSet = false;
                 var _weJsonRegistered = false;
                 function _ensureMonacoThemes() {
-                    if (
-                        _monacoThemesDefined ||
-                        !window.monaco ||
-                        !monaco.editor
-                    ) {
+                    if (_monacoThemesDefined || !window.monaco || !monaco.editor) {
                         return;
                     }
                     _monacoThemesDefined = true;
@@ -2748,12 +2641,7 @@
                         var s = model.getPositionAt(start);
                         var e = model.getPositionAt(start + length);
                         decos.push({
-                            range: new monaco.Range(
-                                s.lineNumber,
-                                s.column,
-                                e.lineNumber,
-                                e.column
-                            ),
+                            range: new monaco.Range(s.lineNumber, s.column, e.lineNumber, e.column),
                             options: { inlineClassName: className },
                         });
                     }
@@ -2767,11 +2655,7 @@
                         var tm;
                         while ((tm = tagRe.exec(full)) !== null) {
                             var tagName = tm[1];
-                            pushRange(
-                                base + tm.index,
-                                tm[0].length,
-                                'we-jsdoc-tag'
-                            );
+                            pushRange(base + tm.index, tm[0].length, 'we-jsdoc-tag');
 
                             var afterOffset = base + tm.index + tm[0].length;
                             var rest = full.slice(tm.index + tm[0].length);
@@ -2779,31 +2663,17 @@
 
                             var typeM = /^\s*(\{[^}]*\})/.exec(rest);
                             if (typeM) {
-                                var typeStart =
-                                    afterOffset + typeM[0].indexOf('{');
-                                pushRange(
-                                    typeStart,
-                                    typeM[1].length,
-                                    'we-jsdoc-type'
-                                );
+                                var typeStart = afterOffset + typeM[0].indexOf('{');
+                                pushRange(typeStart, typeM[1].length, 'we-jsdoc-type');
                                 consumed = typeM[0].length;
                             }
 
                             if (_JSDOC_NAME_TAGS[tagName]) {
                                 var nameRest = rest.slice(consumed);
-                                var nameM = /^\s+(\[?[\w$.]+\]?)/.exec(
-                                    nameRest
-                                );
+                                var nameM = /^\s+(\[?[\w$.]+\]?)/.exec(nameRest);
                                 if (nameM) {
-                                    var nameStart =
-                                        afterOffset +
-                                        consumed +
-                                        nameM[0].indexOf(nameM[1]);
-                                    pushRange(
-                                        nameStart,
-                                        nameM[1].length,
-                                        'we-jsdoc-name'
-                                    );
+                                    var nameStart = afterOffset + consumed + nameM[0].indexOf(nameM[1]);
+                                    pushRange(nameStart, nameM[1].length, 'we-jsdoc-name');
                                 }
                             }
                         }
@@ -2813,11 +2683,7 @@
 
                 // Monarch-only JSON language (no worker) avoids Monaco's "Unexpected usage" console error from the JSON language service worker.
                 function _ensureWeJsonLanguage() {
-                    if (
-                        _weJsonRegistered ||
-                        !window.monaco ||
-                        !monaco.languages
-                    ) {
+                    if (_weJsonRegistered || !window.monaco || !monaco.languages) {
                         return;
                     }
                     _weJsonRegistered = true;
@@ -2827,10 +2693,7 @@
                         tokenizer: {
                             root: [
                                 [/[{}[\],:]/, 'delimiter.bracket'],
-                                [
-                                    /"/,
-                                    { token: 'string.quote', next: '@string' },
-                                ],
+                                [/"/, { token: 'string.quote', next: '@string' }],
                                 [/-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/, 'number'],
                                 [/\b(?:true|false|null)\b/, 'keyword'],
                                 [/\s+/, ''],
@@ -2850,8 +2713,7 @@
                     }
                     _scssTokenizerSet = true;
                     monaco.languages.setLanguageConfiguration('scss', {
-                        wordPattern:
-                            /(#?-?[_a-zA-Z][_a-zA-Z0-9-]*)|\d+[_a-zA-Z][_a-zA-Z0-9-]*/,
+                        wordPattern: /(#?-?[_a-zA-Z][_a-zA-Z0-9-]*)|\d+[_a-zA-Z][_a-zA-Z0-9-]*/,
                         comments: {
                             lineComment: '//',
                             blockComment: ['/*', '*/'],
@@ -2886,10 +2748,7 @@
                                 // Single-line comment
                                 [/\/\/.*$/, 'comment'],
                                 // Block comment
-                                [
-                                    /\/\*/,
-                                    { token: 'comment', next: '@blockcomment' },
-                                ],
+                                [/\/\*/, { token: 'comment', next: '@blockcomment' }],
                                 // Strings
                                 [/"([^"\\]|\\.)*"/, 'string'],
                                 [/'([^'\\]|\\.)*'/, 'string'],
@@ -2909,10 +2768,7 @@
                                     'keyword',
                                 ],
                                 // !important / !default / !global / !optional
-                                [
-                                    /!(?:important|default|global|optional)\b/,
-                                    'keyword',
-                                ],
+                                [/!(?:important|default|global|optional)\b/, 'keyword'],
                                 // Hex colours
                                 [/#[0-9a-fA-F]{3,8}\b/, 'number.hex'],
                                 // Numbers with optional unit
@@ -2952,10 +2808,7 @@
                             ],
 
                             interpolation: [
-                                [
-                                    /}/,
-                                    { token: 'keyword.operator', next: '@pop' },
-                                ],
+                                [/}/, { token: 'keyword.operator', next: '@pop' }],
                                 [/\$[\w-]+/, 'variable'],
                                 { include: '@root' },
                             ],
@@ -2978,26 +2831,19 @@
                         // regardless of whether Monaco's built-in SCSS tokenizer was already set.
                         _setupScssTokenizer();
                         if (window.SNMonacoPlusBootstrap) {
-                            window.SNMonacoPlusBootstrap.ensureCoreLoaded().then(
-                                function (api) {
-                                    if (api) {
-                                        api.loadCssEditorSupport();
-                                    }
+                            window.SNMonacoPlusBootstrap.ensureCoreLoaded().then(function (api) {
+                                if (api) {
+                                    api.loadCssEditorSupport();
                                 }
-                            );
+                            });
                         }
                     }
                     // Each pane loads its own DTS (server or client) when it initialises;
                     // no need to gate all editors on a single DTS load here.
                     $timeout(function () {
-                        var panesToInit = $scope.visibleItems.filter(
-                            function (item) {
-                                return (
-                                    item.type === 'pane' &&
-                                    !monacoEditors[item.key]
-                                );
-                            }
-                        );
+                        var panesToInit = $scope.visibleItems.filter(function (item) {
+                            return item.type === 'pane' && !monacoEditors[item.key];
+                        });
 
                         // One pane per tick so the browser can paint/respond between editor.create() calls.
                         function initNextPane(idx) {
@@ -3007,11 +2853,7 @@
                                 $timeout(layoutAllEditors, 900);
                                 // Re-layout once fonts are ready, since late metrics can delay proper paint.
                                 try {
-                                    if (
-                                        document.fonts &&
-                                        document.fonts.ready &&
-                                        document.fonts.ready.then
-                                    ) {
+                                    if (document.fonts && document.fonts.ready && document.fonts.ready.then) {
                                         document.fonts.ready.then(function () {
                                             $timeout(layoutAllEditors, 0);
                                         });
@@ -3031,14 +2873,8 @@
 
                 function getMonacoTheme() {
                     try {
-                        if (
-                            window.NOW &&
-                            window.NOW.theme &&
-                            window.NOW.theme.name
-                        ) {
-                            return /dark/i.test(window.NOW.theme.name)
-                                ? 'vs-dark'
-                                : 'vs';
+                        if (window.NOW && window.NOW.theme && window.NOW.theme.name) {
+                            return /dark/i.test(window.NOW.theme.name) ? 'vs-dark' : 'vs';
                         }
                     } catch (e) {}
                     var bg = getComputedStyle(document.documentElement)
@@ -3046,10 +2882,7 @@
                         .trim();
                     if (bg) {
                         var parts = bg.split(',').map(Number);
-                        if (
-                            parts.length === 3 &&
-                            (parts[0] + parts[1] + parts[2]) / 3 >= 128
-                        ) {
+                        if (parts.length === 3 && (parts[0] + parts[1] + parts[2]) / 3 >= 128) {
                             return 'vs';
                         }
                     }
@@ -3064,9 +2897,7 @@
                     if (pref === 'light') {
                         return 'we-vs';
                     }
-                    return getMonacoTheme() === 'vs-dark'
-                        ? 'we-vs-dark'
-                        : 'we-vs';
+                    return getMonacoTheme() === 'vs-dark' ? 'we-vs-dark' : 'we-vs';
                 }
 
                 // Returns the table name if the cursor is in the first arg of a table-consuming API call, else null.
@@ -3087,8 +2918,7 @@
                         var c = line[i];
                         if (c === "'" || c === '"') {
                             var bs = 0;
-                            for (var j = i - 1; j >= 0 && line[j] === '\\'; j--)
-                                bs++;
+                            for (var j = i - 1; j >= 0 && line[j] === '\\'; j--) bs++;
                             if (bs % 2 === 0) {
                                 quoteChar = c;
                                 startIdx = i;
@@ -3105,8 +2935,7 @@
                     for (var i = col; i < line.length; i++) {
                         if (line[i] === quoteChar) {
                             var bs = 0;
-                            for (var j = i - 1; j >= 0 && line[j] === '\\'; j--)
-                                bs++;
+                            for (var j = i - 1; j >= 0 && line[j] === '\\'; j--) bs++;
                             if (bs % 2 === 0) {
                                 endIdx = i;
                                 break;
@@ -3121,14 +2950,8 @@
                     }
 
                     // Check that the string is the first argument to a table API
-                    var before = line
-                        .substring(0, startIdx)
-                        .replace(/\s+$/, '');
-                    if (
-                        /(?:GlideRecord(?:Secure)?|GlideAggregate|GlideQuery|addJoinQuery)\s*\($/.test(
-                            before
-                        )
-                    ) {
+                    var before = line.substring(0, startIdx).replace(/\s+$/, '');
+                    if (/(?:GlideRecord(?:Secure)?|GlideAggregate|GlideQuery|addJoinQuery)\s*\($/.test(before)) {
                         return candidate;
                     }
                     return null;
@@ -3219,24 +3042,16 @@
                     if (!word || !word.word) {
                         return null;
                     }
-                    return window.SNMonacoPlus &&
-                        window.SNMonacoPlus.getSiSysId(word.word)
-                        ? word.word
-                        : null;
+                    return window.SNMonacoPlus && window.SNMonacoPlus.getSiSysId(word.word) ? word.word : null;
                 }
 
                 // JS formatting options
                 function _applyJsFormatOptions() {
-                    if (
-                        !window.monaco ||
-                        !monaco.languages ||
-                        !monaco.languages.typescript
-                    ) {
+                    if (!window.monaco || !monaco.languages || !monaco.languages.typescript) {
                         return;
                     }
                     var opts = {
-                        insertSpaceBeforeFunctionParenthesis:
-                            !!$scope.userPrefs.insertSpaceBeforeFuncParen,
+                        insertSpaceBeforeFunctionParenthesis: !!$scope.userPrefs.insertSpaceBeforeFuncParen,
                     };
                     var jsDef = monaco.languages.typescript.javascriptDefaults;
                     var tsDef = monaco.languages.typescript.typescriptDefaults;
@@ -3316,24 +3131,31 @@
                         return;
                     }
                     var start = 0;
-                    while (start < before.length && start < after.length &&
-                           before.charAt(start) === after.charAt(start)) {
+                    while (
+                        start < before.length &&
+                        start < after.length &&
+                        before.charAt(start) === after.charAt(start)
+                    ) {
                         start++;
                     }
                     var beforeEnd = before.length;
                     var afterEnd = after.length;
-                    while (beforeEnd > start && afterEnd > start &&
-                           before.charAt(beforeEnd - 1) === after.charAt(afterEnd - 1)) {
+                    while (
+                        beforeEnd > start &&
+                        afterEnd > start &&
+                        before.charAt(beforeEnd - 1) === after.charAt(afterEnd - 1)
+                    ) {
                         beforeEnd--;
                         afterEnd--;
                     }
                     var from = model.getPositionAt(start);
                     var to = model.getPositionAt(beforeEnd);
-                    editor.executeEdits('cssFormattingSpacing', [{
-                        range: new monaco.Range(from.lineNumber, from.column,
-                            to.lineNumber, to.column),
-                        text: after.substring(start, afterEnd),
-                    }]);
+                    editor.executeEdits('cssFormattingSpacing', [
+                        {
+                            range: new monaco.Range(from.lineNumber, from.column, to.lineNumber, to.column),
+                            text: after.substring(start, afterEnd),
+                        },
+                    ]);
                 }
 
                 // Calls the TypeScript worker directly, forwarding user prefs as format options; more reliable than the removed setFormattingOptions.
@@ -3354,18 +3176,24 @@
                         function format(model, monacoOptions, range) {
                             var before = model.getValue();
                             var version = model.getVersionId();
-                            var start = range ? model.getOffsetAt({ lineNumber: range.startLineNumber, column: range.startColumn }) : 0;
-                            var end = range ? model.getOffsetAt({ lineNumber: range.endLineNumber, column: range.endColumn }) : before.length;
+                            var start = range
+                                ? model.getOffsetAt({
+                                      lineNumber: range.startLineNumber,
+                                      column: range.startColumn,
+                                  })
+                                : 0;
+                            var end = range
+                                ? model.getOffsetAt({
+                                      lineNumber: range.endLineNumber,
+                                      column: range.endColumn,
+                                  })
+                                : before.length;
                             var options = {
                                 baseIndentSize: 0,
-                                indentSize:
-                                    $scope.userPrefs.tabSize,
-                                tabSize:
-                                    $scope.userPrefs.tabSize,
-                                convertTabsToSpaces:
-                                    monacoOptions.insertSpaces,
-                                insertSpaces:
-                                    monacoOptions.insertSpaces,
+                                indentSize: $scope.userPrefs.tabSize,
+                                tabSize: $scope.userPrefs.tabSize,
+                                convertTabsToSpaces: monacoOptions.insertSpaces,
+                                insertSpaces: monacoOptions.insertSpaces,
                                 newLineCharacter: '\n',
                                 indentStyle: 2, // Smart
                                 insertSpaceAfterCommaDelimiter: true,
@@ -3374,11 +3202,8 @@
                                 insertSpaceBeforeAndAfterBinaryOperators: true,
                                 insertSpaceAfterKeywordsInControlFlowStatements: true,
                                 insertSpaceAfterFunctionKeywordForAnonymousFunctions:
-                                    !!$scope.userPrefs
-                                        .insertSpaceBeforeFuncParen,
-                                insertSpaceBeforeFunctionParenthesis:
-                                    !!$scope.userPrefs
-                                        .insertSpaceBeforeFuncParen,
+                                    !!$scope.userPrefs.insertSpaceBeforeFuncParen,
+                                insertSpaceBeforeFunctionParenthesis: !!$scope.userPrefs.insertSpaceBeforeFuncParen,
                                 insertSpaceAfterOpeningAndBeforeClosingNonemptyParenthesis: false,
                                 insertSpaceAfterOpeningAndBeforeClosingNonemptyBrackets: false,
                                 insertSpaceAfterOpeningAndBeforeClosingNonemptyBraces: true,
@@ -3389,7 +3214,9 @@
                                 semicolons: 'ignore',
                             };
                             return getWorker()
-                                .then(function (factory) { return factory(model.uri); })
+                                .then(function (factory) {
+                                    return factory(model.uri);
+                                })
                                 .then(function (worker) {
                                     return range
                                         ? worker.getFormattingEditsForRange(model.uri.toString(), start, end, options)
@@ -3398,9 +3225,17 @@
                                 .then(function (edits) {
                                     if (model.isDisposed() || model.getVersionId() !== version) return [];
                                     var after = before;
-                                    (edits || []).slice().sort(function (a, b) { return b.span.start - a.span.start; }).forEach(function (edit) {
-                                        after = after.substring(0, edit.span.start) + edit.newText + after.substring(edit.span.start + edit.span.length);
-                                    });
+                                    (edits || [])
+                                        .slice()
+                                        .sort(function (a, b) {
+                                            return b.span.start - a.span.start;
+                                        })
+                                        .forEach(function (edit) {
+                                            after =
+                                                after.substring(0, edit.span.start) +
+                                                edit.newText +
+                                                after.substring(edit.span.start + edit.span.length);
+                                        });
                                     // Tokenise the whole document so comment-like text in strings is left alone.
                                     var lines = after.split('\n');
                                     var tokens = monaco.editor.tokenize(after, model.getLanguageId());
@@ -3416,7 +3251,10 @@
                                     function width(indent) {
                                         var result = 0;
                                         for (var k = 0; k < indent.length; k++) {
-                                            result += indent.charAt(k) === '\t' ? options.tabSize - result % options.tabSize : 1;
+                                            result +=
+                                                indent.charAt(k) === '\t'
+                                                    ? options.tabSize - (result % options.tabSize)
+                                                    : 1;
                                         }
                                         return result;
                                     }
@@ -3428,31 +3266,69 @@
                                         for (; j <= lastLine; j++) {
                                             var marker = /^([ \t]*)\*(.*)$/.exec(lines[j]);
                                             if (!marker || !isComment(j, marker[1].length)) break;
-                                            body.push({ line: j, indent: marker[1], rest: '*' + marker[2] });
+                                            body.push({
+                                                line: j,
+                                                indent: marker[1],
+                                                rest: '*' + marker[2],
+                                            });
                                             if (/^\/[ \t]*\r?$/.test(marker[2])) break;
                                         }
-                                        if (!body.length || !/^\*\/[ \t]*\r?$/.test(body[body.length - 1].rest)) continue;
+                                        if (!body.length || !/^\*\/[ \t]*\r?$/.test(body[body.length - 1].rest))
+                                            continue;
                                         var base = width(opening[1]);
                                         // Retain the usual aligned or one-space-offset style; remove excess padding.
-                                        var offset = body.some(function (item) { return width(item.indent) === base + 1; }) ? ' ' : '';
+                                        var offset = body.some(function (item) {
+                                            return width(item.indent) === base + 1;
+                                        })
+                                            ? ' '
+                                            : '';
                                         body.forEach(function (item) {
-                                            if (width(item.indent) > base + 1) lines[item.line] = opening[1] + offset + item.rest;
+                                            if (width(item.indent) > base + 1)
+                                                lines[item.line] = opening[1] + offset + item.rest;
                                         });
                                         i = j;
                                     }
                                     after = lines.join('\n');
                                     if (after === before) return [];
                                     var prefix = 0;
-                                    while (prefix < before.length && prefix < after.length && before.charAt(prefix) === after.charAt(prefix)) prefix++;
-                                    var beforeEnd = before.length, afterEnd = after.length;
-                                    while (beforeEnd > prefix && afterEnd > prefix && before.charAt(beforeEnd - 1) === after.charAt(afterEnd - 1)) { beforeEnd--; afterEnd--; }
-                                    var from = model.getPositionAt(prefix), to = model.getPositionAt(beforeEnd);
-                                    return [{ range: new monaco.Range(from.lineNumber, from.column, to.lineNumber, to.column), text: after.substring(prefix, afterEnd) }];
+                                    while (
+                                        prefix < before.length &&
+                                        prefix < after.length &&
+                                        before.charAt(prefix) === after.charAt(prefix)
+                                    )
+                                        prefix++;
+                                    var beforeEnd = before.length,
+                                        afterEnd = after.length;
+                                    while (
+                                        beforeEnd > prefix &&
+                                        afterEnd > prefix &&
+                                        before.charAt(beforeEnd - 1) === after.charAt(afterEnd - 1)
+                                    ) {
+                                        beforeEnd--;
+                                        afterEnd--;
+                                    }
+                                    var from = model.getPositionAt(prefix),
+                                        to = model.getPositionAt(beforeEnd);
+                                    return [
+                                        {
+                                            range: new monaco.Range(
+                                                from.lineNumber,
+                                                from.column,
+                                                to.lineNumber,
+                                                to.column
+                                            ),
+                                            text: after.substring(prefix, afterEnd),
+                                        },
+                                    ];
                                 });
                         }
                         return {
-                            provideDocumentFormattingEdits: function (model, options) { return format(model, options); },
-                            provideDocumentRangeFormattingEdits: function (model, range, options) { return format(model, options, range); },
+                            provideDocumentFormattingEdits: function (model, options) {
+                                return format(model, options);
+                            },
+                            provideDocumentRangeFormattingEdits: function (model, range, options) {
+                                return format(model, options, range);
+                            },
                         };
                     }
                     function register(language, getWorker) {
@@ -3467,17 +3343,13 @@
                 }
 
                 function initEditorForPane(pane) {
-                    var container = document.getElementById(
-                        'editor-' + pane.key
-                    );
+                    var container = document.getElementById('editor-' + pane.key);
                     if (!container || monacoEditors[pane.key]) {
                         return;
                     }
 
                     var isSI = pane.recordType === 'script_include';
-                    var value = pane.field
-                        ? $scope.widget[pane.field] || ''
-                        : pane.content || '';
+                    var value = pane.field ? $scope.widget[pane.field] || '' : pane.content || '';
                     var readOnly =
                         $scope.isVersionView ||
                         !$scope.canWriteWidget ||
@@ -3495,12 +3367,10 @@
                         if (monaco.languages) {
                             _setupScssTokenizer();
                         }
-                        var isJs =
-                            lang === 'javascript' || lang === 'typescript';
+                        var isJs = lang === 'javascript' || lang === 'typescript';
                         // ESLint only runs for JS/TS; HTML/SCSS use Monaco's built-in validators.
                         _lintEditorLangs[pane.key] = lang;
-                        _lintEditorIsServer[pane.key] =
-                            pane.field === 'script' || isSI;
+                        _lintEditorIsServer[pane.key] = pane.field === 'script' || isSI;
                         if (pane.field === 'script' || isSI) {
                             loadServerMonarchDts();
                         } else if (
@@ -3517,9 +3387,7 @@
                             var ed = monaco.editor.create(container, {
                                 automaticLayout: true,
                                 fixedOverflowWidgets: true,
-                                fontFamily: _buildFontFamily(
-                                    $scope.userPrefs.fontFamily
-                                ),
+                                fontFamily: _buildFontFamily($scope.userPrefs.fontFamily),
                                 fontSize: $scope.userPrefs.fontSize,
                                 glyphMargin: isJs,
                                 insertSpaces: false,
@@ -3546,12 +3414,8 @@
                                 tabSize: $scope.userPrefs.tabSize,
                                 theme: _resolveMonacoTheme(),
                                 value: value,
-                                wordWrap: $scope.userPrefs.wordWrap
-                                    ? 'on'
-                                    : 'off',
-                                autoIndent: $scope.userPrefs.autoIndent
-                                    ? 'full'
-                                    : 'none',
+                                wordWrap: $scope.userPrefs.wordWrap ? 'on' : 'off',
+                                autoIndent: $scope.userPrefs.autoIndent ? 'full' : 'none',
                                 formatOnPaste: !!$scope.userPrefs.formatOnPaste,
                                 formatOnType: !!$scope.userPrefs.formatOnType,
                                 autoSurround: $scope.userPrefs.autoSurround,
@@ -3580,11 +3444,13 @@
                                           : null;
                                 if (_jsScriptKind) {
                                     ed.onDidFocusEditorText(function () {
-                                        if (window.SNMonacoPlus) {
-                                            window.SNMonacoPlus.notifyScriptContextFocus(
-                                                ed.getModel().id,
-                                                _jsScriptKind
-                                            );
+                                        if (window.SNMonacoPlusBootstrap) {
+                                            window.SNMonacoPlusBootstrap.ensureCoreLoaded().then(function (api) {
+                                                var model = ed.getModel();
+                                                if (api && model && ed.hasTextFocus()) {
+                                                    api.notifyScriptContextFocus(model.id, _jsScriptKind);
+                                                }
+                                            });
                                         }
                                     });
                                 }
@@ -3602,11 +3468,7 @@
                                 setValue: function (v) {
                                     if (isJs) {
                                         try {
-                                            monaco.editor.setModelMarkers(
-                                                ed.getModel(),
-                                                'LINT_MARKER',
-                                                []
-                                            );
+                                            monaco.editor.setModelMarkers(ed.getModel(), 'LINT_MARKER', []);
                                         } catch (e2) {}
                                     }
                                     ed.setValue(v);
@@ -3633,10 +3495,7 @@
                                         // Monaco ≥0.32 puts forceTokenization on model.tokenization;
                                         // older builds expose it directly on the model.
                                         var _tok =
-                                            _m.tokenization &&
-                                            _m.tokenization.forceTokenization
-                                                ? _m.tokenization
-                                                : _m;
+                                            _m.tokenization && _m.tokenization.forceTokenization ? _m.tokenization : _m;
                                         if (_tok.forceTokenization) {
                                             _tok.forceTokenization(_lastLine);
                                         }
@@ -3657,17 +3516,15 @@
                                     } catch (e) {}
                                 },
                                 format: function (useSpaces) {
-                                    var action = ed.getAction(
-                                        'editor.action.formatDocument'
-                                    );
+                                    var action = ed.getAction('editor.action.formatDocument');
                                     if (!action) {
                                         return;
                                     }
                                     /* Monaco reads FormattingOptions from the
                                        model, so both must be updated. */
                                     var _fmtModel = ed.getModel();
-                                    var _cssSource = _fmtModel &&
-                                        /^(css|scss)$/.test(_fmtModel.getLanguageId())
+                                    var _cssSource =
+                                        _fmtModel && /^(css|scss)$/.test(_fmtModel.getLanguageId())
                                             ? _fmtModel.getValue()
                                             : null;
                                     ed.updateOptions({
@@ -3691,15 +3548,13 @@
                                     var result = action.run();
                                     if (result && result.then) {
                                         result.then(function () {
-                                            if (_cssSource !== null && _fmtModel &&
-                                                !_fmtModel.isDisposed()) {
+                                            if (_cssSource !== null && _fmtModel && !_fmtModel.isDisposed()) {
                                                 var formatted = _fmtModel.getValue();
                                                 var restored = _restoreInlineCssComments(
                                                     _cssSource,
                                                     _removeLeadingCssRuleGaps(formatted)
                                                 );
-                                                _applyCssFormattingEdit(ed, _fmtModel,
-                                                    formatted, restored);
+                                                _applyCssFormattingEdit(ed, _fmtModel, formatted, restored);
                                             }
                                             _resetIndent();
                                         }, _resetIndent);
@@ -3721,8 +3576,7 @@
                                 ed.onDidChangeModelContent(function () {
                                     $scope.$apply(function () {
                                         var cur = ed.getValue();
-                                        pane.dirty =
-                                            cur !== originalValues[pane.field];
+                                        pane.dirty = cur !== originalValues[pane.field];
                                         if (pane.dirty) {
                                             pane.savedAt = null;
                                         }
@@ -3730,18 +3584,13 @@
                                 });
                             } else if (pane.hasIdInput || isSI) {
                                 ed.onDidChangeModelContent(function () {
-                                    if (
-                                        ed.getOption(
-                                            monaco.editor.EditorOption.readOnly
-                                        )
-                                    ) {
+                                    if (ed.getOption(monaco.editor.EditorOption.readOnly)) {
                                         return;
                                     }
                                     $scope.$apply(function () {
                                         if (isSI) {
                                             var cur = ed.getValue();
-                                            pane.dirty =
-                                                cur !== pane.lastServerContent;
+                                            pane.dirty = cur !== pane.lastServerContent;
                                             if (pane.dirty) {
                                                 pane.savedAt = null;
                                             }
@@ -3753,30 +3602,18 @@
                                 });
                             }
 
-                            if (
-                                !readOnly &&
-                                isJs &&
-                                (pane.field === 'script' || isSI)
-                            ) {
+                            if (!readOnly && isJs && (pane.field === 'script' || isSI)) {
                                 if (window.SNMonacoPlus) {
                                     window.SNMonacoPlus.scanAndFetchSIs(value);
-                                    window.SNMonacoPlus.scanLocalTypedefs(
-                                        pane.key,
-                                        value
-                                    );
+                                    window.SNMonacoPlus.scanLocalTypedefs(pane.key, value);
                                 }
                                 var _siTimer = null;
                                 ed.onDidChangeModelContent(function () {
                                     clearTimeout(_siTimer);
                                     _siTimer = setTimeout(function () {
                                         if (window.SNMonacoPlus) {
-                                            window.SNMonacoPlus.scanAndFetchSIs(
-                                                ed.getValue()
-                                            );
-                                            window.SNMonacoPlus.scanLocalTypedefs(
-                                                pane.key,
-                                                ed.getValue()
-                                            );
+                                            window.SNMonacoPlus.scanAndFetchSIs(ed.getValue());
+                                            window.SNMonacoPlus.scanLocalTypedefs(pane.key, ed.getValue());
                                         }
                                     }, 800);
                                 });
@@ -3791,7 +3628,10 @@
                                     if (!_bs) {
                                         return;
                                     }
-                                    _bs.init({ language: 'javascript', isClient: true }).then(function (api) {
+                                    _bs.init({
+                                        language: 'javascript',
+                                        isClient: true,
+                                    }).then(function (api) {
                                         if (api && typeof api.scanAndFetchProviders === 'function') {
                                             api.scanAndFetchProviders(text);
                                         }
@@ -3843,10 +3683,7 @@
                                 _refreshJsDocDecorations();
                                 ed.onDidChangeModelContent(function () {
                                     clearTimeout(_jsDocTimer);
-                                    _jsDocTimer = setTimeout(
-                                        _refreshJsDocDecorations,
-                                        300
-                                    );
+                                    _jsDocTimer = setTimeout(_refreshJsDocDecorations, 300);
                                 });
                             }
 
@@ -3856,18 +3693,10 @@
 
                             // "Open table": shown when cursor is in a GlideRecord/GlideAggregate/GlideQuery table-name string.
                             if (isJs) {
-                                var _tableCtxKey = ed.createContextKey(
-                                    'weIsOnTable',
-                                    false
-                                );
-                                var _classCtxKey = ed.createContextKey(
-                                    'weIsOnSnClass',
-                                    false
-                                );
+                                var _tableCtxKey = ed.createContextKey('weIsOnTable', false);
+                                var _classCtxKey = ed.createContextKey('weIsOnSnClass', false);
                                 ed.onDidChangeCursorPosition(function () {
-                                    _tableCtxKey.set(
-                                        !!_getTableNameAtCursor(ed)
-                                    );
+                                    _tableCtxKey.set(!!_getTableNameAtCursor(ed));
                                     _classCtxKey.set(!!_getSnClassAtCursor(ed));
                                 });
                                 ed.addAction({
@@ -3890,10 +3719,7 @@
                                             'https://docs.servicenow.com/csh?topicname=c_' +
                                             cls +
                                             'API.html' +
-                                            (ver
-                                                ? '&version=' +
-                                                  encodeURIComponent(ver)
-                                                : '');
+                                            (ver ? '&version=' + encodeURIComponent(ver) : '');
                                         window.open(url, '_blank');
                                     },
                                 });
@@ -3928,10 +3754,7 @@
                                         var tbl = _getTableNameAtCursor(ed);
                                         if (tbl) {
                                             window.open(
-                                                '/nav_to.do?uri=' +
-                                                    encodeURIComponent(
-                                                        tbl + '_list.do'
-                                                    ),
+                                                '/nav_to.do?uri=' + encodeURIComponent(tbl + '_list.do'),
                                                 '_blank'
                                             );
                                         }
@@ -3941,10 +3764,7 @@
 
                             // "Edit Script Include": shown on known SI names or confirmed async for capitalised words.
                             if (isJs) {
-                                var _siCtxKey = ed.createContextKey(
-                                    'weIsOnScriptInclude',
-                                    false
-                                );
+                                var _siCtxKey = ed.createContextKey('weIsOnScriptInclude', false);
                                 var _siCheckSeq = 0;
                                 ed.onDidChangeCursorPosition(function () {
                                     var syncName = _getSINameAtCursor(ed);
@@ -3970,17 +3790,11 @@
                                         return;
                                     }
                                     var seq = ++_siCheckSeq;
-                                    snPlus.checkSiExists(
-                                        wordStr,
-                                        function (foundName) {
-                                            if (
-                                                foundName &&
-                                                seq === _siCheckSeq
-                                            ) {
-                                                _siCtxKey.set(true);
-                                            }
+                                    snPlus.checkSiExists(wordStr, function (foundName) {
+                                        if (foundName && seq === _siCheckSeq) {
+                                            _siCtxKey.set(true);
                                         }
-                                    );
+                                    });
                                 });
                                 ed.addAction({
                                     id: 'we.open-script-include',
@@ -3998,13 +3812,8 @@
                             }
 
                             if (isJs) {
-                                var _isAngularPane =
-                                    pane.recordType === 'provider' ||
-                                    pane.field === 'client_script';
-                                loadCodeActions(
-                                    ed.getModel().id,
-                                    _isAngularPane
-                                );
+                                var _isAngularPane = pane.recordType === 'provider' || pane.field === 'client_script';
+                                loadCodeActions(ed.getModel().id, _isAngularPane);
                                 ed.addAction({
                                     id: 'we.go-to-references-platform',
                                     label: 'Go to References (Platform)',
@@ -4014,12 +3823,7 @@
                                     run: function (ed) {
                                         var model = ed.getModel();
                                         var pos = ed.getPosition();
-                                        if (
-                                            !model ||
-                                            !pos ||
-                                            typeof _openSnReferencesModal !==
-                                                'function'
-                                        ) {
+                                        if (!model || !pos || typeof _openSnReferencesModal !== 'function') {
                                             return;
                                         }
                                         var word = model.getWordAtPosition(pos);
@@ -4035,10 +3839,7 @@
                                 ed.addAction({
                                     id: 'we.save',
                                     label: 'Save',
-                                    keybindings: [
-                                        monaco.KeyMod.CtrlCmd |
-                                            monaco.KeyCode.KeyS,
-                                    ],
+                                    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
                                     run: function () {
                                         $scope.$apply(function () {
                                             _handleCtrlS(pane);
@@ -4048,8 +3849,7 @@
                             }
                             if (lang === 'html') {
                                 loadHtmlMonarchDts(function () {
-                                    if (window.MONACO_LANGUAGE_HTML &&
-                                        MONACO_LANGUAGE_HTML.attachEditor) {
+                                    if (window.MONACO_LANGUAGE_HTML && MONACO_LANGUAGE_HTML.attachEditor) {
                                         MONACO_LANGUAGE_HTML.attachEditor(ed);
                                     }
                                 });
@@ -4086,9 +3886,7 @@
                 function disposeEditor(key) {
                     if (monacoEditors[key]) {
                         try {
-                            var _model =
-                                monacoEditors[key].getModel &&
-                                monacoEditors[key].getModel();
+                            var _model = monacoEditors[key].getModel && monacoEditors[key].getModel();
                             if (_model) {
                                 _clearLintMarkers(key, _model);
                             }
@@ -4109,12 +3907,8 @@
                         return;
                     }
                     var base = window.location.origin;
-                    var workerUrl =
-                        base +
-                        '/scripts/classes/monaco/lintWorker.js?sysparm_substitute=false';
-                    var eslintUrl =
-                        base +
-                        '/scripts/snc-code-editor/eslint_bundle.min.js?sysparm_substitute=false';
+                    var workerUrl = base + '/scripts/classes/monaco/lintWorker.js?sysparm_substitute=false';
+                    var eslintUrl = base + '/scripts/snc-code-editor/eslint_bundle.min.js?sysparm_substitute=false';
                     try {
                         if (typeof SharedWorker !== 'undefined') {
                             var sw = new SharedWorker(workerUrl);
@@ -4148,9 +3942,7 @@
                                 return;
                             }
                             try {
-                                var model =
-                                    monacoEditors[k].getModel &&
-                                    monacoEditors[k].getModel();
+                                var model = monacoEditors[k].getModel && monacoEditors[k].getModel();
                                 if (!model) {
                                     return;
                                 }
@@ -4159,16 +3951,10 @@
                                     owner: 'LINT_MARKER',
                                 });
                                 markers.forEach(function (m) {
-                                    if (
-                                        m.severity ===
-                                        monaco.MarkerSeverity.Error
-                                    ) {
+                                    if (m.severity === monaco.MarkerSeverity.Error) {
                                         hasErrors = true;
                                     }
-                                    if (
-                                        m.severity ===
-                                        monaco.MarkerSeverity.Warning
-                                    ) {
+                                    if (m.severity === monaco.MarkerSeverity.Warning) {
                                         hasWarnings = true;
                                     }
                                 });
@@ -4199,15 +3985,8 @@
                         return;
                     }
                     try {
-                        var markers = _convertLintErrors(
-                            data.errors || [],
-                            entry.model
-                        );
-                        monaco.editor.setModelMarkers(
-                            entry.model,
-                            'LINT_MARKER',
-                            markers
-                        );
+                        var markers = _convertLintErrors(data.errors || [], entry.model);
+                        monaco.editor.setModelMarkers(entry.model, 'LINT_MARKER', markers);
                     } catch (e2) {}
                 }
 
@@ -4222,32 +4001,18 @@
                         : {};
                     return errors.map(function (err) {
                         var lineCount = model.getLineCount();
-                        var startLine = Math.min(
-                            Math.max(err.from.line, 1),
-                            lineCount
-                        );
-                        var endLine = Math.min(
-                            Math.max(err.to.line, 1),
-                            lineCount
-                        );
+                        var startLine = Math.min(Math.max(err.from.line, 1), lineCount);
+                        var endLine = Math.min(Math.max(err.to.line, 1), lineCount);
                         var lineLen = model.getLineLength(startLine);
-                        var startCol = Math.max(
-                            Math.min(err.from.column, lineLen + 1),
-                            1
-                        );
-                        var endCol = Math.max(
-                            Math.min(err.to.column, lineLen + 1),
-                            1
-                        );
+                        var startCol = Math.max(Math.min(err.from.column, lineLen + 1), 1);
+                        var endCol = Math.max(Math.min(err.to.column, lineLen + 1), 1);
                         return {
                             startLineNumber: startLine,
                             endLineNumber: endLine,
                             startColumn: startCol,
                             endColumn: endCol,
                             message: err.message,
-                            severity:
-                                severityMap[err.severity] ||
-                                monaco.MarkerSeverity.Warning,
+                            severity: severityMap[err.severity] || monaco.MarkerSeverity.Warning,
                         };
                     });
                 }
@@ -4258,10 +4023,7 @@
                     if (lang !== 'javascript' && lang !== 'typescript') {
                         return null;
                     }
-                    var ecmaVersion =
-                        _lintEditorIsServer[paneKey] && !_es12Enabled
-                            ? 5
-                            : 2021;
+                    var ecmaVersion = _lintEditorIsServer[paneKey] && !_es12Enabled ? 5 : 2021;
                     return {
                         parserOptions: {
                             ecmaVersion: ecmaVersion,
@@ -4318,11 +4080,7 @@
                         monaco.editor.setModelMarkers(model, 'LINT_MARKER', []);
                     } catch (e) {}
                     try {
-                        monaco.editor.setModelMarkers(
-                            model,
-                            'NG_EXPR_MARKER',
-                            []
-                        );
+                        monaco.editor.setModelMarkers(model, 'NG_EXPR_MARKER', []);
                     } catch (e) {}
                 }
 
@@ -4353,11 +4111,7 @@
                         return;
                     }
                     try {
-                        monaco.editor.setModelMarkers(
-                            model,
-                            'NG_EXPR_MARKER',
-                            _computeNgExpressionMarkers(model)
-                        );
+                        monaco.editor.setModelMarkers(model, 'NG_EXPR_MARKER', _computeNgExpressionMarkers(model));
                     } catch (e) {}
                 }
 
@@ -4373,10 +4127,7 @@
                         _bs.init({
                             language: 'javascript',
                             getRemBase: function () {
-                                return $scope.userPrefs &&
-                                    $scope.userPrefs.remBase > 0
-                                    ? $scope.userPrefs.remBase
-                                    : 16;
+                                return $scope.userPrefs && $scope.userPrefs.remBase > 0 ? $scope.userPrefs.remBase : 16;
                             },
                         });
                     }
@@ -4411,10 +4162,7 @@
                             language: 'javascript',
                             isClient: true,
                             getRemBase: function () {
-                                return $scope.userPrefs &&
-                                    $scope.userPrefs.remBase > 0
-                                    ? $scope.userPrefs.remBase
-                                    : 16;
+                                return $scope.userPrefs && $scope.userPrefs.remBase > 0 ? $scope.userPrefs.remBase : 16;
                             },
                         });
                     }
@@ -4438,7 +4186,9 @@
                         }
                         return;
                     }
-                    var _dependencySysIds = ($scope.dependencies || []).map(function (d) { return d.sys_id; });
+                    var _dependencySysIds = ($scope.dependencies || []).map(function (d) {
+                        return d.sys_id;
+                    });
                     _bs.init({
                         language: 'html',
                         htmlClassPortalSysId: $scope.userPrefs.htmlClassPortalSysId,
@@ -4457,10 +4207,7 @@
                                 includeStandardCss: $scope.userPrefs.htmlClassIncludeStandardCss,
                             });
                         }
-                        if (
-                            api &&
-                            typeof api.loadHtmlMonarchDts === 'function'
-                        ) {
+                        if (api && typeof api.loadHtmlMonarchDts === 'function') {
                             api.loadHtmlMonarchDts(function () {
                                 _syncProviderCompletions();
                                 if (typeof cb === 'function') {
@@ -4485,8 +4232,7 @@
                                 modelId: modelId,
                                 isAngular: !!isAngular,
                                 getRemBase: function () {
-                                    return $scope.userPrefs &&
-                                        $scope.userPrefs.remBase > 0
+                                    return $scope.userPrefs && $scope.userPrefs.remBase > 0
                                         ? $scope.userPrefs.remBase
                                         : 16;
                                 },
@@ -4514,10 +4260,7 @@
                         }
                         var macros = [];
                         try {
-                            var answer =
-                                resp.responseXML.documentElement.getAttribute(
-                                    'answer'
-                                );
+                            var answer = resp.responseXML.documentElement.getAttribute('answer');
                             var data = JSON.parse(answer);
                             if (data.success && data.macros) {
                                 macros = data.macros;
@@ -4535,23 +4278,15 @@
                                     label: m.name,
                                     detail: m.comments || '',
                                     insertText: m.script,
-                                    kind: monaco.languages.CompletionItemKind
-                                        .Snippet,
-                                    insertTextRules:
-                                        monaco.languages
-                                            .CompletionItemInsertTextRule
-                                            .InsertAsSnippet,
+                                    kind: monaco.languages.CompletionItemKind.Snippet,
+                                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
                                 };
                             });
 
                             var frozen = JSON.stringify(suggestions);
                             var _macroProvider = {
-                                provideCompletionItems: function (
-                                    model,
-                                    position
-                                ) {
-                                    var word =
-                                        model.getWordUntilPosition(position);
+                                provideCompletionItems: function (model, position) {
+                                    var word = model.getWordUntilPosition(position);
                                     var range = {
                                         startLineNumber: position.lineNumber,
                                         endLineNumber: position.lineNumber,
@@ -4559,30 +4294,21 @@
                                         endColumn: word.endColumn,
                                     };
                                     return {
-                                        suggestions: JSON.parse(frozen).map(
-                                            function (s) {
-                                                return {
-                                                    label: s.label,
-                                                    detail: s.detail,
-                                                    insertText: s.insertText,
-                                                    kind: s.kind,
-                                                    insertTextRules:
-                                                        s.insertTextRules,
-                                                    range: range,
-                                                };
-                                            }
-                                        ),
+                                        suggestions: JSON.parse(frozen).map(function (s) {
+                                            return {
+                                                label: s.label,
+                                                detail: s.detail,
+                                                insertText: s.insertText,
+                                                kind: s.kind,
+                                                insertTextRules: s.insertTextRules,
+                                                range: range,
+                                            };
+                                        }),
                                     };
                                 },
                             };
-                            monaco.languages.registerCompletionItemProvider(
-                                'javascript',
-                                _macroProvider
-                            );
-                            monaco.languages.registerCompletionItemProvider(
-                                'typescript',
-                                _macroProvider
-                            );
+                            monaco.languages.registerCompletionItemProvider('javascript', _macroProvider);
+                            monaco.languages.registerCompletionItemProvider('typescript', _macroProvider);
                         }
 
                         if (window.monaco) {
@@ -4625,8 +4351,7 @@
                                 $http
                                     .get('/api/now/table/' + t.table, {
                                         params: {
-                                            sysparm_query:
-                                                t.nameField + '=' + name,
+                                            sysparm_query: t.nameField + '=' + name,
                                             sysparm_fields: 'sys_id',
                                             sysparm_limit: 1,
                                         },
@@ -4634,15 +4359,9 @@
                                     })
                                     .then(
                                         function (res) {
-                                            var records =
-                                                res.data && res.data.result;
+                                            var records = res.data && res.data.result;
                                             if (records && records.length > 0) {
-                                                window.open(
-                                                    '/' +
-                                                        t.table +
-                                                        '.do?sys_id=' +
-                                                        records[0].sys_id
-                                                );
+                                                window.open('/' + t.table + '.do?sys_id=' + records[0].sys_id);
                                             } else {
                                                 tryTable(idx + 1);
                                             }
@@ -4656,14 +4375,8 @@
                             return [];
                         },
                     };
-                    monaco.languages.registerDefinitionProvider(
-                        'javascript',
-                        _defProvider
-                    );
-                    monaco.languages.registerDefinitionProvider(
-                        'typescript',
-                        _defProvider
-                    );
+                    monaco.languages.registerDefinitionProvider('javascript', _defProvider);
+                    monaco.languages.registerDefinitionProvider('typescript', _defProvider);
                 }
 
                 // Find References — searches for word usage across SN script tables
@@ -4728,13 +4441,11 @@
                         _refTitle = document.getElementById('we-ref-title');
                         _refBody = document.getElementById('we-ref-body');
 
-                        document
-                            .getElementById('we-ref-close')
-                            .addEventListener('click', function () {
-                                if (_refOverlay.open) {
-                                    _refOverlay.close();
-                                }
-                            });
+                        document.getElementById('we-ref-close').addEventListener('click', function () {
+                            if (_refOverlay.open) {
+                                _refOverlay.close();
+                            }
+                        });
                         _refOverlay.addEventListener('click', function (e) {
                             if (e.target === _refOverlay) {
                                 if (_refOverlay.open) {
@@ -4754,9 +4465,7 @@
                             return;
                         }
                         _refTitle.textContent = '';
-                        _refTitle.appendChild(
-                            document.createTextNode('References to ')
-                        );
+                        _refTitle.appendChild(document.createTextNode('References to '));
                         var strong = document.createElement('strong');
                         strong.textContent = name || '';
                         _refTitle.appendChild(strong);
@@ -4772,9 +4481,7 @@
                         var spin = document.createElement('span');
                         spin.className = 'we-ref-spinner';
                         wrap.appendChild(spin);
-                        wrap.appendChild(
-                            document.createTextNode('Searching records…')
-                        );
+                        wrap.appendChild(document.createTextNode('Searching records…'));
                         _refBody.appendChild(wrap);
                     }
 
@@ -4785,9 +4492,7 @@
                         _refBody.textContent = '';
                         var div = document.createElement('div');
                         div.className = 'we-ref-none';
-                        div.appendChild(
-                            document.createTextNode('No references found for ')
-                        );
+                        div.appendChild(document.createTextNode('No references found for '));
                         var strong = document.createElement('strong');
                         strong.textContent = name || '';
                         div.appendChild(strong);
@@ -4803,10 +4508,7 @@
 
                         var count = document.createElement('div');
                         count.className = 'we-ref-count';
-                        count.textContent =
-                            results.length +
-                            ' reference' +
-                            (results.length !== 1 ? 's' : '');
+                        count.textContent = results.length + ' reference' + (results.length !== 1 ? 's' : '');
                         _refBody.appendChild(count);
 
                         results.forEach(function (r) {
@@ -4859,16 +4561,14 @@
                             $http
                                 .get('/api/now/table/' + t.table, {
                                     params: {
-                                        sysparm_query:
-                                            t.searchField + 'CONTAINS' + name,
+                                        sysparm_query: t.searchField + 'CONTAINS' + name,
                                         sysparm_fields: t.fields,
                                         sysparm_limit: 20,
                                     },
                                     headers: headers,
                                 })
                                 .then(function (res) {
-                                    var records =
-                                        (res.data && res.data.result) || [];
+                                    var records = (res.data && res.data.result) || [];
                                     records.forEach(function (r) {
                                         results.push({
                                             table: t.table,
@@ -4926,18 +4626,8 @@
                         return;
                     }
 
-                    var bpBase =
-                        '/api/now/js/debugger/breakpoint/' +
-                        table +
-                        '/' +
-                        recordSysId +
-                        '/script/';
-                    var dpUrl =
-                        '/api/now/js/debugpoints/script/' +
-                        table +
-                        '/' +
-                        recordSysId +
-                        '/script';
+                    var bpBase = '/api/now/js/debugger/breakpoint/' + table + '/' + recordSysId + '/script/';
+                    var dpUrl = '/api/now/js/debugpoints/script/' + table + '/' + recordSysId + '/script';
                     var authHeaders = {
                         'X-UserToken': window.g_ck || '',
                         Accept: 'application/json',
@@ -4949,79 +4639,49 @@
                     var ghostLine = null;
 
                     function renderDecorations() {
-                        var newDecs = Object.keys(activeLines).map(
-                            function (line) {
-                                return {
-                                    range: new monaco.Range(
-                                        parseInt(line, 10),
-                                        1,
-                                        parseInt(line, 10),
-                                        1
-                                    ),
-                                    options: {
-                                        isWholeLine: false,
-                                        glyphMarginClassName:
-                                            'we-breakpoint-glyph',
-                                        glyphMarginHoverMessage: {
-                                            value:
-                                                'Breakpoint (line ' +
-                                                line +
-                                                ')',
-                                        },
+                        var newDecs = Object.keys(activeLines).map(function (line) {
+                            return {
+                                range: new monaco.Range(parseInt(line, 10), 1, parseInt(line, 10), 1),
+                                options: {
+                                    isWholeLine: false,
+                                    glyphMarginClassName: 'we-breakpoint-glyph',
+                                    glyphMarginHoverMessage: {
+                                        value: 'Breakpoint (line ' + line + ')',
                                     },
-                                };
-                            }
-                        );
-                        decorationIds = editor.deltaDecorations(
-                            decorationIds,
-                            newDecs
-                        );
+                                },
+                            };
+                        });
+                        decorationIds = editor.deltaDecorations(decorationIds, newDecs);
                     }
 
                     function renderGhostDecoration(lineNumber) {
                         var newDecs = lineNumber
                             ? [
                                   {
-                                      range: new monaco.Range(
-                                          lineNumber,
-                                          1,
-                                          lineNumber,
-                                          1
-                                      ),
+                                      range: new monaco.Range(lineNumber, 1, lineNumber, 1),
                                       options: {
                                           isWholeLine: false,
-                                          glyphMarginClassName:
-                                              'we-breakpoint-glyph-ghost',
+                                          glyphMarginClassName: 'we-breakpoint-glyph-ghost',
                                       },
                                   },
                               ]
                             : [];
-                        ghostDecorationIds = editor.deltaDecorations(
-                            ghostDecorationIds,
-                            newDecs
-                        );
+                        ghostDecorationIds = editor.deltaDecorations(ghostDecorationIds, newDecs);
                     }
 
                     function syncFromServer() {
-                        return $http
-                            .get(dpUrl, { headers: authHeaders })
-                            .then(function (res) {
-                                var dp =
-                                    res.data &&
-                                    res.data.result &&
-                                    res.data.result.debugpoints;
-                                // debugpoints structure: { "BREAKPOINT": { "5": {...}, "10": {...} }, ... }
-                                var bpLines = dp && dp.BREAKPOINT;
-                                activeLines = {};
-                                if (bpLines && typeof bpLines === 'object') {
-                                    Object.keys(bpLines).forEach(
-                                        function (line) {
-                                            activeLines[line] = true;
-                                        }
-                                    );
-                                }
-                                renderDecorations();
-                            });
+                        return $http.get(dpUrl, { headers: authHeaders }).then(function (res) {
+                            var dp = res.data && res.data.result && res.data.result.debugpoints;
+                            // debugpoints structure: { "BREAKPOINT": { "5": {...}, "10": {...} }, ... }
+                            var bpLines = dp && dp.BREAKPOINT;
+                            activeLines = {};
+                            if (bpLines && typeof bpLines === 'object') {
+                                Object.keys(bpLines).forEach(function (line) {
+                                    activeLines[line] = true;
+                                });
+                            }
+                            renderDecorations();
+                        });
                     }
 
                     // Load existing breakpoints on init
@@ -5030,21 +4690,15 @@
                     // Ghost glyph + pointer cursor on glyph-margin hover only (not line numbers)
                     var editorDom = editor.getDomNode();
                     editor.onMouseMove(function (e) {
-                        var inGutter =
-                            e.target.type ===
-                            monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN;
+                        var inGutter = e.target.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN;
                         editorDom.style.cursor = inGutter ? 'pointer' : '';
                         var newGhostLine = null;
                         if (inGutter && e.target.position) {
                             var hoverLineNum = e.target.position.lineNumber;
                             // Only show ghost on lines that don't already have a real breakpoint
-                            var lineDecs =
-                                editor.getLineDecorations(hoverLineNum) || [];
+                            var lineDecs = editor.getLineDecorations(hoverLineNum) || [];
                             var hasReal = lineDecs.some(function (d) {
-                                return (
-                                    d.options.glyphMarginClassName ===
-                                    'we-breakpoint-glyph'
-                                );
+                                return d.options.glyphMarginClassName === 'we-breakpoint-glyph';
                             });
                             if (!hasReal) {
                                 newGhostLine = hoverLineNum;
@@ -5066,12 +4720,8 @@
 
                     editor.onMouseDown(function (e) {
                         if (
-                            e.target.type ===
-                                monaco.editor.MouseTargetType
-                                    .GUTTER_GLYPH_MARGIN ||
-                            e.target.type ===
-                                monaco.editor.MouseTargetType
-                                    .GUTTER_LINE_NUMBERS
+                            e.target.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN ||
+                            e.target.type === monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS
                         ) {
                             if (!e.target.position) {
                                 return;
@@ -5080,13 +4730,9 @@
                             var line = String(lineNumber);
                             // Use actual rendered decorations to decide set vs remove —
                             // more reliable than activeLines which may lag behind
-                            var lineDecs =
-                                editor.getLineDecorations(lineNumber) || [];
+                            var lineDecs = editor.getLineDecorations(lineNumber) || [];
                             var isRemoving = lineDecs.some(function (d) {
-                                return (
-                                    d.options.glyphMarginClassName ===
-                                    'we-breakpoint-glyph'
-                                );
+                                return d.options.glyphMarginClassName === 'we-breakpoint-glyph';
                             });
                             // Set: body {evaluationString:''}; Remove: empty body
                             var postConfig = isRemoving
@@ -5094,20 +4740,15 @@
                                 : {
                                       headers: angular.extend(
                                           {
-                                              'Content-Type':
-                                                  'application/json',
+                                              'Content-Type': 'application/json',
                                           },
                                           authHeaders
                                       ),
                                   };
-                            var postBody = isRemoving
-                                ? undefined
-                                : { evaluationString: '' };
-                            $http
-                                .post(bpBase + line, postBody, postConfig)
-                                .then(function () {
-                                    syncFromServer();
-                                });
+                            var postBody = isRemoving ? undefined : { evaluationString: '' };
+                            $http.post(bpBase + line, postBody, postConfig).then(function () {
+                                syncFromServer();
+                            });
                         }
                     });
                 }
@@ -5121,12 +4762,8 @@
                         return;
                     }
 
-                    var leftEl = document.getElementById(
-                        'pane-' + leftPane.key
-                    );
-                    var rightEl = document.getElementById(
-                        'pane-' + rightPane.key
-                    );
+                    var leftEl = document.getElementById('pane-' + leftPane.key);
+                    var rightEl = document.getElementById('pane-' + rightPane.key);
                     if (!leftEl || !rightEl) {
                         return;
                     }
@@ -5159,7 +4796,32 @@
 
                 // Save: single field
                 var _paneIdDebounceMap = {};
+                function checkPaneId(pane) {
+                    var requestId = pane._idCheckRequest;
+                    var action = pane.recordType === 'template' ? 'checkTemplateId' : 'checkProviderId';
+                    ajax(action, {
+                        id: pane.recordId,
+                        sys_id: pane.sys_id || '',
+                    }).then(function (res) {
+                        if (requestId !== pane._idCheckRequest) {
+                            return;
+                        }
+                        pane.idChecking = false;
+                        pane.idError = !res.success
+                            ? res.error || 'Could not check name.'
+                            : res.exists
+                              ? 'ID already exists'
+                              : null;
+                        pane.editorUnlocked = !pane.idError;
+                        if (monacoEditors[pane.key]) {
+                            monacoEditors[pane.key].updateOptions({
+                                readOnly: !pane.editorUnlocked,
+                            });
+                        }
+                    });
+                }
                 $scope.onPaneIdChange = function (pane) {
+                    pane._idCheckRequest = (pane._idCheckRequest || 0) + 1;
                     pane.idDirty = true;
                     pane.idError = null;
                     pane.editorUnlocked = false;
@@ -5175,30 +4837,7 @@
                     }
                     pane.idChecking = true;
                     _paneIdDebounceMap[pane.key] = $timeout(function () {
-                        var action =
-                            pane.recordType === 'template'
-                                ? 'checkTemplateId'
-                                : 'checkProviderId';
-                        ajax(action, {
-                            id: pane.recordId,
-                            sys_id: pane.sys_id || '',
-                        }).then(function (res) {
-                            pane.idChecking = false;
-                            if (!res.success) {
-                                return;
-                            }
-                            if (res.exists) {
-                                pane.idError = 'ID already exists';
-                            } else {
-                                pane.idError = null;
-                                pane.editorUnlocked = true;
-                                if (monacoEditors[pane.key]) {
-                                    monacoEditors[pane.key].updateOptions({
-                                        readOnly: false,
-                                    });
-                                }
-                            }
-                        });
+                        checkPaneId(pane);
                     }, 500);
                 };
 
@@ -5211,7 +4850,9 @@
                 function _buildProviderScaffold(providerType, fnName) {
                     if (providerType === 'directive') {
                         return (
-                            'function ' + fnName + '() {\n' +
+                            'function ' +
+                            fnName +
+                            '() {\n' +
                             '    return {\n' +
                             "        restrict: 'E',\n" +
                             '        scope: {},\n' +
@@ -5226,7 +4867,9 @@
                     }
                     if (providerType === 'factory') {
                         return (
-                            'function ' + fnName + '() {\n' +
+                            'function ' +
+                            fnName +
+                            '() {\n' +
                             '    return {\n' +
                             '        someMethod: function () {},\n' +
                             '    };\n' +
@@ -5234,11 +4877,7 @@
                         );
                     }
                     if (providerType === 'service') {
-                        return (
-                            'function ' + fnName + '() {\n' +
-                            '    this.someMethod = function () {};\n' +
-                            '}\n'
-                        );
+                        return 'function ' + fnName + '() {\n' + '    this.someMethod = function () {};\n' + '}\n';
                     }
                     return null;
                 }
@@ -5246,24 +4885,13 @@
                 $scope.onProviderTypeChange = function (pane) {
                     pane.dirty = true;
                     var editor = monacoEditors[pane.key];
-                    var currentValue = editor
-                        ? editor.getValue()
-                        : pane.content || '';
+                    var currentValue = editor ? editor.getValue() : pane.content || '';
                     // Auto-swaps only when the pane is empty or still holds the last-inserted scaffold.
-                    if (
-                        currentValue.trim() !== '' &&
-                        currentValue !== pane._scaffoldContent
-                    ) {
+                    if (currentValue.trim() !== '' && currentValue !== pane._scaffoldContent) {
                         return;
                     }
-                    var fnName =
-                        pane.recordId ||
-                        _providerScaffoldDefaultNames[pane.providerType] ||
-                        'myProvider';
-                    var scaffold = _buildProviderScaffold(
-                        pane.providerType,
-                        fnName
-                    );
+                    var fnName = pane.recordId || _providerScaffoldDefaultNames[pane.providerType] || 'myProvider';
+                    var scaffold = _buildProviderScaffold(pane.providerType, fnName);
                     if (!scaffold) {
                         return;
                     }
@@ -5302,9 +4930,7 @@
                     }
 
                     var editor = monacoEditors[pane.key];
-                    var value = editor
-                        ? editor.getValue()
-                        : $scope.widget[pane.field] || '';
+                    var value = editor ? editor.getValue() : $scope.widget[pane.field] || '';
 
                     // Mark field as self-saving so the record-watcher echo is absorbed
                     _selfSavingFields[pane.field] = value;
@@ -5324,8 +4950,7 @@
                             originalValues[pane.field] = value;
                             lastServerValues[pane.field] = value;
                             if (data.sys_updated_on) {
-                                $scope.widget.sys_updated_on =
-                                    data.sys_updated_on;
+                                $scope.widget.sys_updated_on = data.sys_updated_on;
                             }
                             pane.dirty = (editor ? editor.getValue() : $scope.widget[pane.field] || '') !== value;
                             pane.externalChange = null;
@@ -5333,10 +4958,7 @@
                             if (!hasUnsavedChanges()) {
                                 pane.savedAt = null;
                                 $scope.lastSaveTime = new Date();
-                                if (
-                                    data.update_set_sys_id &&
-                                    data.update_set_name
-                                ) {
+                                if (data.update_set_sys_id && data.update_set_name) {
                                     $scope.lastSaveUpdateSet = {
                                         sys_id: data.update_set_sys_id,
                                         name: data.update_set_name,
@@ -5377,12 +4999,7 @@
                         return 'just now';
                     }
                     if (diffMin < 60) {
-                        return (
-                            diffMin +
-                            ' min' +
-                            (diffMin === 1 ? '' : 's') +
-                            ' ago'
-                        );
+                        return diffMin + ' min' + (diffMin === 1 ? '' : 's') + ' ago';
                     }
                     var opts = { hour: 'numeric', minute: '2-digit' };
                     if (diffMs >= 86400000) {
@@ -5394,9 +5011,7 @@
                 }
 
                 $scope.getLastSaveLabel = function () {
-                    return $scope.lastSaveTime
-                        ? 'Saved ' + _formatRelativeTime($scope.lastSaveTime)
-                        : '';
+                    return $scope.lastSaveTime ? 'Saved ' + _formatRelativeTime($scope.lastSaveTime) : '';
                 };
 
                 $scope.getLocalDraftEditedLabel = function (draft) {
@@ -5410,9 +5025,7 @@
                 };
 
                 $scope.getPaneSavedLabel = function (pane) {
-                    return pane.savedAt
-                        ? 'Saved ' + _formatRelativeTime(pane.savedAt)
-                        : '';
+                    return pane.savedAt ? 'Saved ' + _formatRelativeTime(pane.savedAt) : '';
                 };
 
                 $scope.formatUpdateSetName = function (name) {
@@ -5424,12 +5037,15 @@
 
                 // Keep the relative labels fresh even when the user is idle
                 setInterval(function () {
-                    var hasPaneSaved = $scope.visibleItems.some(
-                        function (item) {
-                            return item.type === 'pane' && item.savedAt;
-                        }
-                    );
-                    if ($scope.lastSaveTime || ($scope.localDrafts && $scope.localDrafts.length) || ($scope.userPrefs.autosaveInterval && $scope.lastDraftSaveTime) || hasPaneSaved) {
+                    var hasPaneSaved = $scope.visibleItems.some(function (item) {
+                        return item.type === 'pane' && item.savedAt;
+                    });
+                    if (
+                        $scope.lastSaveTime ||
+                        ($scope.localDrafts && $scope.localDrafts.length) ||
+                        ($scope.userPrefs.autosaveInterval && $scope.lastDraftSaveTime) ||
+                        hasPaneSaved
+                    ) {
                         $scope.$applyAsync();
                     }
                 }, 30000);
@@ -5442,19 +5058,30 @@
                     });
                     $scope.visibleItems.forEach(function (item) {
                         if (item.type === 'pane' && item.field) {
-                            item.dirty = (monacoEditors[item.key] ? monacoEditors[item.key].getValue() : $scope.widget[item.field] || '') !== originalValues[item.field];
+                            item.dirty =
+                                (monacoEditors[item.key]
+                                    ? monacoEditors[item.key].getValue()
+                                    : $scope.widget[item.field] || '') !== originalValues[item.field];
                             item.savedAt = null;
                             item.externalChange = null;
                         }
                     });
                     originalHeader = {
-                        name: payload.name || '', id: payload.id || '', description: payload.description || '',
-                        controller_as: payload.controller_as || 'c', is_public: !!payload.public,
-                        roles: payload.roles || '', static: !!payload.static,
+                        name: payload.name || '',
+                        id: payload.id || '',
+                        description: payload.description || '',
+                        controller_as: payload.controller_as || 'c',
+                        is_public: !!payload.public,
+                        roles: payload.roles || '',
+                        static: !!payload.static,
                     };
                     _captureAdditionalHeaderValues(payload);
                     Object.keys(originalHeader).forEach(function (field) {
                         var current = field === 'roles' ? $scope.rolesList.join(',') : $scope.widget[field];
+                        current =
+                            typeof originalHeader[field] === 'boolean'
+                                ? !!current
+                                : current || (field === 'controller_as' ? 'c' : '');
                         $scope.headerDirty[field] = current !== originalHeader[field];
                     });
                     _clearWidgetDrafts();
@@ -5478,13 +5105,7 @@
                     var payload = _buildSavePayload();
 
                     // Marks script fields self-saving so the record-watcher echo doesn't re-dirty panes.
-                    var _saveAllScriptFields = [
-                        'template',
-                        'css',
-                        'client_script',
-                        'script',
-                        'link',
-                    ];
+                    var _saveAllScriptFields = ['template', 'css', 'client_script', 'script', 'link'];
                     _saveAllScriptFields.forEach(function (f) {
                         _selfSavingFields[f] = payload[f];
                     });
@@ -5511,62 +5132,42 @@
                                       }
                                     : null;
                             if (data.sys_updated_on) {
-                                $scope.widget.sys_updated_on =
-                                    data.sys_updated_on;
+                                $scope.widget.sys_updated_on = data.sys_updated_on;
                             }
                             var wasNew = $scope.isNewWidget;
                             if (wasNew) {
                                 SYS_ID = data.sys_id;
                                 $scope.widget.sys_id = SYS_ID;
                                 var newUrl =
-                                    '/' +
-                                    (WE_UI_SCRIPTS.editorPage ||
-                                        'widget_editor') +
-                                    '.do?widget_id=' +
-                                    SYS_ID;
+                                    '/' + (WE_UI_SCRIPTS.editorPage || 'widget_editor') + '.do?widget_id=' + SYS_ID;
                                 history.replaceState({}, '', newUrl);
                                 try {
-                                    window.parent.history.replaceState(
-                                        {},
-                                        '',
-                                        newUrl
-                                    );
+                                    window.parent.history.replaceState({}, '', newUrl);
                                 } catch (e) {}
                                 $scope.isNewWidget = false;
                             }
                             _acceptWidgetSave(payload);
                             // Sync ES12 — SYS_ID is now set even for newly-created widgets
-                            ajax('saveEs12', {
-                                sys_id: SYS_ID,
-                                enabled: $scope.widget.es12 ? 'true' : 'false',
-                            }).then(function (_data) {
-                                $scope.es12RecordExists = true;
-                            });
+                            $scope.saveEs12();
                             // Always refresh versions after a save so the new entry appears in the dropdown
-                            ajax('getVersions', { sys_id: SYS_ID }).then(
-                                function (d) {
-                                    if (d.success) {
-                                        $scope.versions = d.versions;
-                                    }
+                            ajax('getVersions', { sys_id: SYS_ID }).then(function (d) {
+                                if (d.success) {
+                                    $scope.versions = d.versions;
                                 }
-                            );
+                            });
                             if (wasNew) {
                                 // Load remaining side data now that the record exists
-                                ajax('getTemplates', { sys_id: SYS_ID }).then(
-                                    function (d) {
-                                        if (d.success) {
-                                            $scope.templates = d.templates;
-                                        }
+                                ajax('getTemplates', { sys_id: SYS_ID }).then(function (d) {
+                                    if (d.success) {
+                                        $scope.templates = d.templates;
                                     }
-                                );
-                                ajax('getProviders', { sys_id: SYS_ID }).then(
-                                    function (d) {
-                                        if (d.success) {
-                                            $scope.providers = d.providers;
-                                            _syncProviderCompletions();
-                                        }
+                                });
+                                ajax('getProviders', { sys_id: SYS_ID }).then(function (d) {
+                                    if (d.success) {
+                                        $scope.providers = d.providers;
+                                        _syncProviderCompletions();
                                     }
-                                );
+                                });
                                 ajax('getDependencies', {
                                     sys_id: SYS_ID,
                                 }).then(function (d) {
@@ -5608,11 +5209,16 @@
                     if (!SYS_ID) {
                         return;
                     }
-                    _applyEsVersion(!!$scope.widget.es12);
                     ajax('saveEs12', {
                         sys_id: SYS_ID,
                         enabled: $scope.widget.es12 ? 'true' : 'false',
-                    }).then(function (_data) {
+                    }).then(function (data) {
+                        if (!data.success) {
+                            $scope.widget.es12 = _es12Enabled;
+                            $scope.saveError = data.error || 'Could not save ES12 setting.';
+                            return;
+                        }
+                        _applyEsVersion(!!data.result);
                         $scope.es12RecordExists = true;
                     });
                 };
@@ -5623,37 +5229,29 @@
                 function startPresenceSubscription(widgetSysId) {
                     _presenceWidgetSysId = widgetSysId;
 
-                    var currentUserId =
-                        (typeof NOW !== 'undefined' && NOW.user_id) || null;
+                    var currentUserId = (typeof NOW !== 'undefined' && NOW.user_id) || null;
                     // Presence map (user_id -> user info), seeded by polling, kept live via AMB.
                     var presenceMap = {};
 
                     function updatePresenceFromMap() {
-                        $scope.presenceUsers = Object.keys(presenceMap).map(
-                            function (uid) {
-                                return presenceMap[uid];
-                            }
-                        );
+                        $scope.presenceUsers = Object.keys(presenceMap).map(function (uid) {
+                            return presenceMap[uid];
+                        });
                     }
 
                     function fetchPresence() {
-                        ajax('getPresence', { sys_id: widgetSysId }).then(
-                            function (data) {
-                                if (!data || !data.success) {
-                                    return;
-                                }
-                                presenceMap = {};
-                                (data.users || []).forEach(function (u) {
-                                    if (
-                                        u.sys_id &&
-                                        u.sys_id !== currentUserId
-                                    ) {
-                                        presenceMap[u.sys_id] = u;
-                                    }
-                                });
-                                updatePresenceFromMap();
+                        ajax('getPresence', { sys_id: widgetSysId }).then(function (data) {
+                            if (!data || !data.success) {
+                                return;
                             }
-                        );
+                            presenceMap = {};
+                            (data.users || []).forEach(function (u) {
+                                if (u.sys_id && u.sys_id !== currentUserId) {
+                                    presenceMap[u.sys_id] = u;
+                                }
+                            });
+                            updatePresenceFromMap();
+                        });
                     }
 
                     // Publish our own viewing status to the presence channel.
@@ -5667,19 +5265,12 @@
                                 presences: [
                                     {
                                         status: status,
-                                        session_id:
-                                            (NOW && NOW.session_id) || '',
+                                        session_id: (NOW && NOW.session_id) || '',
                                         user_name: (NOW && NOW.user_name) || '',
                                         user_id: currentUserId || '',
-                                        user_display_name:
-                                            (NOW &&
-                                                (NOW.user_display_name ||
-                                                    NOW.full_name)) ||
-                                            '',
-                                        user_initials:
-                                            (NOW && NOW.user_initials) || '',
-                                        user_avatar:
-                                            (NOW && NOW.user_avatar) || null,
+                                        user_display_name: (NOW && (NOW.user_display_name || NOW.full_name)) || '',
+                                        user_initials: (NOW && NOW.user_initials) || '',
+                                        user_avatar: (NOW && NOW.user_avatar) || null,
                                         table: 'sp_widget',
                                         sys_id: widgetSysId,
                                     },
@@ -5690,15 +5281,12 @@
 
                     if (amb) {
                         try {
-                            presenceChannel = amb.getChannel(
-                                '/sn/rp/sp_widget/' + widgetSysId
-                            );
+                            presenceChannel = amb.getChannel('/sn/rp/sp_widget/' + widgetSysId);
 
                             // Subscribe to receive other users' presence updates in real-time.
                             // Subscribing also registers us server-side (sys_amb_channel_presence).
                             presenceChannel.subscribe(function (msg) {
-                                var presences =
-                                    msg && msg.data && msg.data.presences;
+                                var presences = msg && msg.data && msg.data.presences;
                                 if (!presences) {
                                     return;
                                 }
@@ -5708,10 +5296,7 @@
                                     if (!uid || uid === currentUserId) {
                                         return;
                                     }
-                                    if (
-                                        p.status === 'exited' ||
-                                        p.status === 'probably left'
-                                    ) {
+                                    if (p.status === 'exited' || p.status === 'probably left') {
                                         if (presenceMap[uid]) {
                                             delete presenceMap[uid];
                                             changed = true;
@@ -5719,14 +5304,8 @@
                                     } else {
                                         presenceMap[uid] = {
                                             sys_id: uid,
-                                            name:
-                                                p.user_display_name ||
-                                                p.user_name ||
-                                                uid,
-                                            initials:
-                                                p.user_initials ||
-                                                p.user_initial ||
-                                                '',
+                                            name: p.user_display_name || p.user_name || uid,
+                                            initials: p.user_initials || p.user_initial || '',
                                             avatar: p.user_avatar || null,
                                         };
                                         changed = true;
@@ -5756,10 +5335,7 @@
                             publishPresence('viewing');
                         }
                     };
-                    document.addEventListener(
-                        'visibilitychange',
-                        _presenceVisibilityHandler
-                    );
+                    document.addEventListener('visibilitychange', _presenceVisibilityHandler);
                 }
 
                 function stopPresenceSubscription() {
@@ -5770,8 +5346,7 @@
                                 presences: [
                                     {
                                         status: 'exited',
-                                        session_id:
-                                            (NOW && NOW.session_id) || '',
+                                        session_id: (NOW && NOW.session_id) || '',
                                         user_id: (NOW && NOW.user_id) || '',
                                         table: 'sp_widget',
                                         sys_id: _presenceWidgetSysId,
@@ -5785,10 +5360,7 @@
                         presenceChannel = null;
                     }
                     if (_presenceVisibilityHandler) {
-                        document.removeEventListener(
-                            'visibilitychange',
-                            _presenceVisibilityHandler
-                        );
+                        document.removeEventListener('visibilitychange', _presenceVisibilityHandler);
                         _presenceVisibilityHandler = null;
                     }
                     _presenceWidgetSysId = null;
@@ -5796,8 +5368,7 @@
                 }
 
                 // Per-pane presence (template / provider editors)
-                var _panePresenceCurrentUserId =
-                    (typeof NOW !== 'undefined' && NOW.user_id) || null;
+                var _panePresenceCurrentUserId = (typeof NOW !== 'undefined' && NOW.user_id) || null;
 
                 function _presencePublishData(table, sysId, status) {
                     return {
@@ -5807,11 +5378,7 @@
                                 session_id: (NOW && NOW.session_id) || '',
                                 user_name: (NOW && NOW.user_name) || '',
                                 user_id: _panePresenceCurrentUserId || '',
-                                user_display_name:
-                                    (NOW &&
-                                        (NOW.user_display_name ||
-                                            NOW.full_name)) ||
-                                    '',
+                                user_display_name: (NOW && (NOW.user_display_name || NOW.full_name)) || '',
                                 user_initials: (NOW && NOW.user_initials) || '',
                                 user_avatar: (NOW && NOW.user_avatar) || null,
                                 table: table,
@@ -5834,28 +5401,19 @@
                     var panePresenceMap = {};
 
                     try {
-                        pane._presenceChannel = amb.getChannel(
-                            '/sn/rp/' + table + '/' + pane.sys_id
-                        );
+                        pane._presenceChannel = amb.getChannel('/sn/rp/' + table + '/' + pane.sys_id);
                         pane._presenceChannel.subscribe(function (msg) {
-                            var presences =
-                                msg && msg.data && msg.data.presences;
+                            var presences = msg && msg.data && msg.data.presences;
                             if (!presences) {
                                 return;
                             }
                             var changed = false;
                             presences.forEach(function (p) {
                                 var uid = p.user_id;
-                                if (
-                                    !uid ||
-                                    uid === _panePresenceCurrentUserId
-                                ) {
+                                if (!uid || uid === _panePresenceCurrentUserId) {
                                     return;
                                 }
-                                if (
-                                    p.status === 'exited' ||
-                                    p.status === 'probably left'
-                                ) {
+                                if (p.status === 'exited' || p.status === 'probably left') {
                                     if (panePresenceMap[uid]) {
                                         delete panePresenceMap[uid];
                                         changed = true;
@@ -5863,14 +5421,8 @@
                                 } else {
                                     panePresenceMap[uid] = {
                                         sys_id: uid,
-                                        name:
-                                            p.user_display_name ||
-                                            p.user_name ||
-                                            uid,
-                                        initials:
-                                            p.user_initials ||
-                                            p.user_initial ||
-                                            '',
+                                        name: p.user_display_name || p.user_name || uid,
+                                        initials: p.user_initials || p.user_initial || '',
                                         avatar: p.user_avatar || null,
                                     };
                                     changed = true;
@@ -5878,9 +5430,7 @@
                             });
                             if (changed) {
                                 $scope.$applyAsync(function () {
-                                    pane.viewingUsers = Object.keys(
-                                        panePresenceMap
-                                    ).map(function (uid) {
+                                    pane.viewingUsers = Object.keys(panePresenceMap).map(function (uid) {
                                         return panePresenceMap[uid];
                                     });
                                 });
@@ -5889,13 +5439,7 @@
                         $timeout(function () {
                             if (pane._presenceChannel) {
                                 try {
-                                    pane._presenceChannel.publish(
-                                        _presencePublishData(
-                                            table,
-                                            pane.sys_id,
-                                            'viewing'
-                                        )
-                                    );
+                                    pane._presenceChannel.publish(_presencePublishData(table, pane.sys_id, 'viewing'));
                                 } catch (e) {}
                             }
                         }, 500);
@@ -5913,9 +5457,7 @@
                               ? 'sys_script_include'
                               : 'sp_angular_provider';
                     try {
-                        pane._presenceChannel.publish(
-                            _presencePublishData(table, pane.sys_id, 'exited')
-                        );
+                        pane._presenceChannel.publish(_presencePublishData(table, pane.sys_id, 'exited'));
                     } catch (e) {}
                     try {
                         pane._presenceChannel.unsubscribe();
@@ -5946,20 +5488,11 @@
                             : pane.recordType === 'script_include'
                               ? 'sys_script_include'
                               : 'sp_angular_provider';
-                    var contentField =
-                        pane.recordType === 'template' ? 'template' : 'script';
+                    var contentField = pane.recordType === 'template' ? 'template' : 'script';
                     try {
                         pane._rwChannel = amb.getRecordWatcherChannel
-                            ? amb.getRecordWatcherChannel(
-                                  table,
-                                  'sys_id=' + pane.sys_id
-                              )
-                            : amb.getChannel(
-                                  '/rw/default/' +
-                                      table +
-                                      '/' +
-                                      btoa('sys_id=' + pane.sys_id)
-                              );
+                            ? amb.getRecordWatcherChannel(table, 'sys_id=' + pane.sys_id)
+                            : amb.getChannel('/rw/default/' + table + '/' + btoa('sys_id=' + pane.sys_id));
                         pane._rwChannel.subscribe(function (msg) {
                             var d = msg && msg.data;
                             if (!d || !d.record || !d.record[contentField]) {
@@ -5970,17 +5503,12 @@
                                 return;
                             }
                             // Absorb echo of our own save (may arrive before AJAX callback)
-                            if (
-                                pane._pendingSaveContent !== undefined &&
-                                pane._pendingSaveContent === serverVal
-                            ) {
+                            if (pane._pendingSaveContent !== undefined && pane._pendingSaveContent === serverVal) {
                                 delete pane._pendingSaveContent;
                                 pane.lastServerContent = serverVal;
                                 return;
                             }
-                            var updater =
-                                (msg.ext && msg.ext.from_user) ||
-                                'Another user';
+                            var updater = (msg.ext && msg.ext.from_user) || 'Another user';
                             $timeout(function () {
                                 pane.lastServerContent = serverVal;
                                 var editor = monacoEditors[pane.key];
@@ -6016,14 +5544,8 @@
                     // Equivalent to snRecordWatcher._initWatcher(), which ng.amb doesn't expose here.
                     try {
                         var rwChannel = amb.getRecordWatcherChannel
-                            ? amb.getRecordWatcherChannel(
-                                  'sp_widget',
-                                  'sys_id=' + SYS_ID
-                              )
-                            : amb.getChannel(
-                                  '/rw/default/sp_widget/' +
-                                      btoa('sys_id=' + SYS_ID)
-                              );
+                            ? amb.getRecordWatcherChannel('sp_widget', 'sys_id=' + SYS_ID)
+                            : amb.getChannel('/rw/default/sp_widget/' + btoa('sys_id=' + SYS_ID));
                         rwChannel.subscribe(function (msg) {
                             var d = msg && msg.data;
                             if (!d || (d.sys_id && d.sys_id !== SYS_ID)) {
@@ -6042,9 +5564,7 @@
                 function _applyWidgetRwMessage(d, ext) {
                     var updater =
                         (ext && ext.from_user) ||
-                        (d.record &&
-                            d.record.sys_updated_by &&
-                            d.record.sys_updated_by.value) ||
+                        (d.record && d.record.sys_updated_by && d.record.sys_updated_by.value) ||
                         'Another user';
                     var changes = d.changes_with_users || {};
                     var record = d.record || {};
@@ -6067,10 +5587,7 @@
                             return;
                         }
                         // Skips the infobar when the RW notification just echoes our own save.
-                        if (
-                            _selfSavingFields[field] !== undefined &&
-                            _selfSavingFields[field] === serverVal
-                        ) {
+                        if (_selfSavingFields[field] !== undefined && _selfSavingFields[field] === serverVal) {
                             delete _selfSavingFields[field];
                             originalValues[field] = serverVal;
                             pane.dirty = false;
@@ -6108,13 +5625,7 @@
                 // Reverts by other users are handled by the AMB record watcher.
                 function startRevertListener() {
                     var revertKey = '_weRevertPending_' + SYS_ID;
-                    var FIELDS = [
-                        'template',
-                        'css',
-                        'client_script',
-                        'script',
-                        'link',
-                    ];
+                    var FIELDS = ['template', 'css', 'client_script', 'script', 'link'];
 
                     function _onRevertDetected(w) {
                         FIELDS.forEach(function (f) {
@@ -6133,21 +5644,19 @@
                         try {
                             localStorage.removeItem(revertKey);
                         } catch (ex) {}
-                        ajax('getWidget', { sys_id: SYS_ID }).then(
-                            function (data) {
-                                if (!data.success || !data.widget) {
-                                    return;
-                                }
-                                var w = data.widget;
-                                // Only show the banner if server values actually changed (skips a cancelled revert).
-                                var changed = FIELDS.some(function (f) {
-                                    return (w[f] || '') !== lastServerValues[f];
-                                });
-                                if (changed) {
-                                    _onRevertDetected(w);
-                                }
+                        ajax('getWidget', { sys_id: SYS_ID }).then(function (data) {
+                            if (!data.success || !data.widget) {
+                                return;
                             }
-                        );
+                            var w = data.widget;
+                            // Only show the banner if server values actually changed (skips a cancelled revert).
+                            var changed = FIELDS.some(function (f) {
+                                return (w[f] || '') !== lastServerValues[f];
+                            });
+                            if (changed) {
+                                _onRevertDetected(w);
+                            }
+                        });
                     });
                 }
 
@@ -6169,8 +5678,7 @@
                     // Save current value of editors becoming hidden, then dispose them
                     $scope.coreEditorDefs.forEach(function (def) {
                         if (!def.visible && monacoEditors[def.key]) {
-                            $scope.widget[def.field] =
-                                monacoEditors[def.key].getValue();
+                            $scope.widget[def.field] = monacoEditors[def.key].getValue();
                             disposeEditor(def.key);
                         }
                     });
@@ -6195,14 +5703,12 @@
                     $scope.coreEditorDefs.forEach(function (d) {
                         prefs[d.key] = storedVis.hasOwnProperty(d.key) ? storedVis[d.key] : d.visible;
                     });
-                    prefs.formatTabsToSpaces =
-                        $scope.userPrefs.formatTabsToSpaces;
+                    prefs.formatTabsToSpaces = $scope.userPrefs.formatTabsToSpaces;
                     prefs.wordWrap = $scope.userPrefs.wordWrap;
                     prefs.editorTheme = $scope.userPrefs.editorTheme;
                     prefs.minimap = $scope.userPrefs.minimap;
                     prefs.alwaysShowLink = $scope.userPrefs.alwaysShowLink;
-                    prefs.realtimeWidgetUpdates =
-                        $scope.userPrefs.realtimeWidgetUpdates;
+                    prefs.realtimeWidgetUpdates = $scope.userPrefs.realtimeWidgetUpdates;
                     prefs.autoIndent = $scope.userPrefs.autoIndent;
                     prefs.formatOnPaste = $scope.userPrefs.formatOnPaste;
                     prefs.formatOnType = $scope.userPrefs.formatOnType;
@@ -6216,42 +5722,36 @@
                     prefs.autoClosingBrackets = $scope.userPrefs.autoClosingBrackets;
                     prefs.autoClosingQuotes = $scope.userPrefs.autoClosingQuotes;
                     prefs.linkedEditing = $scope.userPrefs.linkedEditing;
-                    prefs.insertSpaceBeforeFuncParen =
-                        $scope.userPrefs.insertSpaceBeforeFuncParen;
+                    prefs.insertSpaceBeforeFuncParen = $scope.userPrefs.insertSpaceBeforeFuncParen;
                     prefs.tabSize = $scope.userPrefs.tabSize;
                     prefs.remBase = $scope.userPrefs.remBase;
                     prefs.autosaveInterval = $scope.userPrefs.autosaveInterval;
                     prefs.draftRetentionDays = $scope.userPrefs.draftRetentionDays;
-                    prefs.ctrlSSaveActiveOnly =
-                        $scope.userPrefs.ctrlSSaveActiveOnly;
-                    prefs.flashOnEditorOpen =
-                        $scope.userPrefs.flashOnEditorOpen;
-                    prefs.showOpenInVsCode =
-                        $scope.userPrefs.showOpenInVsCode;
-                    prefs.showRecentlyOpenedWidgets =
-                        $scope.userPrefs.showRecentlyOpenedWidgets !== false;
-                    prefs.showOpenHistory =
-                        $scope.userPrefs.showOpenHistory;
-                    prefs.showAssistantButton =
-                        $scope.userPrefs.showAssistantButton;
-                    prefs.contextMenuMode =
-                        $scope.userPrefs.contextMenuMode || 'enhanced';
-                    prefs.htmlClassPortalSysId =
-                        $scope.userPrefs.htmlClassPortalSysId;
-                    prefs.htmlClassPortalUrlSuffix =
-                        $scope.userPrefs.htmlClassPortalUrlSuffix;
-                    prefs.htmlClassThemeSysId =
-                        $scope.userPrefs.htmlClassThemeSysId;
-                    prefs.htmlClassIncludeStandardCss =
-                        !!$scope.userPrefs.htmlClassIncludeStandardCss;
+                    prefs.ctrlSSaveActiveOnly = $scope.userPrefs.ctrlSSaveActiveOnly;
+                    prefs.flashOnEditorOpen = $scope.userPrefs.flashOnEditorOpen;
+                    prefs.showOpenInVsCode = $scope.userPrefs.showOpenInVsCode;
+                    prefs.showRecentlyOpenedWidgets = $scope.userPrefs.showRecentlyOpenedWidgets !== false;
+                    prefs.showOpenHistory = $scope.userPrefs.showOpenHistory;
+                    prefs.showAssistantButton = $scope.userPrefs.showAssistantButton;
+                    prefs.contextMenuMode = $scope.userPrefs.contextMenuMode || 'enhanced';
+                    prefs.htmlClassPortalSysId = $scope.userPrefs.htmlClassPortalSysId;
+                    prefs.htmlClassPortalUrlSuffix = $scope.userPrefs.htmlClassPortalUrlSuffix;
+                    prefs.htmlClassThemeSysId = $scope.userPrefs.htmlClassThemeSysId;
+                    prefs.htmlClassIncludeStandardCss = !!$scope.userPrefs.htmlClassIncludeStandardCss;
                     prefs.recentWidgets = $scope.userPrefs.recentWidgets;
                     prefs.order = storedOrder.length
                         ? storedOrder.concat(
-                            $scope.coreEditorDefs
-                                .map(function (d) { return d.key; })
-                                .filter(function (k) { return storedOrder.indexOf(k) === -1; })
+                              $scope.coreEditorDefs
+                                  .map(function (d) {
+                                      return d.key;
+                                  })
+                                  .filter(function (k) {
+                                      return storedOrder.indexOf(k) === -1;
+                                  })
                           )
-                        : $scope.coreEditorDefs.map(function (d) { return d.key; });
+                        : $scope.coreEditorDefs.map(function (d) {
+                              return d.key;
+                          });
                     return prefs;
                 }
 
@@ -6262,7 +5762,9 @@
                             prefs[k] = overrides[k];
                         });
                     }
-                    return ajax('saveUserPrefs', { value: JSON.stringify(prefs) });
+                    return ajax('saveUserPrefs', {
+                        value: JSON.stringify(prefs),
+                    });
                 }
 
                 // Angular Templates (sp_ng_template)
@@ -6277,15 +5779,11 @@
                             return;
                         }
                         // Fallback while Monaco is still mounting.
-                        var container = document.getElementById(
-                            'editor-' + pane.key
-                        );
+                        var container = document.getElementById('editor-' + pane.key);
                         if (!container || !container.querySelector) {
                             return;
                         }
-                        var input = container.querySelector(
-                            'textarea, [contenteditable="true"]'
-                        );
+                        var input = container.querySelector('textarea, [contenteditable="true"]');
                         if (input && input.focus) {
                             input.focus();
                         }
@@ -6296,9 +5794,7 @@
                     if (!existingPane || !existingPane.key || !$scope.userPrefs.flashOnEditorOpen) {
                         return;
                     }
-                    var paneEl = document.getElementById(
-                        'pane-' + existingPane.key
-                    );
+                    var paneEl = document.getElementById('pane-' + existingPane.key);
                     if (!paneEl || !paneEl.classList) {
                         return;
                     }
@@ -6328,43 +5824,9 @@
                     openExtraPane(pane);
                 };
 
-                function initPaneIdCheck(pane) {
-                    if (!pane.recordId || !pane.recordId.trim()) {
-                        return;
-                    }
-                    pane.idChecking = true;
-                    var action =
-                        pane.recordType === 'template'
-                            ? 'checkTemplateId'
-                            : 'checkProviderId';
-                    ajax(action, {
-                        id: pane.recordId,
-                        sys_id: pane.sys_id || '',
-                    }).then(function (res) {
-                        pane.idChecking = false;
-                        if (!res.success) {
-                            return;
-                        }
-                        if (res.exists) {
-                            pane.idError = 'ID already exists';
-                        } else {
-                            pane.idError = null;
-                            pane.editorUnlocked = true;
-                            if (monacoEditors[pane.key]) {
-                                monacoEditors[pane.key].updateOptions({
-                                    readOnly: false,
-                                });
-                            }
-                        }
-                    });
-                }
-
                 $scope.addTemplate = function () {
                     $scope.openDropdown = null;
-                    var defaultId =
-                        $scope.widget && $scope.widget.id
-                            ? $scope.widget.id + '-'
-                            : '';
+                    var defaultId = $scope.widget && $scope.widget.id ? $scope.widget.id + '-' : '';
                     var pane = makeTemplatePaneObj({
                         sys_id: null,
                         id: defaultId,
@@ -6373,7 +5835,8 @@
                     openExtraPane(pane);
                     if (defaultId) {
                         $timeout(function () {
-                            initPaneIdCheck(pane);
+                            pane.idChecking = true;
+                            checkPaneId(pane);
                         }, 80);
                     }
                 };
@@ -6406,8 +5869,7 @@
                         viewingUsers: [],
                         width: null,
                         volatility_level: t.volatility_level || '',
-                        volatility_level_display:
-                            t.volatility_level_display || '',
+                        volatility_level_display: t.volatility_level_display || '',
                     };
                 }
 
@@ -6503,8 +5965,7 @@
                         if (d.success) {
                             $scope.linkProviderResults = d.providers;
                             $scope.linkProviderTotal = d.total || 0;
-                            $scope.linkProviderHasMore =
-                                $scope.linkProviderResults.length < $scope.linkProviderTotal;
+                            $scope.linkProviderHasMore = $scope.linkProviderResults.length < $scope.linkProviderTotal;
                         }
                     });
                 }
@@ -6547,16 +6008,15 @@
                         provider_sys_id: p.sys_id,
                     }).then(function (d) {
                         if (!d.success) {
+                            $window.alert(d.error || 'Link failed');
                             return;
                         }
-                        ajax('getProviders', { sys_id: SYS_ID }).then(
-                            function (pd) {
-                                if (pd.success) {
-                                    $scope.providers = pd.providers;
-                                    _syncProviderCompletions();
-                                }
+                        ajax('getProviders', { sys_id: SYS_ID }).then(function (pd) {
+                            if (pd.success) {
+                                $scope.providers = pd.providers;
+                                _syncProviderCompletions();
                             }
-                        );
+                        });
                         $scope.openProvider(p);
                     });
                 };
@@ -6597,8 +6057,7 @@
                         viewingUsers: [],
                         width: null,
                         volatility_level: p.volatility_level || '',
-                        volatility_level_display:
-                            p.volatility_level_display || '',
+                        volatility_level_display: p.volatility_level_display || '',
                     };
                 }
 
@@ -6631,8 +6090,7 @@
                         viewingUsers: [],
                         width: null,
                         volatility_level: si.volatility_level || '',
-                        volatility_level_display:
-                            si.volatility_level_display || '',
+                        volatility_level_display: si.volatility_level_display || '',
                     };
                 }
 
@@ -6651,9 +6109,7 @@
                 };
 
                 function openScriptIncludeByName(name) {
-                    var sysId =
-                        window.SNMonacoPlus &&
-                        window.SNMonacoPlus.getSiSysId(name);
+                    var sysId = window.SNMonacoPlus && window.SNMonacoPlus.getSiSysId(name);
                     // If already open, focus it
                     if (sysId) {
                         var existing = extraPanes.filter(function (p) {
@@ -6661,9 +6117,7 @@
                         })[0];
                         if (existing) {
                             $timeout(function () {
-                                var el = document.querySelector(
-                                    '[data-key="' + existing.key + '"]'
-                                );
+                                var el = document.querySelector('[data-key="' + existing.key + '"]');
                                 if (el) {
                                     el.scrollIntoView({
                                         behavior: 'smooth',
@@ -6703,38 +6157,31 @@
                     if (item.recordType === 'provider') {
                         params.widget_sys_id = SYS_ID;
                     }
-                    ajax(
-                        item.recordType === 'template'
-                            ? 'deleteTemplate'
-                            : 'deleteProvider',
-                        params
-                    ).then(function (d) {
-                        item.deleting = false;
-                        $scope.pendingDeletePane = null;
-                        if (!d.success) {
-                            $window.alert(d.error || 'Delete failed');
-                            return;
-                        }
-                        var idx = extraPanes.indexOf(item);
-                        if (idx !== -1) {
-                            extraPanes.splice(idx, 1);
-                        }
-                        if (item.recordType === 'template') {
-                            $scope.templates = $scope.templates.filter(
-                                function (t) {
+                    ajax(item.recordType === 'template' ? 'deleteTemplate' : 'deleteProvider', params).then(
+                        function (d) {
+                            item.deleting = false;
+                            $scope.pendingDeletePane = null;
+                            if (!d.success) {
+                                $window.alert(d.error || 'Delete failed');
+                                return;
+                            }
+                            var idx = extraPanes.indexOf(item);
+                            if (idx !== -1) {
+                                extraPanes.splice(idx, 1);
+                            }
+                            if (item.recordType === 'template') {
+                                $scope.templates = $scope.templates.filter(function (t) {
                                     return t.sys_id !== item.sys_id;
-                                }
-                            );
-                        } else {
-                            $scope.providers = $scope.providers.filter(
-                                function (p) {
+                                });
+                            } else {
+                                $scope.providers = $scope.providers.filter(function (p) {
                                     return p.sys_id !== item.sys_id;
-                                }
-                            );
-                            _syncProviderCompletions();
+                                });
+                                _syncProviderCompletions();
+                            }
+                            buildVisibleItems();
                         }
-                        buildVisibleItems();
-                    });
+                    );
                 };
 
                 // Dependencies (m2m_sp_widget_dependency)
@@ -6743,10 +6190,7 @@
                 $scope.openDependency = function (dep) {
                     $scope.openDropdown = null;
                     $window.open(
-                        '/nav_to.do?uri=' +
-                            encodeURIComponent(
-                                'sp_dependency.do?sys_id=' + dep.sys_id
-                            ),
+                        '/nav_to.do?uri=' + encodeURIComponent('sp_dependency.do?sys_id=' + dep.sys_id),
                         '_blank'
                     );
                 };
@@ -6770,9 +6214,7 @@
                     $scope.linkDependencySearching = true;
                     $timeout.cancel(_linkDepDebounce);
                     _linkDepDebounce = $timeout(function () {
-                        _loadLinkDependencyResults(
-                            $scope.linkDependency.search
-                        );
+                        _loadLinkDependencyResults($scope.linkDependency.search);
                     }, 300);
                 };
 
@@ -6802,7 +6244,11 @@
                 }
 
                 $scope.loadMoreLinkDependencies = function () {
-                    if ($scope.linkDependencySearching || $scope.linkDependencyLoadingMore || !$scope.linkDependencyHasMore) {
+                    if (
+                        $scope.linkDependencySearching ||
+                        $scope.linkDependencyLoadingMore ||
+                        !$scope.linkDependencyHasMore
+                    ) {
                         return;
                     }
                     $scope.linkDependencyLoadingMore = true;
@@ -6839,16 +6285,15 @@
                         dep_sys_id: dep.sys_id,
                     }).then(function (d) {
                         if (!d.success) {
+                            $window.alert(d.error || 'Link failed');
                             return;
                         }
-                        ajax('getDependencies', { sys_id: SYS_ID }).then(
-                            function (dd) {
-                                if (dd.success) {
-                                    $scope.dependencies = dd.dependencies;
-                                    loadHtmlMonarchDts();
-                                }
+                        ajax('getDependencies', { sys_id: SYS_ID }).then(function (dd) {
+                            if (dd.success) {
+                                $scope.dependencies = dd.dependencies;
+                                loadHtmlMonarchDts();
                             }
-                        );
+                        });
                     });
                 };
 
@@ -6881,13 +6326,12 @@
                         dep_sys_id: pending.sys_id,
                     }).then(function (d) {
                         if (!d.success) {
+                            $window.alert(d.error || 'Unlink failed');
                             return;
                         }
-                        $scope.dependencies = $scope.dependencies.filter(
-                            function (dep) {
-                                return dep.sys_id !== pending.sys_id;
-                            }
-                        );
+                        $scope.dependencies = $scope.dependencies.filter(function (dep) {
+                            return dep.sys_id !== pending.sys_id;
+                        });
                         loadHtmlMonarchDts();
                     });
                 };
@@ -6912,21 +6356,19 @@
                     $scope.relatedModal.tabs = [];
                     $scope.relatedModal.activeTab = null;
                     $scope.relatedModal.loading = true;
-                    ajax('getRelatedDefinitions', { sys_id: SYS_ID }).then(
-                        function (d) {
-                            $scope.relatedModal.loading = false;
-                            if (!d.success) {
-                                return;
-                            }
-                            d.tabs.forEach(function (tab) {
-                                _markFirstLink(tab.columns);
-                            });
-                            $scope.relatedModal.tabs = d.tabs;
-                            if (d.tabs.length > 0) {
-                                $scope.selectRelatedTab(d.tabs[0]);
-                            }
+                    ajax('getRelatedDefinitions', { sys_id: SYS_ID }).then(function (d) {
+                        $scope.relatedModal.loading = false;
+                        if (!d.success) {
+                            return;
                         }
-                    );
+                        d.tabs.forEach(function (tab) {
+                            _markFirstLink(tab.columns);
+                        });
+                        $scope.relatedModal.tabs = d.tabs;
+                        if (d.tabs.length > 0) {
+                            $scope.selectRelatedTab(d.tabs[0]);
+                        }
+                    });
                 };
 
                 $scope.assistantModal = {
@@ -6995,13 +6437,9 @@
                         _markFirstLink(tab.columns);
                         tab.page = d.page;
                         var _ps = 20;
-                        tab.pageStart =
-                            d.rows.length > 0 ? d.page * _ps + 1 : 0;
+                        tab.pageStart = d.rows.length > 0 ? d.page * _ps + 1 : 0;
                         tab.pageEnd = d.page * _ps + d.rows.length;
-                        tab.lastPage = Math.max(
-                            0,
-                            Math.ceil(tab.count / _ps) - 1
-                        );
+                        tab.lastPage = Math.max(0, Math.ceil(tab.count / _ps) - 1);
                         tab.pageStartInput = tab.pageStart;
                     });
                 };
@@ -7019,10 +6457,7 @@
                 };
 
                 $scope.relatedRecordUrl = function (table, sysId) {
-                    return (
-                        '/nav_to.do?uri=' +
-                        encodeURIComponent(table + '.do?sys_id=' + sysId)
-                    );
+                    return '/nav_to.do?uri=' + encodeURIComponent(table + '.do?sys_id=' + sysId);
                 };
 
                 // Unlink Provider
@@ -7064,11 +6499,9 @@
                             return;
                         }
                         // Remove from providers list
-                        $scope.providers = $scope.providers.filter(
-                            function (p) {
-                                return p.sys_id !== pending.sys_id;
-                            }
-                        );
+                        $scope.providers = $scope.providers.filter(function (p) {
+                            return p.sys_id !== pending.sys_id;
+                        });
                         _syncProviderCompletions();
                         // Close the open pane for this provider, if any
                         var idx = extraPanes.findIndex(function (e) {
@@ -7082,14 +6515,13 @@
                 };
 
                 function saveExtraPane(pane, onSuccess) {
+                    pane.saveError = null;
                     if (pane.recordType === 'script_include') {
                         if (pane.readOnly) {
                             return;
                         }
                         var editor = monacoEditors[pane.key];
-                        var value = editor
-                            ? editor.getValue()
-                            : pane.content || '';
+                        var value = editor ? editor.getValue() : pane.content || '';
                         pane._pendingSaveContent = value;
                         ajax('saveScriptInclude', {
                             sys_id: pane.sys_id,
@@ -7097,6 +6529,7 @@
                         }).then(function (res) {
                             if (!res.success) {
                                 delete pane._pendingSaveContent;
+                                pane.saveError = res.error || 'Save failed';
                                 return;
                             }
                             pane.lastServerContent = value;
@@ -7143,6 +6576,7 @@
                     }).then(function (res) {
                         if (!res.success) {
                             delete pane._pendingSaveContent;
+                            pane.saveError = res.error || 'Save failed';
                             return;
                         }
                         pane.sys_id = res.sys_id;
@@ -7153,7 +6587,8 @@
                         pane._draftOriginalId = isTemplate ? dataObj.id : dataObj.name;
                         pane._draftOriginalType = dataObj.type || '';
                         pane.dirty = (editor ? editor.getValue() : pane.content || '') !== value;
-                        pane.idDirty = pane.recordId !== pane._draftOriginalId ||
+                        pane.idDirty =
+                            pane.recordId !== pane._draftOriginalId ||
                             (!isTemplate && pane.providerType !== pane._draftOriginalType);
                         _writeLocalDraft(true);
                         if (!hasUnsavedChanges()) {
@@ -7162,9 +6597,7 @@
                         } else {
                             pane.savedAt = new Date();
                         }
-                        var action = isTemplate
-                            ? 'getTemplates'
-                            : 'getProviders';
+                        var action = isTemplate ? 'getTemplates' : 'getProviders';
                         ajax(action, { sys_id: SYS_ID }).then(function (d) {
                             if (d.success) {
                                 if (isTemplate) {
@@ -7254,9 +6687,7 @@
                         }
 
                         // SN returns UTC dates without a timezone suffix — append T and Z
-                        return new Date(
-                            snDate.replace(' ', 'T') + 'Z'
-                        ).toLocaleString(undefined, options);
+                        return new Date(snDate.replace(' ', 'T') + 'Z').toLocaleString(undefined, options);
                     } catch (e) {
                         return snDate;
                     }
@@ -7278,14 +6709,10 @@
                     var $sce = $injector.get('$sce');
                     var label =
                         $scope.formatVersionDate(version.sys_created_on) +
-                        (version.sys_created_by
-                            ? ' \u2014 ' + version.sys_created_by
-                            : '');
+                        (version.sys_created_by ? ' \u2014 ' + version.sys_created_by : '');
                     $scope.versionDiffModal.rawUrl = rawUrl;
                     $scope.versionDiffModal.url = $sce.trustAsResourceUrl(
-                        _diffIframeUrl(
-                            angular.extend({}, params, { da_iframe: 'true' })
-                        )
+                        _diffIframeUrl(angular.extend({}, params, { da_iframe: 'true' }))
                     );
                     $scope.versionDiffModal.label = label;
                     $scope.versionDiffModal.isUnsaved = false;
@@ -7311,10 +6738,7 @@
                 $scope.collapseDiffEditor = function () {
                     var iframe = document.querySelector('.we-diff-iframe');
                     if (iframe && iframe.contentWindow) {
-                        iframe.contentWindow.postMessage(
-                            { type: 'we-diff-collapse' },
-                            '*'
-                        );
+                        iframe.contentWindow.postMessage({ type: 'we-diff-collapse' }, '*');
                     }
                 };
 
@@ -7324,8 +6748,7 @@
                         return;
                     }
                     $scope.$apply(function () {
-                        $scope.versionDiffModal.expandedField =
-                            e.data.fieldLabel || null;
+                        $scope.versionDiffModal.expandedField = e.data.fieldLabel || null;
                     });
                 });
 
@@ -7362,13 +6785,9 @@
                 };
 
                 function _openUnsavedSnapshotDiff(table, recordId, snap, label) {
-                    var snapToken =
-                        Date.now() + '_' + Math.random().toString(36).slice(2);
+                    var snapToken = Date.now() + '_' + Math.random().toString(36).slice(2);
                     try {
-                        localStorage.setItem(
-                            '_weDiffSnap_' + snapToken,
-                            JSON.stringify(snap)
-                        );
+                        localStorage.setItem('_weDiffSnap_' + snapToken, JSON.stringify(snap));
                     } catch (e) {
                         $scope.localDraftError = 'The comparison could not be opened. Check browser storage settings.';
                         return false;
@@ -7383,9 +6802,7 @@
                     var $sce = $injector.get('$sce');
                     $scope.versionDiffModal.rawUrl = rawUrl;
                     $scope.versionDiffModal.url = $sce.trustAsResourceUrl(
-                        _diffIframeUrl(
-                            angular.extend({}, params, { da_iframe: 'true' })
-                        )
+                        _diffIframeUrl(angular.extend({}, params, { da_iframe: 'true' }))
                     );
                     $scope.versionDiffModal.label = label;
                     $scope.versionDiffModal.expandedField = null;
@@ -7451,26 +6868,20 @@
                 }
 
                 function _applyAdditionalWidgetFieldDefaults() {
-                    ($scope.additionalWidgetFields || []).forEach(function (
-                        fieldDef
-                    ) {
+                    ($scope.additionalWidgetFields || []).forEach(function (fieldDef) {
                         if ($scope.widget[fieldDef.name] !== undefined) {
                             return;
                         }
-                        $scope.widget[fieldDef.name] =
-                            fieldDef.type === 'boolean' ? false : '';
+                        $scope.widget[fieldDef.name] = fieldDef.type === 'boolean' ? false : '';
                     });
                 }
 
                 function _captureAdditionalHeaderValues(source) {
-                    ($scope.additionalWidgetFields || []).forEach(function (
-                        fieldDef
-                    ) {
-                        originalHeader[fieldDef.name] =
-                            _normaliseExtraWidgetFieldValue(
-                                fieldDef,
-                                source[fieldDef.name]
-                            );
+                    ($scope.additionalWidgetFields || []).forEach(function (fieldDef) {
+                        originalHeader[fieldDef.name] = _normaliseExtraWidgetFieldValue(
+                            fieldDef,
+                            source[fieldDef.name]
+                        );
                     });
                 }
 
@@ -7535,7 +6946,9 @@
                         var currentBtn = $event.currentTarget;
                         var wrapper = currentBtn.closest ? currentBtn.closest('.we-alert-pill-wrapper') : null;
                         if (wrapper) {
-                            var firstAction = wrapper.querySelector('input[type="radio"]:checked, .we-alert-popover-actions button, .we-alert-popover-actions a');
+                            var firstAction = wrapper.querySelector(
+                                'input[type="radio"]:checked, .we-alert-popover-actions button, .we-alert-popover-actions a'
+                            );
                             if (firstAction) {
                                 $event.preventDefault();
                                 $event.stopPropagation();
@@ -7551,18 +6964,28 @@
                     if ($event.keyCode === 27) {
                         $event.preventDefault();
                         $event.stopPropagation();
-                        var wrapper = $event.currentTarget.closest ? $event.currentTarget.closest('.we-alert-pill-wrapper') : null;
+                        var wrapper = $event.currentTarget.closest
+                            ? $event.currentTarget.closest('.we-alert-pill-wrapper')
+                            : null;
                         if (wrapper) {
                             var pillBtn = wrapper.querySelector('.we-alert-pill');
-                            if (pillBtn) { pillBtn.focus(); }
+                            if (pillBtn) {
+                                pillBtn.focus();
+                            }
                         }
                         // Close after Angular has handled the pill's queued focus event.
-                        $scope.$evalAsync(function () { $scope.openDropdown = null; });
+                        $scope.$evalAsync(function () {
+                            $scope.openDropdown = null;
+                        });
                     } else if ($event.keyCode === 9 && !$event.shiftKey && isLast) {
-                        var currentWrapper = $event.currentTarget.closest ? $event.currentTarget.closest('.we-alert-pill-wrapper') : null;
+                        var currentWrapper = $event.currentTarget.closest
+                            ? $event.currentTarget.closest('.we-alert-pill-wrapper')
+                            : null;
                         $scope.openDropdown = null;
                         if (currentWrapper && currentWrapper.parentElement) {
-                            var allWrappers = Array.prototype.slice.call(currentWrapper.parentElement.querySelectorAll('.we-alert-pill-wrapper'));
+                            var allWrappers = Array.prototype.slice.call(
+                                currentWrapper.parentElement.querySelectorAll('.we-alert-pill-wrapper')
+                            );
                             var idx = allWrappers.indexOf(currentWrapper);
                             if (idx >= 0 && idx < allWrappers.length - 1) {
                                 var nextPill = allWrappers[idx + 1].querySelector('.we-alert-pill');
@@ -7574,14 +6997,22 @@
                             }
                         }
                     } else if ($event.keyCode === 9 && $event.shiftKey) {
-                        var wrapperEl = $event.currentTarget.closest ? $event.currentTarget.closest('.we-alert-pill-wrapper') : null;
+                        var wrapperEl = $event.currentTarget.closest
+                            ? $event.currentTarget.closest('.we-alert-pill-wrapper')
+                            : null;
                         if (wrapperEl) {
-                            var actions = wrapperEl.querySelectorAll('.we-alert-popover-actions button, .we-alert-popover-actions a');
+                            var actions = wrapperEl.querySelectorAll(
+                                '.we-alert-popover-actions button, .we-alert-popover-actions a'
+                            );
                             if (actions.length > 0 && actions[0] === $event.currentTarget) {
                                 $event.preventDefault();
                                 $event.stopPropagation();
-                                var previousControl = wrapperEl.querySelector('input[type="radio"]:checked') || wrapperEl.querySelector('.we-alert-pill');
-                                if (previousControl) { previousControl.focus(); }
+                                var previousControl =
+                                    wrapperEl.querySelector('input[type="radio"]:checked') ||
+                                    wrapperEl.querySelector('.we-alert-pill');
+                                if (previousControl) {
+                                    previousControl.focus();
+                                }
                             }
                         }
                     }
@@ -7589,32 +7020,25 @@
 
                 // Dropdown management
                 $scope.toggleDropdown = function (name) {
-                    $scope.openDropdown =
-                        $scope.openDropdown === name ? null : name;
+                    $scope.openDropdown = $scope.openDropdown === name ? null : name;
                     if (name !== 'compactMenu') {
                         $scope.openCompactSubmenu = null;
                     }
                 };
 
                 $scope.toggleCompactSubmenu = function (key) {
-                    $scope.openCompactSubmenu =
-                        $scope.openCompactSubmenu === key ? null : key;
+                    $scope.openCompactSubmenu = $scope.openCompactSubmenu === key ? null : key;
                 };
 
                 function _isKeyboardActivatableElement(el) {
                     if (!el || !el.closest) {
                         return false;
                     }
-                    var target = el.closest(
-                        '.we-dropdown-item, .we-compact-submenu-trigger'
-                    );
+                    var target = el.closest('.we-dropdown-item, .we-compact-submenu-trigger');
                     if (!target) {
                         return false;
                     }
-                    if (
-                        target.classList.contains('disabled') ||
-                        target.getAttribute('aria-disabled') === 'true'
-                    ) {
+                    if (target.classList.contains('disabled') || target.getAttribute('aria-disabled') === 'true') {
                         return false;
                     }
                     return true;
@@ -7625,9 +7049,7 @@
                         return [];
                     }
                     return Array.prototype.filter.call(
-                        container.querySelectorAll(
-                            '.we-dropdown-item, .we-compact-submenu-trigger'
-                        ),
+                        container.querySelectorAll('.we-dropdown-item, .we-compact-submenu-trigger'),
                         function (el) {
                             if (el.classList.contains('disabled')) {
                                 return false;
@@ -7638,14 +7060,10 @@
                 }
 
                 function _prepareDropdownKeyboardItems() {
-                    var roots = document.querySelectorAll(
-                        '.we-dropdown-menu, .we-popover'
-                    );
+                    var roots = document.querySelectorAll('.we-dropdown-menu, .we-popover');
                     Array.prototype.forEach.call(roots, function (root) {
                         Array.prototype.forEach.call(
-                            root.querySelectorAll(
-                                '.we-dropdown-item, .we-compact-submenu-trigger'
-                            ),
+                            root.querySelectorAll('.we-dropdown-item, .we-compact-submenu-trigger'),
                             function (el) {
                                 // Menu options are arrow-key navigable; keep them out of Tab order.
                                 el.setAttribute('tabindex', '-1');
@@ -7690,10 +7108,7 @@
                     var currentIdx = -1;
                     if ($scope.openDropdown) {
                         for (var i = 0; i < triggers.length; i++) {
-                            if (
-                                _getDropdownNameFromTrigger(triggers[i]) ===
-                                $scope.openDropdown
-                            ) {
+                            if (_getDropdownNameFromTrigger(triggers[i]) === $scope.openDropdown) {
                                 currentIdx = i;
                                 break;
                             }
@@ -7709,15 +7124,9 @@
 
                     var nextIdx;
                     if (backward) {
-                        nextIdx =
-                            currentIdx === 0
-                                ? triggers.length - 1
-                                : currentIdx - 1;
+                        nextIdx = currentIdx === 0 ? triggers.length - 1 : currentIdx - 1;
                     } else {
-                        nextIdx =
-                            currentIdx === triggers.length - 1
-                                ? 0
-                                : currentIdx + 1;
+                        nextIdx = currentIdx === triggers.length - 1 ? 0 : currentIdx + 1;
                     }
 
                     var next = triggers[nextIdx];
@@ -7734,10 +7143,7 @@
                     if (!trigger) {
                         return false;
                     }
-                    return (
-                        _getDropdownNameFromTrigger(trigger) ===
-                        $scope.openDropdown
-                    );
+                    return _getDropdownNameFromTrigger(trigger) === $scope.openDropdown;
                 }
 
                 function _closeOpenModalOnEscape() {
@@ -7948,9 +7354,7 @@
                         return;
                     }
 
-                    var menuContainer = e.target.closest(
-                        '.we-dropdown-menu, .we-popover'
-                    );
+                    var menuContainer = e.target.closest('.we-dropdown-menu, .we-popover');
                     if (!menuContainer) {
                         if (
                             !$scope.openDropdown ||
@@ -7982,9 +7386,7 @@
                             return;
                         }
                         e.preventDefault();
-                        var current = e.target.closest(
-                            '.we-dropdown-item, .we-compact-submenu-trigger'
-                        );
+                        var current = e.target.closest('.we-dropdown-item, .we-compact-submenu-trigger');
                         var currentIdx = items.indexOf(current);
                         if (currentIdx < 0) {
                             items[0].focus();
@@ -8000,17 +7402,12 @@
                     }
 
                     var isEnter = key === 'Enter' || keyCode === 13;
-                    var isSpace =
-                        key === ' ' || key === 'Spacebar' || keyCode === 32;
+                    var isSpace = key === ' ' || key === 'Spacebar' || keyCode === 32;
                     if (!isEnter && !isSpace) {
                         return;
                     }
 
-                    if (
-                        e.target.closest(
-                            'a, button, input, select, textarea, .select2-container, .select2-dropdown'
-                        )
-                    ) {
+                    if (e.target.closest('a, button, input, select, textarea, .select2-container, .select2-dropdown')) {
                         return;
                     }
 
@@ -8019,9 +7416,7 @@
                     }
 
                     e.preventDefault();
-                    var target = e.target.closest(
-                        '.we-dropdown-item, .we-compact-submenu-trigger'
-                    );
+                    var target = e.target.closest('.we-dropdown-item, .we-compact-submenu-trigger');
                     if (target && target.click) {
                         target.click();
                     }
@@ -8037,7 +7432,11 @@
                 $scope.localDraftSelection = { draft: null };
                 $scope.localDraftError = null;
                 $scope.lastDraftSaveTime = null;
-                $scope.draftRecovery = { entries: [], records: [], busy: false };
+                $scope.draftRecovery = {
+                    entries: [],
+                    records: [],
+                    busy: false,
+                };
 
                 function _validAutosaveInterval(value) {
                     return Number.isSafeInteger(value) && value >= 0;
@@ -8057,59 +7456,127 @@
 
                 function _syncLocalDraftSelection() {
                     var selected = $scope.localDraftSelection.draft;
-                    $scope.localDraftSelection.draft = $scope.localDrafts.find(function (draft) {
-                        return selected && draft.key === selected.key;
-                    }) || $scope.localDrafts[0] || null;
+                    $scope.localDraftSelection.draft =
+                        $scope.localDrafts.find(function (draft) {
+                            return selected && draft.key === selected.key;
+                        }) ||
+                        $scope.localDrafts[0] ||
+                        null;
                 }
 
                 function _localDraftFieldSummary(draft) {
-                    return draft.entries.map(function (entry) {
-                        if (entry.type !== 'widget') {
-                            return { template: 'Angular template', provider: 'Angular provider', script_include: 'Script Include' }[entry.type];
-                        }
-                        var def = $scope.coreEditorDefs.find(function (d) { return d.field === entry.field; }) ||
-                            $scope.additionalWidgetFields.find(function (d) { return d.name === entry.field; });
-                        return (def && def.label) || { name: 'Name', id: 'ID', description: 'Description',
-                            controller_as: 'Controller alias', is_public: 'Public', roles: 'Roles', static: 'Static',
-                            option_schema: 'Option Schema', demo_data: 'Demo Data' }[entry.field] || entry.field.replace(/_/g, ' ');
-                    }).filter(function (label, index, labels) { return labels.indexOf(label) === index; }).join(' · ');
+                    return draft.entries
+                        .map(function (entry) {
+                            if (entry.type !== 'widget') {
+                                return {
+                                    template: 'Angular template',
+                                    provider: 'Angular provider',
+                                    script_include: 'Script Include',
+                                }[entry.type];
+                            }
+                            var def =
+                                $scope.coreEditorDefs.find(function (d) {
+                                    return d.field === entry.field;
+                                }) ||
+                                $scope.additionalWidgetFields.find(function (d) {
+                                    return d.name === entry.field;
+                                });
+                            return (
+                                (def && def.label) ||
+                                {
+                                    name: 'Name',
+                                    id: 'ID',
+                                    description: 'Description',
+                                    controller_as: 'Controller alias',
+                                    is_public: 'Public',
+                                    roles: 'Roles',
+                                    static: 'Static',
+                                    option_schema: 'Option Schema',
+                                    demo_data: 'Demo Data',
+                                }[entry.field] ||
+                                entry.field.replace(/_/g, ' ')
+                            );
+                        })
+                        .filter(function (label, index, labels) {
+                            return labels.indexOf(label) === index;
+                        })
+                        .join(' · ');
                 }
 
                 function _pruneLocalDrafts() {
-                    if (!_draftRetentionLoaded || !$scope.currentUserId || !_validDraftRetentionDays($scope.userPrefs.draftRetentionDays)) { return; }
+                    if (
+                        !_draftRetentionLoaded ||
+                        !$scope.currentUserId ||
+                        !_validDraftRetentionDays($scope.userPrefs.draftRetentionDays)
+                    ) {
+                        return;
+                    }
                     var prefix = 'we_local_draft:v1:' + $scope.currentUserId + ':';
                     var cutoff = Date.now() - $scope.userPrefs.draftRetentionDays * 86400000;
                     for (var i = localStorage.length - 1; i >= 0; i--) {
                         var key = localStorage.key(i);
                         // Keep this tab's working copy even if its content has not changed recently.
-                        if (key.indexOf(prefix) !== 0 || key === _draftPrefix() + _draftPageId) { continue; }
+                        if (key.indexOf(prefix) !== 0 || key === _draftPrefix() + _draftPageId) {
+                            continue;
+                        }
                         var raw = localStorage.getItem(key);
                         var draft;
-                        try { draft = JSON.parse(raw); }
-                        catch (e) { continue; }
-                        if (draft && draft.version === 1 && Number.isFinite(draft.updatedAt) &&
-                            Array.isArray(draft.entries) && draft.updatedAt <= cutoff && localStorage.getItem(key) === raw) {
+                        try {
+                            draft = JSON.parse(raw);
+                        } catch (e) {
+                            continue;
+                        }
+                        if (
+                            draft &&
+                            draft.version === 1 &&
+                            Number.isFinite(draft.updatedAt) &&
+                            Array.isArray(draft.entries) &&
+                            draft.updatedAt <= cutoff &&
+                            localStorage.getItem(key) === raw
+                        ) {
                             localStorage.removeItem(key);
                         }
                     }
-                    $scope.localDrafts = $scope.localDrafts.filter(function (draft) { return draft.updatedAt > cutoff; });
+                    $scope.localDrafts = $scope.localDrafts.filter(function (draft) {
+                        return draft.updatedAt > cutoff;
+                    });
                     _syncLocalDraftSelection();
                 }
 
                 function _canDraft() {
-                    return !!(!_draftCaptureStopped && SYS_ID && $scope.currentUserId && !$scope.loading && !$scope.loadError &&
-                        !$scope.isNewWidget && !$scope.isVersionView && $scope.canWriteWidget && !$scope.widget.deleted);
+                    return !!(
+                        !_draftCaptureStopped &&
+                        SYS_ID &&
+                        $scope.currentUserId &&
+                        !$scope.loading &&
+                        !$scope.loadError &&
+                        !$scope.isNewWidget &&
+                        !$scope.isVersionView &&
+                        $scope.canWriteWidget &&
+                        !$scope.widget.deleted
+                    );
                 }
 
                 function _draftWidgetFields() {
                     return ['name', 'id', 'description', 'controller_as', 'is_public', 'roles', 'static']
-                        .concat($scope.coreEditorDefs.map(function (d) { return d.field; }))
-                        .concat($scope.additionalWidgetFields.map(function (d) { return d.name; }));
+                        .concat(
+                            $scope.coreEditorDefs.map(function (d) {
+                                return d.field;
+                            })
+                        )
+                        .concat(
+                            $scope.additionalWidgetFields.map(function (d) {
+                                return d.name;
+                            })
+                        );
                 }
 
                 function _draftPrettyJson(value) {
-                    try { return value.trim() ? JSON.stringify(JSON.parse(value), null, 4) : value; }
-                    catch (e) { return value; }
+                    try {
+                        return value.trim() ? JSON.stringify(JSON.parse(value), null, 4) : value;
+                    } catch (e) {
+                        return value;
+                    }
                 }
 
                 function _collectLocalDraft() {
@@ -8118,28 +7585,66 @@
                         base = base == null ? '' : base;
                         value = value == null ? '' : value;
                         if (value !== base) {
-                            entries.push({ type: type, id: id, key: key, field: field,
-                                base: base, value: value });
+                            entries.push({
+                                type: type,
+                                id: id,
+                                key: key,
+                                field: field,
+                                base: base,
+                                value: value,
+                            });
                         }
                     }
                     _draftWidgetFields().forEach(function (field) {
-                        var def = $scope.coreEditorDefs.find(function (d) { return d.field === field; });
-                        var extra = $scope.additionalWidgetFields.find(function (d) { return d.name === field; });
+                        var def = $scope.coreEditorDefs.find(function (d) {
+                            return d.field === field;
+                        });
+                        var extra = $scope.additionalWidgetFields.find(function (d) {
+                            return d.name === field;
+                        });
                         var base = def ? originalValues[field] : originalHeader[field];
-                        var value = def && monacoEditors[def.key] ? monacoEditors[def.key].getValue() :
-                            field === 'roles' ? $scope.rolesList.join(',') : $scope.widget[field];
-                        if (extra) { value = _normaliseExtraWidgetFieldValue(extra, value); }
+                        var value =
+                            def && monacoEditors[def.key]
+                                ? monacoEditors[def.key].getValue()
+                                : field === 'roles'
+                                  ? $scope.rolesList.join(',')
+                                  : $scope.widget[field];
+                        if (extra) {
+                            value = _normaliseExtraWidgetFieldValue(extra, value);
+                        }
                         add('widget', SYS_ID, def ? def.key : '', field, base, value);
                     });
                     extraPanes.forEach(function (pane) {
-                        if (pane.readOnly) { return; }
+                        if (pane.readOnly) {
+                            return;
+                        }
                         var editor = monacoEditors[pane.key];
-                        add(pane.recordType, pane.sys_id || '', pane.key, 'content',
-                            pane.lastServerContent, editor ? editor.getValue() : pane.content);
+                        add(
+                            pane.recordType,
+                            pane.sys_id || '',
+                            pane.key,
+                            'content',
+                            pane.lastServerContent,
+                            editor ? editor.getValue() : pane.content
+                        );
                         if (pane.hasIdInput) {
-                            add(pane.recordType, pane.sys_id || '', pane.key, 'recordId', pane._draftOriginalId, pane.recordId);
+                            add(
+                                pane.recordType,
+                                pane.sys_id || '',
+                                pane.key,
+                                'recordId',
+                                pane._draftOriginalId,
+                                pane.recordId
+                            );
                             if (pane.recordType === 'provider') {
-                                add('provider', pane.sys_id || '', pane.key, 'providerType', pane._draftOriginalType, pane.providerType);
+                                add(
+                                    'provider',
+                                    pane.sys_id || '',
+                                    pane.key,
+                                    'providerType',
+                                    pane._draftOriginalType,
+                                    pane.providerType
+                                );
                             }
                         }
                     });
@@ -8147,16 +7652,24 @@
                         var json = _draftJson[field];
                         add('widget', SYS_ID, '', field, json.base, json.value);
                     });
-                    return { version: 1, updatedAt: Date.now(), entries: entries };
+                    return {
+                        version: 1,
+                        updatedAt: Date.now(),
+                        entries: entries,
+                    };
                 }
 
                 function _writeLocalDraft(cleanup) {
-                    if (!_canDraft() || (!cleanup && !$scope.userPrefs.autosaveInterval)) { return; }
+                    if (!_canDraft() || (!cleanup && !$scope.userPrefs.autosaveInterval)) {
+                        return;
+                    }
                     try {
                         _pruneLocalDrafts();
                         var key = _draftPrefix() + _draftPageId;
                         // Saving with autosave off may clean up an existing draft, but must not create one.
-                        if (cleanup && !$scope.userPrefs.autosaveInterval && !localStorage.getItem(key)) { return; }
+                        if (cleanup && !$scope.userPrefs.autosaveInterval && !localStorage.getItem(key)) {
+                            return;
+                        }
                         var draft = _collectLocalDraft();
                         if (!draft.entries.length) {
                             localStorage.removeItem(key);
@@ -8172,7 +7685,8 @@
                         }
                         $scope.localDraftError = null;
                     } catch (e) {
-                        $scope.localDraftError = 'Local drafts could not be saved. Check browser storage settings or available space.';
+                        $scope.localDraftError =
+                            'Local drafts could not be saved. Check browser storage settings or available space.';
                     }
                 }
 
@@ -8181,77 +7695,135 @@
                     try {
                         localStorage.removeItem(_draftPrefix() + _draftPageId);
                         $scope.lastDraftSaveTime = null;
+                    } catch (e) {
+                        $scope.localDraftError = 'The local draft could not be discarded.';
                     }
-                    catch (e) { $scope.localDraftError = 'The local draft could not be discarded.'; }
                 }
 
                 function _clearWidgetDrafts() {
-                    if (!SYS_ID || !$scope.currentUserId) { return; }
+                    if (!SYS_ID || !$scope.currentUserId) {
+                        return;
+                    }
                     try {
                         for (var i = localStorage.length - 1; i >= 0; i--) {
                             var key = localStorage.key(i);
-                            if (key.indexOf(_draftPrefix()) === 0) { localStorage.removeItem(key); }
+                            if (key.indexOf(_draftPrefix()) === 0) {
+                                localStorage.removeItem(key);
+                            }
                         }
                         $scope.localDrafts = [];
                         $scope.localDraftSelection.draft = null;
                         $scope.lastDraftSaveTime = null;
-                        if ($scope.versionDiffModal.localDraft) { $scope.closeVersionDiffModal(); }
-                        $scope.draftRecovery = { entries: [], records: [], busy: false };
+                        if ($scope.versionDiffModal.localDraft) {
+                            $scope.closeVersionDiffModal();
+                        }
+                        $scope.draftRecovery = {
+                            entries: [],
+                            records: [],
+                            busy: false,
+                        };
                         $scope.localDraftError = null;
-                    } catch (e) { $scope.localDraftError = 'The widget was saved, but its local drafts could not be removed.'; }
+                    } catch (e) {
+                        $scope.localDraftError = 'The widget was saved, but its local drafts could not be removed.';
+                    }
                 }
 
                 function _validLocalDraft(draft) {
-                    return draft && draft.version === 1 && Number.isFinite(draft.updatedAt) &&
-                        Array.isArray(draft.entries) && draft.entries.length && draft.entries.every(function (entry) {
-                            if (!entry || typeof entry.key !== 'string' || !/^[\w-]*$/.test(entry.key) ||
-                                typeof entry.id !== 'string' || (entry.id && !/^[a-f0-9]{32}$/.test(entry.id)) ||
+                    return (
+                        draft &&
+                        draft.version === 1 &&
+                        Number.isFinite(draft.updatedAt) &&
+                        Array.isArray(draft.entries) &&
+                        draft.entries.length &&
+                        draft.entries.every(function (entry) {
+                            if (
+                                !entry ||
+                                typeof entry.key !== 'string' ||
+                                !/^[\w-]*$/.test(entry.key) ||
+                                typeof entry.id !== 'string' ||
+                                (entry.id && !/^[a-f0-9]{32}$/.test(entry.id)) ||
                                 !['string', 'boolean'].includes(typeof entry.value) ||
-                                !['string', 'boolean'].includes(typeof entry.base)) { return false; }
-                            if (entry.type === 'widget') {
-                                var booleanField = ['is_public', 'static'].includes(entry.field) ||
-                                    $scope.additionalWidgetFields.some(function (d) { return d.name === entry.field && d.type === 'boolean'; });
-                                var valueType = booleanField ? 'boolean' : 'string';
-                                return typeof entry.value === valueType && typeof entry.base === valueType &&
-                                    entry.id === SYS_ID && _draftWidgetFields().concat(['option_schema', 'demo_data']).includes(entry.field);
+                                !['string', 'boolean'].includes(typeof entry.base)
+                            ) {
+                                return false;
                             }
-                            return typeof entry.value === 'string' && typeof entry.base === 'string' &&
+                            if (entry.type === 'widget') {
+                                var booleanField =
+                                    ['is_public', 'static'].includes(entry.field) ||
+                                    $scope.additionalWidgetFields.some(function (d) {
+                                        return d.name === entry.field && d.type === 'boolean';
+                                    });
+                                var valueType = booleanField ? 'boolean' : 'string';
+                                return (
+                                    typeof entry.value === valueType &&
+                                    typeof entry.base === valueType &&
+                                    entry.id === SYS_ID &&
+                                    _draftWidgetFields().concat(['option_schema', 'demo_data']).includes(entry.field)
+                                );
+                            }
+                            return (
+                                typeof entry.value === 'string' &&
+                                typeof entry.base === 'string' &&
                                 ['template', 'provider', 'script_include'].includes(entry.type) &&
                                 (entry.type !== 'script_include' || !!entry.id) &&
-                                (entry.field === 'content' || (entry.type !== 'script_include' && entry.field === 'recordId') ||
-                                    (entry.type === 'provider' && entry.field === 'providerType'));
-                        });
+                                (entry.field === 'content' ||
+                                    (entry.type !== 'script_include' && entry.field === 'recordId') ||
+                                    (entry.type === 'provider' && entry.field === 'providerType'))
+                            );
+                        })
+                    );
                 }
 
                 function _findLocalDrafts(onLoad) {
                     try {
                         _pruneLocalDrafts();
-                        if (!_canDraft()) { return; }
+                        if (!_canDraft()) {
+                            return;
+                        }
                         $scope.localDrafts = [];
                         for (var i = 0; i < localStorage.length; i++) {
                             var key = localStorage.key(i);
-                            if (key.indexOf(_draftPrefix()) !== 0 || key === _draftPrefix() + _draftPageId) { continue; }
+                            if (key.indexOf(_draftPrefix()) !== 0 || key === _draftPrefix() + _draftPageId) {
+                                continue;
+                            }
                             try {
                                 var raw = localStorage.getItem(key);
                                 var draft = JSON.parse(raw);
                                 if (_validLocalDraft(draft)) {
-                                    $scope.localDrafts.push({ key: key, raw: raw, updatedAt: draft.updatedAt,
-                                        entries: draft.entries, fieldsLabel: _localDraftFieldSummary(draft) });
+                                    $scope.localDrafts.push({
+                                        key: key,
+                                        raw: raw,
+                                        updatedAt: draft.updatedAt,
+                                        entries: draft.entries,
+                                        fieldsLabel: _localDraftFieldSummary(draft),
+                                    });
                                 }
-                            } catch (e) { /* Leave unreadable drafts untouched. */ }
+                            } catch (e) {
+                                /* Leave unreadable drafts untouched. */
+                            }
                         }
-                        $scope.localDrafts.sort(function (a, b) { return b.updatedAt - a.updatedAt; });
+                        $scope.localDrafts.sort(function (a, b) {
+                            return b.updatedAt - a.updatedAt;
+                        });
                         _syncLocalDraftSelection();
                         if (onLoad) {
                             var previousKey;
                             try {
                                 previousKey = sessionStorage.getItem(_draftPrefix());
                                 sessionStorage.setItem(_draftPrefix(), _draftPrefix() + _draftPageId);
-                            } catch (e) { /* Manual recovery still works when tab storage is unavailable. */ }
+                            } catch (e) {
+                                /* Manual recovery still works when tab storage is unavailable. */
+                            }
                             if (document.wasDiscarded === true) {
-                                var previousDraft = $scope.localDrafts.find(function (draft) { return draft.key === previousKey; });
-                                if (!previousKey && $scope.localDrafts.length === 1) { previousDraft = $scope.localDrafts[0]; }
-                                if (previousDraft) { return $scope.restoreLocalDraft(previousDraft); }
+                                var previousDraft = $scope.localDrafts.find(function (draft) {
+                                    return draft.key === previousKey;
+                                });
+                                if (!previousKey && $scope.localDrafts.length === 1) {
+                                    previousDraft = $scope.localDrafts[0];
+                                }
+                                if (previousDraft) {
+                                    return $scope.restoreLocalDraft(previousDraft);
+                                }
                             }
                         }
                     } catch (e) {
@@ -8260,7 +7832,9 @@
                 }
 
                 function _loadDraftRecovery(draft) {
-                    if (!_canDraft() || $scope.draftRecovery.busy) { return $q.reject('Draft recovery is unavailable.'); }
+                    if (!_canDraft() || $scope.draftRecovery.busy) {
+                        return $q.reject('Draft recovery is unavailable.');
+                    }
                     $scope.draftRecovery.busy = true;
                     $scope.localDraftError = null;
                     var requests = Object.create(null);
@@ -8268,86 +7842,177 @@
                         var key = action + ':' + (params.sys_id || '');
                         if (!requests[key]) {
                             requests[key] = ajax(action, params).then(function (data) {
-                                if (!data.success) { throw new Error(data.error || 'Could not load saved content.'); }
+                                if (!data.success) {
+                                    throw new Error(data.error || 'Could not load saved content.');
+                                }
                                 return data;
                             });
                         }
                         return requests[key];
                     }
-                    return request('getWidget', { sys_id: SYS_ID }).then(function (data) {
-                        if (data.widget.canWrite === false || data.widget.sys_policy || data.widget.deleted) {
-                            throw new Error('This widget is no longer editable.');
-                        }
-                        return $q.all(draft.entries.map(function (entry) {
-                            var load;
-                            if (entry.type === 'widget') {
-                                var action = entry.field === 'option_schema' ? 'getOptionSchema' : entry.field === 'demo_data' ? 'getDemoData' : 'getWidget';
-                                load = request(action, { sys_id: SYS_ID }).then(function (data) {
-                                    if (action !== 'getWidget') { return { value: _draftPrettyJson(data[entry.field] || '') }; }
-                                    return { value: data.widget[entry.field], record: data.widget };
-                                });
-                            } else if (!entry.id) {
-                                load = $q.resolve({ value: '', record: {} });
-                            } else if (entry.type === 'script_include') {
-                                load = request('getScriptInclude', { sys_id: entry.id }).then(function (data) {
-                                    return { value: data.si.script, record: data.si };
-                                });
-                            } else {
-                                load = request(entry.type === 'template' ? 'getTemplates' : 'getProviders', { sys_id: SYS_ID }).then(function (data) {
-                                    var record = (data.templates || data.providers).find(function (r) { return r.sys_id === entry.id; });
-                                    if (!record) { throw new Error('A draft record was deleted, unlinked or is no longer accessible.'); }
-                                    var field = entry.field === 'content' ? (entry.type === 'template' ? 'template' : 'script') :
-                                        entry.field === 'recordId' ? (entry.type === 'template' ? 'id' : 'name') : 'type';
-                                    return { value: record[field], record: record };
-                                });
+                    return request('getWidget', { sys_id: SYS_ID })
+                        .then(function (data) {
+                            if (data.widget.canWrite === false || data.widget.sys_policy || data.widget.deleted) {
+                                throw new Error('This widget is no longer editable.');
                             }
-                            return load.then(function (loaded) {
-                                if (loaded.record && loaded.record.readOnly) { throw new Error('A draft record is no longer editable.'); }
-                                var current = loaded.value == null ? '' : loaded.value;
-                                if (typeof entry.value === 'boolean') { current = current === true || current === 'true' || current === '1'; }
-                                if (entry.field === 'roles') { current = parseRoles(current).join(','); }
-                                return Object.assign({}, entry, { current: current, record: loaded.record,
-                                    conflict: current !== entry.base && current !== entry.value });
-                            });
-                        }));
-                    }).then(function (entries) {
-                        $scope.draftRecovery = { draft: draft, entries: entries, records: [], busy: false,
-                            conflict: entries.some(function (entry) { return entry.conflict; }) };
-                        return entries;
-                    }).catch(function (err) {
-                        $scope.draftRecovery.busy = false;
-                        $scope.localDraftError = err.message || String(err);
-                        throw err;
-                    });
+                            return $q.all(
+                                draft.entries.map(function (entry) {
+                                    var load;
+                                    if (entry.type === 'widget') {
+                                        var action =
+                                            entry.field === 'option_schema'
+                                                ? 'getOptionSchema'
+                                                : entry.field === 'demo_data'
+                                                  ? 'getDemoData'
+                                                  : 'getWidget';
+                                        load = request(action, {
+                                            sys_id: SYS_ID,
+                                        }).then(function (data) {
+                                            if (action !== 'getWidget') {
+                                                return {
+                                                    value: _draftPrettyJson(data[entry.field] || ''),
+                                                };
+                                            }
+                                            return {
+                                                value: data.widget[entry.field],
+                                                record: data.widget,
+                                            };
+                                        });
+                                    } else if (!entry.id) {
+                                        load = $q.resolve({
+                                            value: '',
+                                            record: {},
+                                        });
+                                    } else if (entry.type === 'script_include') {
+                                        load = request('getScriptInclude', {
+                                            sys_id: entry.id,
+                                        }).then(function (data) {
+                                            return {
+                                                value: data.si.script,
+                                                record: data.si,
+                                            };
+                                        });
+                                    } else {
+                                        load = request(entry.type === 'template' ? 'getTemplates' : 'getProviders', {
+                                            sys_id: SYS_ID,
+                                        }).then(function (data) {
+                                            var record = (data.templates || data.providers).find(function (r) {
+                                                return r.sys_id === entry.id;
+                                            });
+                                            if (!record) {
+                                                throw new Error(
+                                                    'A draft record was deleted, unlinked or is no longer accessible.'
+                                                );
+                                            }
+                                            var field =
+                                                entry.field === 'content'
+                                                    ? entry.type === 'template'
+                                                        ? 'template'
+                                                        : 'script'
+                                                    : entry.field === 'recordId'
+                                                      ? entry.type === 'template'
+                                                          ? 'id'
+                                                          : 'name'
+                                                      : 'type';
+                                            return {
+                                                value: record[field],
+                                                record: record,
+                                            };
+                                        });
+                                    }
+                                    return load.then(function (loaded) {
+                                        if (loaded.record && loaded.record.readOnly) {
+                                            throw new Error('A draft record is no longer editable.');
+                                        }
+                                        var current = loaded.value == null ? '' : loaded.value;
+                                        if (typeof entry.value === 'boolean') {
+                                            current = current === true || current === 'true' || current === '1';
+                                        }
+                                        if (entry.field === 'roles') {
+                                            current = parseRoles(current).join(',');
+                                        }
+                                        return Object.assign({}, entry, {
+                                            current: current,
+                                            record: loaded.record,
+                                            conflict: current !== entry.base && current !== entry.value,
+                                        });
+                                    });
+                                })
+                            );
+                        })
+                        .then(function (entries) {
+                            $scope.draftRecovery = {
+                                draft: draft,
+                                entries: entries,
+                                records: [],
+                                busy: false,
+                                conflict: entries.some(function (entry) {
+                                    return entry.conflict;
+                                }),
+                            };
+                            return entries;
+                        })
+                        .catch(function (err) {
+                            $scope.draftRecovery.busy = false;
+                            $scope.localDraftError = err.message || String(err);
+                            throw err;
+                        });
                 }
 
                 function _openLocalDraftCompare() {
                     var records = [];
                     $scope.draftRecovery.entries.forEach(function (entry) {
                         var key = entry.type + ':' + (entry.id || entry.key);
-                        var record = records.find(function (r) { return r.key === key; });
+                        var record = records.find(function (r) {
+                            return r.key === key;
+                        });
                         if (!record) {
-                            var name = entry.type === 'widget' ? $scope.widget.name :
-                                (entry.record && (entry.record.name || entry.record.id)) ||
-                                { template: 'Angular template', provider: 'Angular provider', script_include: 'Script Include' }[entry.type];
+                            var name =
+                                entry.type === 'widget'
+                                    ? $scope.widget.name
+                                    : (entry.record && (entry.record.name || entry.record.id)) ||
+                                      {
+                                          template: 'Angular template',
+                                          provider: 'Angular provider',
+                                          script_include: 'Script Include',
+                                      }[entry.type];
                             record = {
-                                key: key, id: entry.id,
-                                table: { widget: 'sp_widget', template: 'sp_ng_template',
-                                    provider: 'sp_angular_provider', script_include: 'sys_script_include' }[entry.type],
+                                key: key,
+                                id: entry.id,
+                                table: {
+                                    widget: 'sp_widget',
+                                    template: 'sp_ng_template',
+                                    provider: 'sp_angular_provider',
+                                    script_include: 'sys_script_include',
+                                }[entry.type],
                                 label: name,
                                 snapshot: { _unsaved: true },
                             };
-                            if (!entry.id) { record.snapshot._newRecord = true; }
+                            if (!entry.id) {
+                                record.snapshot._newRecord = true;
+                            }
                             records.push(record);
                         }
                         var field = entry.field;
                         if (entry.type !== 'widget') {
-                            field = field === 'content' ? (entry.type === 'template' ? 'template' : 'script') :
-                                field === 'recordId' ? (entry.type === 'template' ? 'id' : 'name') : 'type';
+                            field =
+                                field === 'content'
+                                    ? entry.type === 'template'
+                                        ? 'template'
+                                        : 'script'
+                                    : field === 'recordId'
+                                      ? entry.type === 'template'
+                                          ? 'id'
+                                          : 'name'
+                                      : 'type';
                         }
                         record.snapshot[field] = entry.value;
-                        if (!entry.id && entry.field === 'recordId' && entry.value) { record.label = entry.value; }
-                        if (field === 'is_public') { record.snapshot.public = entry.value; }
+                        if (!entry.id && entry.field === 'recordId' && entry.value) {
+                            record.label = entry.value;
+                        }
+                        if (field === 'is_public') {
+                            record.snapshot.public = entry.value;
+                        }
                     });
                     $scope.draftRecovery.records = records;
                     $scope.draftRecovery.selectedRecord = records[0];
@@ -8363,13 +8028,19 @@
                 };
 
                 $scope.compareLocalDraft = function (draft) {
-                    return _loadDraftRecovery(draft).then(_openLocalDraftCompare).catch(function () {});
+                    return _loadDraftRecovery(draft)
+                        .then(_openLocalDraftCompare)
+                        .catch(function () {});
                 };
 
                 function _removeRecoveredDraft(draft) {
                     // Another tab may have updated this draft since the recovery prompt appeared.
-                    if (localStorage.getItem(draft.key) === draft.raw) { localStorage.removeItem(draft.key); }
-                    $scope.localDrafts = $scope.localDrafts.filter(function (d) { return d !== draft; });
+                    if (localStorage.getItem(draft.key) === draft.raw) {
+                        localStorage.removeItem(draft.key);
+                    }
+                    $scope.localDrafts = $scope.localDrafts.filter(function (d) {
+                        return d !== draft;
+                    });
                     _syncLocalDraftSelection();
                 }
 
@@ -8377,81 +8048,128 @@
                     try {
                         _removeRecoveredDraft(draft);
                         $scope.openDropdown = null;
-                        if ($scope.versionDiffModal.localDraft === draft) { $scope.closeVersionDiffModal(); }
-                    } catch (e) { $scope.localDraftError = 'The local draft could not be discarded.'; }
+                        if ($scope.versionDiffModal.localDraft === draft) {
+                            $scope.closeVersionDiffModal();
+                        }
+                    } catch (e) {
+                        $scope.localDraftError = 'The local draft could not be discarded.';
+                    }
                 };
 
                 $scope.restoreLocalDraft = function (draft, reviewed) {
-                    return _loadDraftRecovery(draft).then(function (entries) {
-                        if (!reviewed && ($scope.draftRecovery.conflict || hasUnsavedChanges())) {
-                            _openLocalDraftCompare();
-                            return;
-                        }
-                        var panes = Object.create(null);
-                        entries.forEach(function (entry) {
-                            if (entry.type === 'widget') {
-                                if (entry.field === 'option_schema' || entry.field === 'demo_data') {
-                                    _draftJson[entry.field] = { base: entry.current, value: entry.value };
-                                } else {
-                                    var def = $scope.coreEditorDefs.find(function (d) { return d.field === entry.field; });
-                                    $scope.widget[entry.field] = entry.value;
-                                    if (entry.field === 'roles') { $scope.rolesList = parseRoles(entry.value); }
-                                    if (def) {
-                                        originalValues[entry.field] = lastServerValues[entry.field] = entry.current;
-                                        if (monacoEditors[def.key]) {
-                                            // Monaco callbacks use $apply; run them outside this digest.
-                                            $timeout(function () { monacoEditors[def.key].setValue(entry.value); }, 0, false);
+                    return _loadDraftRecovery(draft)
+                        .then(function (entries) {
+                            if (!reviewed && ($scope.draftRecovery.conflict || hasUnsavedChanges())) {
+                                _openLocalDraftCompare();
+                                return;
+                            }
+                            var panes = Object.create(null);
+                            entries.forEach(function (entry) {
+                                if (entry.type === 'widget') {
+                                    if (entry.field === 'option_schema' || entry.field === 'demo_data') {
+                                        _draftJson[entry.field] = {
+                                            base: entry.current,
+                                            value: entry.value,
+                                        };
+                                    } else {
+                                        var def = $scope.coreEditorDefs.find(function (d) {
+                                            return d.field === entry.field;
+                                        });
+                                        $scope.widget[entry.field] = entry.value;
+                                        if (entry.field === 'roles') {
+                                            $scope.rolesList = parseRoles(entry.value);
                                         }
-                                    } else { originalHeader[entry.field] = entry.current; }
-                                }
-                            } else {
-                                var pane = panes[entry.key] || extraPanes.find(function (p) {
-                                    return p.recordType === entry.type && (entry.id ? p.sys_id === entry.id : p.key === entry.key);
-                                });
-                                if (!pane) {
-                                    pane = entry.type === 'template' ? makeTemplatePaneObj(entry.record) :
-                                        entry.type === 'provider' ? makeProviderPaneObj(entry.record) : makeScriptIncludePaneObj(entry.record);
-                                    pane._draftOriginalId = entry.record.id || entry.record.name || '';
-                                    pane._draftOriginalType = entry.record.type || '';
-                                    pane.lastServerContent = entry.record.template || entry.record.script || '';
-                                    openExtraPane(pane);
-                                }
-                                panes[entry.key] = pane;
-                                pane[entry.field] = entry.value;
-                                if (entry.field === 'content') {
-                                    pane.lastServerContent = entry.current;
-                                    pane.dirty = entry.value !== entry.current;
-                                    if (monacoEditors[pane.key]) {
-                                        $timeout(function () { monacoEditors[pane.key].setValue(entry.value); }, 0, false);
+                                        if (def) {
+                                            originalValues[entry.field] = lastServerValues[entry.field] = entry.current;
+                                            if (monacoEditors[def.key]) {
+                                                // Monaco callbacks use $apply; run them outside this digest.
+                                                $timeout(
+                                                    function () {
+                                                        monacoEditors[def.key].setValue(entry.value);
+                                                    },
+                                                    0,
+                                                    false
+                                                );
+                                            }
+                                        } else {
+                                            originalHeader[entry.field] = entry.current;
+                                        }
                                     }
                                 } else {
-                                    pane.idDirty = true;
-                                    if (entry.field === 'recordId') {
-                                        pane._draftOriginalId = entry.current;
-                                        $scope.onPaneIdChange(pane);
-                                    } else { pane._draftOriginalType = entry.current; }
+                                    var pane =
+                                        panes[entry.key] ||
+                                        extraPanes.find(function (p) {
+                                            return (
+                                                p.recordType === entry.type &&
+                                                (entry.id ? p.sys_id === entry.id : p.key === entry.key)
+                                            );
+                                        });
+                                    if (!pane) {
+                                        pane =
+                                            entry.type === 'template'
+                                                ? makeTemplatePaneObj(entry.record)
+                                                : entry.type === 'provider'
+                                                  ? makeProviderPaneObj(entry.record)
+                                                  : makeScriptIncludePaneObj(entry.record);
+                                        pane._draftOriginalId = entry.record.id || entry.record.name || '';
+                                        pane._draftOriginalType = entry.record.type || '';
+                                        pane.lastServerContent = entry.record.template || entry.record.script || '';
+                                        openExtraPane(pane);
+                                    }
+                                    panes[entry.key] = pane;
+                                    pane[entry.field] = entry.value;
+                                    if (entry.field === 'content') {
+                                        pane.lastServerContent = entry.current;
+                                        pane.dirty = entry.value !== entry.current;
+                                        if (monacoEditors[pane.key]) {
+                                            $timeout(
+                                                function () {
+                                                    monacoEditors[pane.key].setValue(entry.value);
+                                                },
+                                                0,
+                                                false
+                                            );
+                                        }
+                                    } else {
+                                        pane.idDirty = true;
+                                        if (entry.field === 'recordId') {
+                                            pane._draftOriginalId = entry.current;
+                                            $scope.onPaneIdChange(pane);
+                                        } else {
+                                            pane._draftOriginalType = entry.current;
+                                        }
+                                    }
                                 }
+                            });
+                            $scope.openDropdown = null;
+                            $timeout(function () {
+                                try {
+                                    // Explicit recovery also keeps a copy when automatic capture is off.
+                                    var copy = _collectLocalDraft();
+                                    if (copy.entries.length) {
+                                        localStorage.setItem(_draftPrefix() + _draftPageId, JSON.stringify(copy));
+                                        $scope.lastDraftSaveTime = new Date(copy.updatedAt);
+                                    }
+                                    _removeRecoveredDraft(draft);
+                                } catch (e) {
+                                    $scope.localDraftError =
+                                        'The recovered draft could not be copied. Its original recovery copy has been retained.';
+                                }
+                            }, 0);
+                            if ($scope.versionDiffModal.localDraft === draft) {
+                                $scope.closeVersionDiffModal();
                             }
-                        });
-                        $scope.openDropdown = null;
-                        $timeout(function () {
-                            try {
-                                // Explicit recovery also keeps a copy when automatic capture is off.
-                                var copy = _collectLocalDraft();
-                                if (copy.entries.length) {
-                                    localStorage.setItem(_draftPrefix() + _draftPageId, JSON.stringify(copy));
-                                    $scope.lastDraftSaveTime = new Date(copy.updatedAt);
-                                }
-                                _removeRecoveredDraft(draft);
-                            } catch (e) { $scope.localDraftError = 'The recovered draft could not be copied. Its original recovery copy has been retained.'; }
-                        }, 0);
-                        if ($scope.versionDiffModal.localDraft === draft) { $scope.closeVersionDiffModal(); }
-                    }).catch(function () {});
+                        })
+                        .catch(function () {});
                 };
 
                 $scope.$watch('userPrefs.autosaveInterval', function (seconds) {
-                    if (_draftTimer) { $timeout.cancel(_draftTimer); }
-                    if (!_validAutosaveInterval(seconds) || !seconds) { return; }
+                    if (_draftTimer) {
+                        $timeout.cancel(_draftTimer);
+                    }
+                    if (!_validAutosaveInterval(seconds) || !seconds) {
+                        return;
+                    }
                     var dueAt = Date.now() + seconds * 1000;
                     function tick() {
                         if (Date.now() >= dueAt) {
@@ -8467,24 +8185,23 @@
                     $scope.$applyAsync();
                 }
                 function _draftVisibilityChanged() {
-                    if (document.visibilityState === 'hidden') { _flushLocalDraft(); }
+                    if (document.visibilityState === 'hidden') {
+                        _flushLocalDraft();
+                    }
                 }
                 document.addEventListener('visibilitychange', _draftVisibilityChanged);
                 window.addEventListener('pagehide', _flushLocalDraft);
                 $scope.$on('$destroy', function () {
-                    if (_draftTimer) { $timeout.cancel(_draftTimer); }
+                    if (_draftTimer) {
+                        $timeout.cancel(_draftTimer);
+                    }
                     document.removeEventListener('visibilitychange', _draftVisibilityChanged);
                     window.removeEventListener('pagehide', _flushLocalDraft);
                 });
 
                 // Unsaved changes guard
                 function hasUnsavedChanges() {
-                    if (
-                        $scope.isNewWidget &&
-                        ($scope.widget.name ||
-                            $scope.widget.id ||
-                            $scope.widget.description)
-                    ) {
+                    if ($scope.isNewWidget && ($scope.widget.name || $scope.widget.id || $scope.widget.description)) {
                         return true;
                     }
 
@@ -8496,27 +8213,21 @@
                         !!$scope.headerDirty.is_public ||
                         !!$scope.headerDirty.roles ||
                         !!$scope.headerDirty.static ||
-                        ($scope.additionalWidgetFields || []).some(function (
-                            fieldDef
-                        ) {
+                        ($scope.additionalWidgetFields || []).some(function (fieldDef) {
                             return !!$scope.headerDirty[fieldDef.name];
                         });
 
                     return (
-                        Object.keys(_draftJson).some(function (field) { return _draftJson[field].value !== _draftJson[field].base; }) ||
+                        Object.keys(_draftJson).some(function (field) {
+                            return _draftJson[field].value !== _draftJson[field].base;
+                        }) ||
                         hasHeaderChanges ||
                         $scope.visibleItems.some(function (item) {
-                            return (
-                                item.type === 'pane' &&
-                                (item.dirty || item.idDirty)
-                            );
+                            return item.type === 'pane' && (item.dirty || item.idDirty);
                         }) ||
                         $scope.coreEditorDefs.some(function (def) {
                             var ed = monacoEditors[def.key];
-                            return (
-                                ed &&
-                                ed.getValue() !== originalValues[def.field]
-                            );
+                            return ed && ed.getValue() !== originalValues[def.field];
                         })
                     );
                 }
@@ -8524,11 +8235,7 @@
                 $scope.hasUnsavedChanges = hasUnsavedChanges;
 
                 $scope.openInPlatform = function () {
-                    window.open(
-                        '/nav_to.do?uri=' +
-                            encodeURIComponent('sp_widget.do?sys_id=' + SYS_ID),
-                        '_blank'
-                    );
+                    window.open('/nav_to.do?uri=' + encodeURIComponent('sp_widget.do?sys_id=' + SYS_ID), '_blank');
                     $scope.openDropdown = null;
                 };
 
@@ -8537,17 +8244,13 @@
                         return;
                     }
                     $scope.openDropdown = null;
-                    ajax('cloneWidget', { sys_id: SYS_ID }).then(
-                        function (data) {
-                            if (!data.success) {
-                                $scope.saveError = data.error || 'Clone failed';
-                                return;
-                            }
-                            window.location.href = buildWidgetEditorUrl(
-                                data.sys_id
-                            );
+                    ajax('cloneWidget', { sys_id: SYS_ID }).then(function (data) {
+                        if (!data.success) {
+                            $scope.saveError = data.error || 'Clone failed';
+                            return;
                         }
-                    );
+                        window.location.href = buildWidgetEditorUrl(data.sys_id);
+                    });
                 };
 
                 $scope.switchToWidgetScope = function () {
@@ -8577,13 +8280,7 @@
                             : item.recordType === 'script_include'
                               ? 'sys_script_include'
                               : 'sp_angular_provider';
-                    window.open(
-                        '/nav_to.do?uri=' +
-                            encodeURIComponent(
-                                table + '.do?sys_id=' + item.sys_id
-                            ),
-                        '_blank'
-                    );
+                    window.open('/nav_to.do?uri=' + encodeURIComponent(table + '.do?sys_id=' + item.sys_id), '_blank');
                 };
 
                 $scope.openScriptDebugger = function () {
@@ -8619,21 +8316,8 @@
                             'Courier New',
                             'Fixedsys',
                         ],
-                        macos: [
-                            'SF Mono',
-                            'Menlo',
-                            'Monaco',
-                            'Andale Mono',
-                            'Courier',
-                        ],
-                        linux: [
-                            'Ubuntu Mono',
-                            'Liberation Mono',
-                            'DejaVu Sans Mono',
-                            'Hack',
-                            'Fira Mono',
-                            'FreeMono',
-                        ],
+                        macos: ['SF Mono', 'Menlo', 'Monaco', 'Andale Mono', 'Courier'],
+                        linux: ['Ubuntu Mono', 'Liberation Mono', 'DejaVu Sans Mono', 'Hack', 'Fira Mono', 'FreeMono'],
                         unknown: ['Consolas', 'Menlo', 'Monaco', 'Courier New'],
                     };
 
@@ -8648,9 +8332,7 @@
 
                     var available = fontsToTest.filter(function (font) {
                         ctx.font = baseSize + ' "' + font + '", sans-serif';
-                        return (
-                            ctx.measureText(testString).width !== baselineWidth
-                        );
+                        return ctx.measureText(testString).width !== baselineWidth;
                     });
 
                     if (available.indexOf('monospace') === -1) {
@@ -8667,13 +8349,7 @@
                     return '"' + name + '", "Courier New", monospace';
                 }
 
-                var _GOOGLE_FONTS = [
-                    'Fira Code',
-                    'JetBrains Mono',
-                    'Source Code Pro',
-                    'Roboto Mono',
-                    'IBM Plex Mono',
-                ];
+                var _GOOGLE_FONTS = ['Fira Code', 'JetBrains Mono', 'Source Code Pro', 'Roboto Mono', 'IBM Plex Mono'];
                 var _googleFontsLoaded = false;
 
                 function _loadGoogleFonts() {
@@ -8694,18 +8370,26 @@
                     var _savedVis = $scope.userPrefs.editorVisibility;
                     var _editorKeys = _savedOrder.length
                         ? _savedOrder.concat(
-                            $scope.coreEditorDefs
-                                .map(function (d) { return d.key; })
-                                .filter(function (k) { return _savedOrder.indexOf(k) === -1; })
+                              $scope.coreEditorDefs
+                                  .map(function (d) {
+                                      return d.key;
+                                  })
+                                  .filter(function (k) {
+                                      return _savedOrder.indexOf(k) === -1;
+                                  })
                           )
-                        : $scope.coreEditorDefs.map(function (d) { return d.key; });
+                        : $scope.coreEditorDefs.map(function (d) {
+                              return d.key;
+                          });
                     $scope.userPrefsEdit = {
                         editors: _editorKeys.map(function (key) {
-                            var def = $scope.coreEditorDefs.filter(function (d) { return d.key === key; })[0];
+                            var def = $scope.coreEditorDefs.filter(function (d) {
+                                return d.key === key;
+                            })[0];
                             return {
                                 key: key,
                                 label: def ? def.label : key,
-                                visible: _savedVis.hasOwnProperty(key) ? _savedVis[key] : (def ? def.visible : true),
+                                visible: _savedVis.hasOwnProperty(key) ? _savedVis[key] : def ? def.visible : true,
                             };
                         }),
                         formatTabsToSpaces: $scope.userPrefs.formatTabsToSpaces,
@@ -8713,8 +8397,7 @@
                         editorTheme: $scope.userPrefs.editorTheme,
                         minimap: $scope.userPrefs.minimap,
                         alwaysShowLink: $scope.userPrefs.alwaysShowLink,
-                        realtimeWidgetUpdates:
-                            $scope.userPrefs.realtimeWidgetUpdates,
+                        realtimeWidgetUpdates: $scope.userPrefs.realtimeWidgetUpdates,
                         autoIndent: $scope.userPrefs.autoIndent,
                         formatOnPaste: $scope.userPrefs.formatOnPaste,
                         formatOnType: $scope.userPrefs.formatOnType,
@@ -8729,30 +8412,20 @@
                         autoClosingBrackets: $scope.userPrefs.autoClosingBrackets,
                         autoClosingQuotes: $scope.userPrefs.autoClosingQuotes,
                         linkedEditing: $scope.userPrefs.linkedEditing,
-                        insertSpaceBeforeFuncParen:
-                            $scope.userPrefs.insertSpaceBeforeFuncParen,
+                        insertSpaceBeforeFuncParen: $scope.userPrefs.insertSpaceBeforeFuncParen,
                         tabSize: $scope.userPrefs.tabSize,
                         remBase: $scope.userPrefs.remBase,
                         autosaveInterval: $scope.userPrefs.autosaveInterval,
                         draftRetentionDays: $scope.userPrefs.draftRetentionDays,
-                        ctrlSSaveActiveOnly:
-                            $scope.userPrefs.ctrlSSaveActiveOnly,
-                        flashOnEditorOpen:
-                            $scope.userPrefs.flashOnEditorOpen,
-                        showOpenInVsCode:
-                            $scope.userPrefs.showOpenInVsCode !== false,
-                        showRecentlyOpenedWidgets:
-                            $scope.userPrefs.showRecentlyOpenedWidgets !== false,
-                        showOpenHistory:
-                            $scope.userPrefs.showOpenHistory !== false,
-                        showAssistantButton:
-                            $scope.userPrefs.showAssistantButton,
-                        contextMenuMode:
-                            $scope.userPrefs.contextMenuMode || 'enhanced',
-                        htmlClassPortalSysId:
-                            $scope.userPrefs.htmlClassPortalSysId || '',
-                        htmlClassIncludeStandardCss:
-                            !!$scope.userPrefs.htmlClassIncludeStandardCss,
+                        ctrlSSaveActiveOnly: $scope.userPrefs.ctrlSSaveActiveOnly,
+                        flashOnEditorOpen: $scope.userPrefs.flashOnEditorOpen,
+                        showOpenInVsCode: $scope.userPrefs.showOpenInVsCode !== false,
+                        showRecentlyOpenedWidgets: $scope.userPrefs.showRecentlyOpenedWidgets !== false,
+                        showOpenHistory: $scope.userPrefs.showOpenHistory !== false,
+                        showAssistantButton: $scope.userPrefs.showAssistantButton,
+                        contextMenuMode: $scope.userPrefs.contextMenuMode || 'enhanced',
+                        htmlClassPortalSysId: $scope.userPrefs.htmlClassPortalSysId || '',
+                        htmlClassIncludeStandardCss: !!$scope.userPrefs.htmlClassIncludeStandardCss,
                         availableFonts: _getAvailableMonospaceFonts(),
                         googleFonts: _GOOGLE_FONTS,
                     };
@@ -8776,8 +8449,10 @@
                 }
 
                 $scope.saveUserPrefsModal = function () {
-                    if (!_validAutosaveInterval($scope.userPrefsEdit.autosaveInterval) ||
-                        !_validDraftRetentionDays($scope.userPrefsEdit.draftRetentionDays)) {
+                    if (
+                        !_validAutosaveInterval($scope.userPrefsEdit.autosaveInterval) ||
+                        !_validDraftRetentionDays($scope.userPrefsEdit.draftRetentionDays)
+                    ) {
                         return;
                     }
                     $scope.userPrefs.autosaveInterval = $scope.userPrefsEdit.autosaveInterval;
@@ -8799,73 +8474,44 @@
                     orderedDefs.forEach(function (d) {
                         $scope.coreEditorDefs.push(d);
                     });
-                    $scope.userPrefs.formatTabsToSpaces =
-                        $scope.userPrefsEdit.formatTabsToSpaces;
+                    $scope.userPrefs.formatTabsToSpaces = $scope.userPrefsEdit.formatTabsToSpaces;
                     $scope.userPrefs.wordWrap = $scope.userPrefsEdit.wordWrap;
-                    $scope.userPrefs.editorTheme =
-                        $scope.userPrefsEdit.editorTheme;
+                    $scope.userPrefs.editorTheme = $scope.userPrefsEdit.editorTheme;
                     $scope.userPrefs.minimap = $scope.userPrefsEdit.minimap;
-                    $scope.userPrefs.alwaysShowLink =
-                        $scope.userPrefsEdit.alwaysShowLink;
-                    $scope.userPrefs.realtimeWidgetUpdates =
-                        $scope.userPrefsEdit.realtimeWidgetUpdates;
-                    $scope.userPrefs.autoIndent =
-                        $scope.userPrefsEdit.autoIndent;
-                    $scope.userPrefs.formatOnPaste =
-                        $scope.userPrefsEdit.formatOnPaste;
-                    $scope.userPrefs.formatOnType =
-                        $scope.userPrefsEdit.formatOnType;
+                    $scope.userPrefs.alwaysShowLink = $scope.userPrefsEdit.alwaysShowLink;
+                    $scope.userPrefs.realtimeWidgetUpdates = $scope.userPrefsEdit.realtimeWidgetUpdates;
+                    $scope.userPrefs.autoIndent = $scope.userPrefsEdit.autoIndent;
+                    $scope.userPrefs.formatOnPaste = $scope.userPrefsEdit.formatOnPaste;
+                    $scope.userPrefs.formatOnType = $scope.userPrefsEdit.formatOnType;
                     $scope.userPrefs.fontSize = $scope.userPrefsEdit.fontSize;
-                    $scope.userPrefs.fontFamily =
-                        $scope.userPrefsEdit.fontFamily || '';
-                    $scope.userPrefs.languageHelpers =
-                        $scope.userPrefsEdit.languageHelpers;
-                    $scope.userPrefs.showUnusedVars =
-                        !!$scope.userPrefsEdit.showUnusedVars;
-                    $scope.userPrefs.stickyScroll =
-                        !!$scope.userPrefsEdit.stickyScroll;
-                    $scope.userPrefs.htmlValidation =
-                        !!$scope.userPrefsEdit.htmlValidation;
-                    $scope.userPrefs.htmlAutoCloseTags =
-                        !!$scope.userPrefsEdit.htmlAutoCloseTags;
-                    $scope.userPrefs.autoSurround =
-                        $scope.userPrefsEdit.autoSurround;
-                    $scope.userPrefs.autoClosingBrackets =
-                        $scope.userPrefsEdit.autoClosingBrackets;
-                    $scope.userPrefs.autoClosingQuotes =
-                        $scope.userPrefsEdit.autoClosingQuotes;
-                    $scope.userPrefs.linkedEditing =
-                        !!$scope.userPrefsEdit.linkedEditing;
-                    $scope.userPrefs.insertSpaceBeforeFuncParen =
-                        !!$scope.userPrefsEdit.insertSpaceBeforeFuncParen;
-                    $scope.userPrefs.ctrlSSaveActiveOnly =
-                        !!$scope.userPrefsEdit.ctrlSSaveActiveOnly;
-                    $scope.userPrefs.flashOnEditorOpen =
-                        !!$scope.userPrefsEdit.flashOnEditorOpen;
-                    $scope.userPrefs.showOpenInVsCode =
-                        !!$scope.userPrefsEdit.showOpenInVsCode;
+                    $scope.userPrefs.fontFamily = $scope.userPrefsEdit.fontFamily || '';
+                    $scope.userPrefs.languageHelpers = $scope.userPrefsEdit.languageHelpers;
+                    $scope.userPrefs.showUnusedVars = !!$scope.userPrefsEdit.showUnusedVars;
+                    $scope.userPrefs.stickyScroll = !!$scope.userPrefsEdit.stickyScroll;
+                    $scope.userPrefs.htmlValidation = !!$scope.userPrefsEdit.htmlValidation;
+                    $scope.userPrefs.htmlAutoCloseTags = !!$scope.userPrefsEdit.htmlAutoCloseTags;
+                    $scope.userPrefs.autoSurround = $scope.userPrefsEdit.autoSurround;
+                    $scope.userPrefs.autoClosingBrackets = $scope.userPrefsEdit.autoClosingBrackets;
+                    $scope.userPrefs.autoClosingQuotes = $scope.userPrefsEdit.autoClosingQuotes;
+                    $scope.userPrefs.linkedEditing = !!$scope.userPrefsEdit.linkedEditing;
+                    $scope.userPrefs.insertSpaceBeforeFuncParen = !!$scope.userPrefsEdit.insertSpaceBeforeFuncParen;
+                    $scope.userPrefs.ctrlSSaveActiveOnly = !!$scope.userPrefsEdit.ctrlSSaveActiveOnly;
+                    $scope.userPrefs.flashOnEditorOpen = !!$scope.userPrefsEdit.flashOnEditorOpen;
+                    $scope.userPrefs.showOpenInVsCode = !!$scope.userPrefsEdit.showOpenInVsCode;
                     $scope.userPrefs.showRecentlyOpenedWidgets =
                         $scope.userPrefsEdit.showRecentlyOpenedWidgets !== false;
-                    $scope.userPrefs.showOpenHistory =
-                        $scope.userPrefsEdit.showOpenHistory !== false;
-                    $scope.userPrefs.showAssistantButton =
-                        !!$scope.userPrefsEdit.showAssistantButton;
-                    $scope.userPrefs.contextMenuMode =
-                        $scope.userPrefsEdit.contextMenuMode || 'enhanced';
+                    $scope.userPrefs.showOpenHistory = $scope.userPrefsEdit.showOpenHistory !== false;
+                    $scope.userPrefs.showAssistantButton = !!$scope.userPrefsEdit.showAssistantButton;
+                    $scope.userPrefs.contextMenuMode = $scope.userPrefsEdit.contextMenuMode || 'enhanced';
                     var _selectedClassPortal = ($scope.classPortals || []).filter(function (p) {
                         return p.sys_id === $scope.userPrefsEdit.htmlClassPortalSysId;
                     })[0];
-                    $scope.userPrefs.htmlClassPortalSysId = _selectedClassPortal
-                        ? _selectedClassPortal.sys_id
-                        : '';
+                    $scope.userPrefs.htmlClassPortalSysId = _selectedClassPortal ? _selectedClassPortal.sys_id : '';
                     $scope.userPrefs.htmlClassPortalUrlSuffix = _selectedClassPortal
                         ? _selectedClassPortal.url_suffix
                         : '';
-                    $scope.userPrefs.htmlClassThemeSysId = _selectedClassPortal
-                        ? _selectedClassPortal.themeSysId
-                        : '';
-                    $scope.userPrefs.htmlClassIncludeStandardCss =
-                        !!$scope.userPrefsEdit.htmlClassIncludeStandardCss;
+                    $scope.userPrefs.htmlClassThemeSysId = _selectedClassPortal ? _selectedClassPortal.themeSysId : '';
+                    $scope.userPrefs.htmlClassIncludeStandardCss = !!$scope.userPrefsEdit.htmlClassIncludeStandardCss;
                     var ts = parseInt($scope.userPrefsEdit.tabSize, 10);
                     if (ts >= 1 && ts <= 8) {
                         $scope.userPrefs.tabSize = ts;
@@ -8876,15 +8522,11 @@
                     }
                     var wrapVal = $scope.userPrefs.wordWrap ? 'on' : 'off';
                     var minimapVal = { enabled: !!$scope.userPrefs.minimap };
-                    var autoIndentVal = $scope.userPrefs.autoIndent
-                        ? 'full'
-                        : 'none';
+                    var autoIndentVal = $scope.userPrefs.autoIndent ? 'full' : 'none';
                     var formatOnPasteVal = !!$scope.userPrefs.formatOnPaste;
                     var formatOnTypeVal = !!$scope.userPrefs.formatOnType;
                     var fontSizeVal = $scope.userPrefs.fontSize;
-                    var fontFamilyVal = _buildFontFamily(
-                        $scope.userPrefs.fontFamily
-                    );
+                    var fontFamilyVal = _buildFontFamily($scope.userPrefs.fontFamily);
                     var langHelpersEnabled = !!$scope.userPrefs.languageHelpers;
                     if (window.SNMonacoPlus && SNMonacoPlus.setUnusedVarsEnabled) {
                         SNMonacoPlus.setUnusedVarsEnabled($scope.userPrefs.showUnusedVars);
@@ -8941,14 +8583,8 @@
                             if (d && d.success && d.real_user_id) {
                                 try {
                                     var json = JSON.stringify(debugMenuPrefs);
-                                    localStorage.setItem(
-                                        'we_debug_menu_prefs_' + d.real_user_id,
-                                        json
-                                    );
-                                    localStorage.setItem(
-                                        'we_debug_menu_prefs',
-                                        json
-                                    );
+                                    localStorage.setItem('we_debug_menu_prefs_' + d.real_user_id, json);
+                                    localStorage.setItem('we_debug_menu_prefs', json);
                                 } catch (e) {}
                             }
                         });
@@ -8959,68 +8595,98 @@
                         $scope.userPrefsEdit.favouriteGroups = undefined;
                         var allRecords = [];
                         importedGroups.forEach(function (g) {
-                            (g && g.records || []).forEach(function (r) {
-                                if (r && r.table && r.sys_id) allRecords.push({ table: r.table, sys_id: r.sys_id });
+                            ((g && g.records) || []).forEach(function (r) {
+                                if (r && r.table && r.sys_id)
+                                    allRecords.push({
+                                        table: r.table,
+                                        sys_id: r.sys_id,
+                                    });
                             });
                         });
                         var validated = allRecords.length
-                            ? _assistantAjax('validateRecordsExist', { records: JSON.stringify(allRecords) })
+                            ? _assistantAjax('validateRecordsExist', {
+                                  records: JSON.stringify(allRecords),
+                              })
                             : $q.resolve({ success: true, records: [] });
                         // _assistantAjax always resolves (even on failure, with {success:false}) — every
                         // step's success flag has to be checked explicitly, and the modal stays open with
                         // an error instead of closing as though the import had actually been saved.
-                        validated.then(function (v) {
-                            if (!v || !v.success) {
-                                return $q.reject('Could not validate the imported records.');
-                            }
-                            var validKeys = {};
-                            (v.records || []).forEach(function (r) { validKeys[r.table + ':' + r.sys_id] = true; });
-                            return _assistantAjax('getFavouriteGroups', {}).then(function (existingRes) {
-                                if (!existingRes || !existingRes.success) {
-                                    return $q.reject('Could not load your existing favourite groups.');
+                        validated
+                            .then(function (v) {
+                                if (!v || !v.success) {
+                                    return $q.reject('Could not validate the imported records.');
                                 }
-                                var existingGroups = Array.isArray(existingRes.groups) ? existingRes.groups : [];
-                                var now = new Date().toISOString();
-                                // A group with no valid records left after validation is never
-                                // imported; an existing group with the same name is overwritten.
-                                importedGroups.forEach(function (g) {
-                                    if (!g || !g.name) return;
-                                    var name = g.name.trim();
-                                    if (!name) return;
-                                    var validRecords = (g.records || []).filter(function (r) {
-                                        return r && r.table && r.sys_id && validKeys[r.table + ':' + r.sys_id];
-                                    }).map(function (r) { return { table: r.table, sys_id: r.sys_id }; });
-                                    if (!validRecords.length) return;
-                                    var normalized = _normalizeGroupName(name);
-                                    var existing = existingGroups.filter(function (eg) { return _normalizeGroupName(eg.name) === normalized; })[0];
-                                    if (existing) {
-                                        existing.records = validRecords;
-                                        existing.updated = now;
-                                    } else {
-                                        existingGroups.push({
-                                            id: 'fav_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
-                                            name: name,
-                                            records: validRecords,
-                                            created: g.created || now,
-                                            updated: now,
-                                        });
-                                    }
+                                var validKeys = {};
+                                (v.records || []).forEach(function (r) {
+                                    validKeys[r.table + ':' + r.sys_id] = true;
                                 });
-                                return _assistantAjax('saveFavouriteGroups', { groups: JSON.stringify(existingGroups) });
-                            });
-                        }).then(function (saveRes) {
-                            if (!saveRes || !saveRes.success) {
-                                return $q.reject('The server rejected the save.');
-                            }
-                            _closeModal(function () {
-                                $scope.showUserPrefsModal = false;
-                            });
-                        }, function (reason) {
-                            $scope.importPrefsStatus = {
-                                type: 'error',
-                                text: 'Your other preferences were saved, but importing favourite groups failed: ' + (reason || 'unknown error') + ' Try importing again.',
-                            };
-                        });
+                                return _assistantAjax('getFavouriteGroups', {}).then(function (existingRes) {
+                                    if (!existingRes || !existingRes.success) {
+                                        return $q.reject('Could not load your existing favourite groups.');
+                                    }
+                                    var existingGroups = Array.isArray(existingRes.groups) ? existingRes.groups : [];
+                                    var now = new Date().toISOString();
+                                    // A group with no valid records left after validation is never
+                                    // imported; an existing group with the same name is overwritten.
+                                    importedGroups.forEach(function (g) {
+                                        if (!g || !g.name) return;
+                                        var name = g.name.trim();
+                                        if (!name) return;
+                                        var validRecords = (g.records || [])
+                                            .filter(function (r) {
+                                                return r && r.table && r.sys_id && validKeys[r.table + ':' + r.sys_id];
+                                            })
+                                            .map(function (r) {
+                                                return {
+                                                    table: r.table,
+                                                    sys_id: r.sys_id,
+                                                };
+                                            });
+                                        if (!validRecords.length) return;
+                                        var normalized = _normalizeGroupName(name);
+                                        var existing = existingGroups.filter(function (eg) {
+                                            return _normalizeGroupName(eg.name) === normalized;
+                                        })[0];
+                                        if (existing) {
+                                            existing.records = validRecords;
+                                            existing.updated = now;
+                                        } else {
+                                            existingGroups.push({
+                                                id:
+                                                    'fav_' +
+                                                    Date.now().toString(36) +
+                                                    Math.random().toString(36).slice(2, 8),
+                                                name: name,
+                                                records: validRecords,
+                                                created: g.created || now,
+                                                updated: now,
+                                            });
+                                        }
+                                    });
+                                    return _assistantAjax('saveFavouriteGroups', {
+                                        groups: JSON.stringify(existingGroups),
+                                    });
+                                });
+                            })
+                            .then(
+                                function (saveRes) {
+                                    if (!saveRes || !saveRes.success) {
+                                        return $q.reject('The server rejected the save.');
+                                    }
+                                    _closeModal(function () {
+                                        $scope.showUserPrefsModal = false;
+                                    });
+                                },
+                                function (reason) {
+                                    $scope.importPrefsStatus = {
+                                        type: 'error',
+                                        text:
+                                            'Your other preferences were saved, but importing favourite groups failed: ' +
+                                            (reason || 'unknown error') +
+                                            ' Try importing again.',
+                                    };
+                                }
+                            );
                         return;
                     }
                     _closeModal(function () {
@@ -9035,12 +8701,13 @@
                 };
 
                 $scope.resetUserPrefsModal = function () {
-                    var defaultOrder = [
-                        'template', 'css', 'client_script', 'link', 'script',
-                    ];
+                    var defaultOrder = ['template', 'css', 'client_script', 'link', 'script'];
                     var defaultVisible = {
-                        template: true, css: true, client_script: true,
-                        link: false, script: true,
+                        template: true,
+                        css: true,
+                        client_script: true,
+                        link: false,
+                        script: true,
                     };
                     var sorted = [];
                     defaultOrder.forEach(function (key) {
@@ -9080,7 +8747,8 @@
                     $scope.userPrefsEdit.autosaveInterval = 30;
                     $scope.userPrefsEdit.draftRetentionDays = 7;
                     $scope.userPrefsEdit.ctrlSSaveActiveOnly = true;
-                    $scope.userPrefsEdit.flashOnEditorOpen = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                    $scope.userPrefsEdit.flashOnEditorOpen = !window.matchMedia('(prefers-reduced-motion: reduce)')
+                        .matches;
                     $scope.userPrefsEdit.showOpenInVsCode = true;
                     $scope.userPrefsEdit.showRecentlyOpenedWidgets = true;
                     $scope.userPrefsEdit.showOpenHistory = true;
@@ -9090,15 +8758,26 @@
                 $scope.importPrefsStatus = null;
 
                 function _downloadUserPrefsBlob(prefs) {
-                    var blob = new Blob(
-                        [JSON.stringify(prefs, null, 2)],
-                        { type: 'application/json' }
-                    );
+                    var blob = new Blob([JSON.stringify(prefs, null, 2)], {
+                        type: 'application/json',
+                    });
                     var url = URL.createObjectURL(blob);
                     var now = new Date();
-                    var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
-                    var stamp = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) +
-                        '_' + pad(now.getHours()) + '-' + pad(now.getMinutes()) + '-' + pad(now.getSeconds());
+                    var pad = function (n) {
+                        return n < 10 ? '0' + n : '' + n;
+                    };
+                    var stamp =
+                        now.getFullYear() +
+                        '-' +
+                        pad(now.getMonth() + 1) +
+                        '-' +
+                        pad(now.getDate()) +
+                        '_' +
+                        pad(now.getHours()) +
+                        '-' +
+                        pad(now.getMinutes()) +
+                        '-' +
+                        pad(now.getSeconds());
                     var a = document.createElement('a');
                     a.href = url;
                     a.download = 'widget-editor-prefs-' + stamp + '.json';
@@ -9109,23 +8788,22 @@
                 }
 
                 $scope.exportUserPrefs = function () {
-                    $q.all([
-                        ajax('getDebugMenuPrefs', {}),
-                        _assistantAjax('getFavouriteGroups', {}),
-                    ]).then(function (results) {
-                        var d = results[0];
-                        var f = results[1];
-                        var prefs = _buildUserPrefsBlob();
-                        if (d && d.success && d.value) {
-                            try {
-                                prefs.debugMenu = JSON.parse(d.value);
-                            } catch (e) {}
+                    $q.all([ajax('getDebugMenuPrefs', {}), _assistantAjax('getFavouriteGroups', {})]).then(
+                        function (results) {
+                            var d = results[0];
+                            var f = results[1];
+                            var prefs = _buildUserPrefsBlob();
+                            if (d && d.success && d.value) {
+                                try {
+                                    prefs.debugMenu = JSON.parse(d.value);
+                                } catch (e) {}
+                            }
+                            if (f && f.success && Array.isArray(f.groups)) {
+                                prefs.favouriteGroups = f.groups;
+                            }
+                            _downloadUserPrefsBlob(prefs);
                         }
-                        if (f && f.success && Array.isArray(f.groups)) {
-                            prefs.favouriteGroups = f.groups;
-                        }
-                        _downloadUserPrefsBlob(prefs);
-                    });
+                    );
                 };
 
                 $scope.triggerImportUserPrefs = function () {
@@ -9136,16 +8814,30 @@
                     if (p.order && Array.isArray(p.order)) {
                         var orderedKeys = p.order.concat(
                             $scope.coreEditorDefs
-                                .map(function (d) { return d.key; })
-                                .filter(function (k) { return p.order.indexOf(k) === -1; })
+                                .map(function (d) {
+                                    return d.key;
+                                })
+                                .filter(function (k) {
+                                    return p.order.indexOf(k) === -1;
+                                })
                         );
                         $scope.userPrefsEdit.editors = orderedKeys.map(function (key) {
-                            var existing = $scope.userPrefsEdit.editors.filter(function (e) { return e.key === key; })[0];
-                            var def = $scope.coreEditorDefs.filter(function (d) { return d.key === key; })[0];
+                            var existing = $scope.userPrefsEdit.editors.filter(function (e) {
+                                return e.key === key;
+                            })[0];
+                            var def = $scope.coreEditorDefs.filter(function (d) {
+                                return d.key === key;
+                            })[0];
                             return {
                                 key: key,
                                 label: def ? def.label : key,
-                                visible: p.hasOwnProperty(key) ? !!p[key] : (existing ? existing.visible : (def ? def.visible : true)),
+                                visible: p.hasOwnProperty(key)
+                                    ? !!p[key]
+                                    : existing
+                                      ? existing.visible
+                                      : def
+                                        ? def.visible
+                                        : true,
                             };
                         });
                     } else {
@@ -9156,14 +8848,32 @@
                         });
                     }
                     [
-                        'formatTabsToSpaces', 'wordWrap', 'editorTheme', 'minimap',
-                        'alwaysShowLink', 'realtimeWidgetUpdates', 'autoIndent',
-                        'formatOnPaste', 'formatOnType', 'fontFamily', 'languageHelpers',
-                        'showUnusedVars', 'stickyScroll', 'htmlValidation',
-                        'htmlAutoCloseTags', 'autoSurround', 'autoClosingBrackets',
-                        'autoClosingQuotes', 'linkedEditing', 'insertSpaceBeforeFuncParen',
-                        'ctrlSSaveActiveOnly', 'flashOnEditorOpen', 'showOpenInVsCode',
-                        'showRecentlyOpenedWidgets', 'showOpenHistory', 'showAssistantButton',
+                        'formatTabsToSpaces',
+                        'wordWrap',
+                        'editorTheme',
+                        'minimap',
+                        'alwaysShowLink',
+                        'realtimeWidgetUpdates',
+                        'autoIndent',
+                        'formatOnPaste',
+                        'formatOnType',
+                        'fontFamily',
+                        'languageHelpers',
+                        'showUnusedVars',
+                        'stickyScroll',
+                        'htmlValidation',
+                        'htmlAutoCloseTags',
+                        'autoSurround',
+                        'autoClosingBrackets',
+                        'autoClosingQuotes',
+                        'linkedEditing',
+                        'insertSpaceBeforeFuncParen',
+                        'ctrlSSaveActiveOnly',
+                        'flashOnEditorOpen',
+                        'showOpenInVsCode',
+                        'showRecentlyOpenedWidgets',
+                        'showOpenHistory',
+                        'showAssistantButton',
                     ].forEach(function (k) {
                         if (p.hasOwnProperty(k)) {
                             $scope.userPrefsEdit[k] = p[k];
@@ -9227,11 +8937,14 @@
                                 _applyPrefsBlobToEdit(parsed);
                                 var importedExtras = [];
                                 if ($scope.userPrefsEdit.debugMenu) importedExtras.push('debug menu preferences');
-                                if ($scope.userPrefsEdit.favouriteGroups) importedExtras.push('Assistant favourite groups');
+                                if ($scope.userPrefsEdit.favouriteGroups)
+                                    importedExtras.push('Assistant favourite groups');
                                 $scope.importPrefsStatus = {
                                     type: 'success',
                                     text: importedExtras.length
-                                        ? 'Preferences loaded, including ' + importedExtras.join(' and ') + '. Click Save to apply.'
+                                        ? 'Preferences loaded, including ' +
+                                          importedExtras.join(' and ') +
+                                          '. Click Save to apply.'
                                         : 'Preferences loaded. Click Save to apply.',
                                 };
                             } catch (e) {
@@ -9287,7 +9000,9 @@
                     });
                     try {
                         localStorage.setItem(_openOnPortalStorageKey(), JSON.stringify(obj));
-                    } catch (e) { /* localStorage unavailable/full — ignore */ }
+                    } catch (e) {
+                        /* localStorage unavailable/full — ignore */
+                    }
                 };
 
                 $scope.resetOpenOnPortalParams = function () {
@@ -9296,13 +9011,15 @@
                     });
                     try {
                         localStorage.removeItem(_openOnPortalStorageKey());
-                    } catch (e) { }
+                    } catch (e) {}
                 };
 
                 // Detects $sp.getParameter('name') calls from the live editor (falling back to saved script).
                 function _detectSpGetParameters() {
-                    var script = (monacoEditors.script && monacoEditors.script.getValue()) ||
-                        ($scope.widget && $scope.widget.script) || '';
+                    var script =
+                        (monacoEditors.script && monacoEditors.script.getValue()) ||
+                        ($scope.widget && $scope.widget.script) ||
+                        '';
                     var names = [];
                     var seen = {};
                     var re = /\$sp\.getParameter\(\s*['"]([^'"]+)['"]\s*\)/g;
@@ -9332,19 +9049,22 @@
                     $scope.openOnPortalLoading = true;
                     $scope.openOnPortalError = null;
 
-                    ajax('getOpenPageOptions', { sys_id: SYS_ID }).then(function (data) {
-                        $scope.openOnPortalLoading = false;
-                        if (!data.success) {
-                            $scope.openOnPortalError = data.error || 'Failed to load pages/portals';
-                            return;
+                    ajax('getOpenPageOptions', { sys_id: SYS_ID }).then(
+                        function (data) {
+                            $scope.openOnPortalLoading = false;
+                            if (!data.success) {
+                                $scope.openOnPortalError = data.error || 'Failed to load pages/portals';
+                                return;
+                            }
+                            $scope.openOnPortalInstances = data.instances || [];
+                            $scope.openOnPortalPortals = data.portals || [];
+                            $scope.openOnPortalStep = $scope.openOnPortalInstances.length > 1 ? 'instance' : 'portal';
+                        },
+                        function () {
+                            $scope.openOnPortalLoading = false;
+                            $scope.openOnPortalError = 'Failed to load pages/portals';
                         }
-                        $scope.openOnPortalInstances = data.instances || [];
-                        $scope.openOnPortalPortals = data.portals || [];
-                        $scope.openOnPortalStep = $scope.openOnPortalInstances.length > 1 ? 'instance' : 'portal';
-                    }, function () {
-                        $scope.openOnPortalLoading = false;
-                        $scope.openOnPortalError = 'Failed to load pages/portals';
-                    });
+                    );
                 }
 
                 $scope.openOnPortalModal = function () {
@@ -9372,7 +9092,10 @@
                 };
 
                 $scope.selectOpenOnPortalInstance = function (inst) {
-                    $scope.openOnPortalSelectedPage = { id: inst.pageId, title: inst.pageTitle };
+                    $scope.openOnPortalSelectedPage = {
+                        id: inst.pageId,
+                        title: inst.pageTitle,
+                    };
                     $scope.openOnPortalStep = 'portal';
                 };
 
@@ -9396,9 +9119,13 @@
                 };
 
                 $scope.selectOpenOnPortalPortal = function (portal) {
-                    var page = $scope.openOnPortalSelectedPage ||
+                    var page =
+                        $scope.openOnPortalSelectedPage ||
                         ($scope.openOnPortalInstances.length === 1
-                            ? { id: $scope.openOnPortalInstances[0].pageId, title: $scope.openOnPortalInstances[0].pageTitle }
+                            ? {
+                                  id: $scope.openOnPortalInstances[0].pageId,
+                                  title: $scope.openOnPortalInstances[0].pageTitle,
+                              }
                             : null);
                     if (page && page.id) {
                         var url = '/' + portal.url_suffix + '?id=' + encodeURIComponent(page.id);
@@ -9444,9 +9171,7 @@
                 $scope.openApiDocs = function () {
                     var build = _getSnVersion();
                     var url = build
-                        ? 'https://www.servicenow.com/docs/r/' +
-                          build +
-                          '/api-reference'
+                        ? 'https://www.servicenow.com/docs/r/' + build + '/api-reference'
                         : 'https://www.servicenow.com/docs/';
                     window.open(url, '_blank', 'noopener,noreferrer');
                     $scope.openDropdown = null;
@@ -9467,15 +9192,12 @@
                     }).then(function (data) {
                         if (!data.success) {
                             $scope.optionSchemaLoading = false;
-                            $scope.optionSchemaLoadError =
-                                data.error || 'Failed to load option schema';
+                            $scope.optionSchemaLoadError = data.error || 'Failed to load option schema';
                             return;
                         }
                         $scope.optionSchemaLoading = false;
                         $timeout(function () {
-                            var container = document.getElementById(
-                                'option-schema-editor'
-                            );
+                            var container = document.getElementById('option-schema-editor');
                             if (!container) {
                                 return;
                             }
@@ -9488,44 +9210,36 @@
                             var raw = data.option_schema || '';
                             var value = raw;
                             try {
-                                if (value.trim())
-                                    value = JSON.stringify(
-                                        JSON.parse(value),
-                                        null,
-                                        4
-                                    );
+                                if (value.trim()) value = JSON.stringify(JSON.parse(value), null, 4);
                             } catch (e) {}
                             var pendingDraft = _draftJson.option_schema;
-                            _draftJson.option_schema = { base: value, value: pendingDraft ? pendingDraft.value : value };
+                            _draftJson.option_schema = {
+                                base: value,
+                                value: pendingDraft ? pendingDraft.value : value,
+                            };
                             value = _draftJson.option_schema.value;
                             _ensureMonacoThemes();
                             _ensureWeJsonLanguage();
                             function _create() {
                                 $scope.optionSchemaJsonInvalid = false;
-                                _optionSchemaEditor = monaco.editor.create(
-                                    container,
-                                    {
-                                        value: value,
-                                        language: 'we-json',
-                                        theme: _resolveMonacoTheme(),
-                                        readOnly: !$scope.canWriteWidget,
-                                        automaticLayout: true,
-                                        fontSize: 12,
-                                        scrollBeyondLastLine: false,
-                                        minimap: { enabled: false },
-                                        tabSize: 4,
-                                        insertSpaces: true,
-                                        wordWrap: $scope.userPrefs.wordWrap
-                                            ? 'on'
-                                            : 'off',
-                                        fixedOverflowWidgets: true,
-                                        mouseWheelZoom: true,
-                                    }
-                                );
+                                _optionSchemaEditor = monaco.editor.create(container, {
+                                    value: value,
+                                    language: 'we-json',
+                                    theme: _resolveMonacoTheme(),
+                                    readOnly: !$scope.canWriteWidget,
+                                    automaticLayout: true,
+                                    fontSize: 12,
+                                    scrollBeyondLastLine: false,
+                                    minimap: { enabled: false },
+                                    tabSize: 4,
+                                    insertSpaces: true,
+                                    wordWrap: $scope.userPrefs.wordWrap ? 'on' : 'off',
+                                    fixedOverflowWidgets: true,
+                                    mouseWheelZoom: true,
+                                });
                                 // Validate JSON manually on every content change
                                 function _validateJson() {
-                                    var content =
-                                        _optionSchemaEditor.getValue();
+                                    var content = _optionSchemaEditor.getValue();
                                     _draftJson.option_schema.value = content;
                                     var invalid = !!content.trim();
                                     if (invalid) {
@@ -9535,13 +9249,10 @@
                                         } catch (e) {}
                                     }
                                     $scope.$apply(function () {
-                                        $scope.optionSchemaJsonInvalid =
-                                            invalid;
+                                        $scope.optionSchemaJsonInvalid = invalid;
                                     });
                                 }
-                                _optionSchemaEditor.onDidChangeModelContent(
-                                    _validateJson
-                                );
+                                _optionSchemaEditor.onDidChangeModelContent(_validateJson);
                                 _validateJson(); // run immediately in case initial value is invalid
                             }
                             if (window.monaco && window.monaco.editor) {
@@ -9558,11 +9269,7 @@
                 };
 
                 $scope.saveOptionSchemaModal = function () {
-                    if (
-                        !_optionSchemaEditor ||
-                        !$scope.canWriteWidget ||
-                        $scope.optionSchemaJsonInvalid
-                    ) {
+                    if (!_optionSchemaEditor || !$scope.canWriteWidget || $scope.optionSchemaJsonInvalid) {
                         return;
                     }
                     $scope.optionSchemaSaving = true;
@@ -9574,13 +9281,13 @@
                     }).then(function (data) {
                         $scope.optionSchemaSaving = false;
                         if (!data.success) {
-                            $scope.optionSchemaSaveError =
-                                data.error || 'Save failed';
+                            $scope.optionSchemaSaveError = data.error || 'Save failed';
                             return;
                         }
-                        $scope.widget.option_schema_has_value =
-                            _hasProperJsonObjectValue(newValue);
-                        if (_draftJson.option_schema) { _draftJson.option_schema.base = newValue; }
+                        $scope.widget.option_schema_has_value = _hasProperJsonObjectValue(newValue);
+                        if (_draftJson.option_schema) {
+                            _draftJson.option_schema.base = newValue;
+                        }
                         _writeLocalDraft(true);
                         if (_optionSchemaEditor && _optionSchemaEditor.getValue() === newValue) {
                             $scope.closeOptionSchemaModal();
@@ -9635,15 +9342,12 @@
                     }).then(function (data) {
                         if (!data.success) {
                             $scope.demoDataLoading = false;
-                            $scope.demoDataLoadError =
-                                data.error || 'Failed to load demo data';
+                            $scope.demoDataLoadError = data.error || 'Failed to load demo data';
                             return;
                         }
                         $scope.demoDataLoading = false;
                         $timeout(function () {
-                            var container = document.getElementById(
-                                'demo-data-editor'
-                            );
+                            var container = document.getElementById('demo-data-editor');
                             if (!container) {
                                 return;
                             }
@@ -9656,44 +9360,36 @@
                             var raw = data.demo_data || '';
                             var value = raw;
                             try {
-                                if (value.trim())
-                                    value = JSON.stringify(
-                                        JSON.parse(value),
-                                        null,
-                                        4
-                                    );
+                                if (value.trim()) value = JSON.stringify(JSON.parse(value), null, 4);
                             } catch (e) {}
                             var pendingDraft = _draftJson.demo_data;
-                            _draftJson.demo_data = { base: value, value: pendingDraft ? pendingDraft.value : value };
+                            _draftJson.demo_data = {
+                                base: value,
+                                value: pendingDraft ? pendingDraft.value : value,
+                            };
                             value = _draftJson.demo_data.value;
                             _ensureMonacoThemes();
                             _ensureWeJsonLanguage();
                             function _create() {
                                 $scope.demoDataJsonInvalid = false;
-                                _demoDataEditor = monaco.editor.create(
-                                    container,
-                                    {
-                                        value: value,
-                                        language: 'we-json',
-                                        theme: _resolveMonacoTheme(),
-                                        readOnly: !$scope.canWriteWidget,
-                                        automaticLayout: true,
-                                        fontSize: 12,
-                                        scrollBeyondLastLine: false,
-                                        minimap: { enabled: false },
-                                        tabSize: 4,
-                                        insertSpaces: true,
-                                        wordWrap: $scope.userPrefs.wordWrap
-                                            ? 'on'
-                                            : 'off',
-                                        fixedOverflowWidgets: true,
-                                        mouseWheelZoom: true,
-                                    }
-                                );
+                                _demoDataEditor = monaco.editor.create(container, {
+                                    value: value,
+                                    language: 'we-json',
+                                    theme: _resolveMonacoTheme(),
+                                    readOnly: !$scope.canWriteWidget,
+                                    automaticLayout: true,
+                                    fontSize: 12,
+                                    scrollBeyondLastLine: false,
+                                    minimap: { enabled: false },
+                                    tabSize: 4,
+                                    insertSpaces: true,
+                                    wordWrap: $scope.userPrefs.wordWrap ? 'on' : 'off',
+                                    fixedOverflowWidgets: true,
+                                    mouseWheelZoom: true,
+                                });
                                 // Validate JSON manually on every content change
                                 function _validateJson() {
-                                    var content =
-                                        _demoDataEditor.getValue();
+                                    var content = _demoDataEditor.getValue();
                                     _draftJson.demo_data.value = content;
                                     var invalid = !!content.trim();
                                     if (invalid) {
@@ -9703,13 +9399,10 @@
                                         } catch (e) {}
                                     }
                                     $scope.$apply(function () {
-                                        $scope.demoDataJsonInvalid =
-                                            invalid;
+                                        $scope.demoDataJsonInvalid = invalid;
                                     });
                                 }
-                                _demoDataEditor.onDidChangeModelContent(
-                                    _validateJson
-                                );
+                                _demoDataEditor.onDidChangeModelContent(_validateJson);
                                 _validateJson(); // run immediately in case initial value is invalid
                             }
                             if (window.monaco && window.monaco.editor) {
@@ -9726,11 +9419,7 @@
                 };
 
                 $scope.saveDemoDataModal = function () {
-                    if (
-                        !_demoDataEditor ||
-                        !$scope.canWriteWidget ||
-                        $scope.demoDataJsonInvalid
-                    ) {
+                    if (!_demoDataEditor || !$scope.canWriteWidget || $scope.demoDataJsonInvalid) {
                         return;
                     }
                     $scope.demoDataSaving = true;
@@ -9742,13 +9431,13 @@
                     }).then(function (data) {
                         $scope.demoDataSaving = false;
                         if (!data.success) {
-                            $scope.demoDataSaveError =
-                                data.error || 'Save failed';
+                            $scope.demoDataSaveError = data.error || 'Save failed';
                             return;
                         }
-                        $scope.widget.demo_data_has_value =
-                            _hasProperJsonObjectValue(newValue);
-                        if (_draftJson.demo_data) { _draftJson.demo_data.base = newValue; }
+                        $scope.widget.demo_data_has_value = _hasProperJsonObjectValue(newValue);
+                        if (_draftJson.demo_data) {
+                            _draftJson.demo_data.base = newValue;
+                        }
                         _writeLocalDraft(true);
                         if (_demoDataEditor && _demoDataEditor.getValue() === newValue) {
                             $scope.closeDemoDataModal();
@@ -9790,8 +9479,7 @@
                     $scope.xmlLoadError = null;
                     $scope.xmlExportUrl = null;
 
-                    var xmlUrl =
-                        '/sp_widget.do?UNL&sysparm_query=sys_id=' + SYS_ID;
+                    var xmlUrl = '/sp_widget.do?UNL&sysparm_query=sys_id=' + SYS_ID;
 
                     $q.all([
                         $http.get(xmlUrl, {
@@ -9803,22 +9491,17 @@
                         ajax('getHistorySetId', { sys_id: SYS_ID }),
                     ]).then(
                         function (results) {
-                            var xmlContent =
-                                typeof results[0].data === 'string'
-                                    ? results[0].data
-                                    : '';
+                            var xmlContent = typeof results[0].data === 'string' ? results[0].data : '';
                             var histRes = results[1];
                             if (histRes.success && histRes.history_set_id) {
                                 $scope.xmlExportUrl =
-                                    '/sys_history_set.do?UNL&sysparm_query=sys_id=' +
-                                    histRes.history_set_id;
+                                    '/sys_history_set.do?UNL&sysparm_query=sys_id=' + histRes.history_set_id;
                             } else if (SYS_ID) {
                                 $scope.xmlExportUrl = xmlUrl;
                             }
                             $scope.xmlLoading = false;
                             $timeout(function () {
-                                var container =
-                                    document.getElementById('xml-modal-editor');
+                                var container = document.getElementById('xml-modal-editor');
                                 if (!container) {
                                     return;
                                 }
@@ -9830,28 +9513,23 @@
                                 }
                                 _ensureMonacoThemes();
                                 function _create() {
-                                    _xmlEditor = monaco.editor.create(
-                                        container,
-                                        {
-                                            value: xmlContent,
-                                            language: 'xml',
-                                            theme: _resolveMonacoTheme(),
-                                            readOnly: true,
-                                            automaticLayout: true,
-                                            fontSize: 12,
-                                            scrollBeyondLastLine: false,
-                                            minimap: { enabled: false },
-                                            wordWrap: 'on',
-                                            fixedOverflowWidgets: true,
-                                        }
-                                    );
+                                    _xmlEditor = monaco.editor.create(container, {
+                                        value: xmlContent,
+                                        language: 'xml',
+                                        theme: _resolveMonacoTheme(),
+                                        readOnly: true,
+                                        automaticLayout: true,
+                                        fontSize: 12,
+                                        scrollBeyondLastLine: false,
+                                        minimap: { enabled: false },
+                                        wordWrap: 'on',
+                                        fixedOverflowWidgets: true,
+                                    });
                                 }
                                 if (window.monaco && window.monaco.editor) {
                                     _create();
                                 } else {
-                                    require([
-                                        'vs/editor/editor.main',
-                                    ], function () {
+                                    require(['vs/editor/editor.main'], function () {
                                         _ensureMonacoThemes();
                                         _create();
                                     });

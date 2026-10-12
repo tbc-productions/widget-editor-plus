@@ -42,6 +42,11 @@ jobs:
       - name: Run unit tests
         run: npm run test:unit
 
+      - name: Check formatting and lint
+        run: |
+          npm run format:check
+          npm run lint
+
       - name: Build and Pack
         run: |
           npm run build
@@ -80,7 +85,7 @@ jobs:
           if (!notes.trim()) throw new Error("The release tag has no release notes");
           fs.writeFileSync(process.env.RELEASE_NOTES_FILE, notes);
           '
-          
+
           # Detect platform without using non-standard YAML context objects
           if [ "$SERVER_URL" != "https://github.com" ] || [ -n "$GITEA_SERVER_URL" ]; then
             IS_GITEA=true

@@ -102,7 +102,7 @@ test('Graph cards mirror the remaining table-view pills', () => {
     assert.ok(source.includes("className: 'we-pill-update-set'"));
     assert.ok(source.includes("className: 'we-pill-new'"));
     assert.ok(source.includes("className: 'we-pill-deleted'"));
-    assert.ok(source.includes('node.height = Math.max(82, 58 + node.labelLines.length * 19 + node.fieldHeight + node.pillLines.length * 26);'));
+    assert.match(source, /node.height = Math.max\(\s*82,\s*58 \+ node.labelLines.length \* 19 \+ node.fieldHeight \+ node.pillLines.length \* 26,?\s*\);/);
 });
 
 test('Canvas colours come only from live ServiceNow theme variables', () => {
@@ -126,11 +126,11 @@ test('Canvas highlights new and deleted records with ServiceNow status colours',
     assert.ok(source.includes('isNew: !!ctrl.includePreviousUpdates && !!r.isNewInUpdateSet'));
     assert.ok(source.includes("isDeleted: r.updateSetAction === 'DELETE'"));
     assert.ok(source.includes('if (node.isNew && node.isDeleted)'));
-    assert.ok(source.includes('colours.positiveSurface, colours.criticalSurface'));
+    assert.match(source, /colours.positiveSurface,\s*colours.criticalSurface/);
     assert.ok(source.includes('if (node.isDeleted) return colours.criticalSurface;'));
     assert.ok(source.includes('if (node.isNew) return colours.positiveSurface;'));
     assert.ok(source.includes('ctx.fillStyle = nodeFillStyle(ctx, node);'));
-    assert.ok(source.includes('(node.isNew || node.isDeleted) ? nodeFillStyle(minimapCtx, node)'));
+    assert.match(source, /node.isNew \|\| node.isDeleted\s*\? nodeFillStyle\(minimapCtx, node\)/);
 });
 
 test('Canvas retains its dot grid and uses the smaller minimap', () => {

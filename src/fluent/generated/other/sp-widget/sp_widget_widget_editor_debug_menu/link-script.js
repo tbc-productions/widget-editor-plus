@@ -32,9 +32,10 @@ function link(scope, element, attrs, controller) {
         const el = document.createElement('div');
         el.setAttribute('aria-hidden', 'true');
         el.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden;visibility:hidden;pointer-events:none';
-        el.innerHTML = '<i class="icon-cog"></i><i class="icon-cog-selected"></i><i class="icon-open-document-new-tab"></i>';
+        el.innerHTML =
+            '<i class="icon-cog"></i><i class="icon-cog-selected"></i><i class="icon-open-document-new-tab"></i>';
         document.body.appendChild(el);
-    }());
+    })();
 
     /**
      * Resolves a ServiceNow design-token CSS variable to a usable CSS color value.
@@ -52,7 +53,11 @@ function link(scope, element, attrs, controller) {
         const rootStyle = getComputedStyle(document.documentElement);
         for (const name of varNames) {
             const raw = rootStyle.getPropertyValue(name).trim();
-            if (!raw || raw === 'transparent' || /^rgba\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*,\s*0(?:\.0+)?\s*\)$/.test(raw)) {
+            if (
+                !raw ||
+                raw === 'transparent' ||
+                /^rgba\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*,\s*0(?:\.0+)?\s*\)$/.test(raw)
+            ) {
                 continue;
             }
             if (/^\d+\s*,\s*\d+\s*,\s*\d+$/.test(raw)) {
@@ -66,12 +71,24 @@ function link(scope, element, attrs, controller) {
     const COLOR_MENU_BG = resolveThemeColor(['--now-dropdown-list--background-color'], '255, 255, 255');
     const COLOR_TEXT_PRIMARY = resolveThemeColor(['--now-color_text--primary'], '58, 63, 81');
     const COLOR_TEXT_SECONDARY = resolveThemeColor(['--now-color_text--secondary'], '100, 116, 139');
-    const COLOR_BORDER = resolveThemeColor(['--now-tabs--border-color', '--now-color_border--secondary'], '222, 229, 231');
+    const COLOR_BORDER = resolveThemeColor(
+        ['--now-tabs--border-color', '--now-color_border--secondary'],
+        '222, 229, 231'
+    );
     const COLOR_PRIMARY_ACCENT = resolveThemeColor(['--now-button--primary--background-color'], '66, 139, 202');
     const COLOR_BTN_PRIMARY_TEXT = resolveThemeColor(['--now-button--primary--color'], '255, 255, 255');
-    const COLOR_ALERT_SUCCESS = resolveThemeColor(['--now-alert--success--color', '--now-color_alert--low-3'], '40, 167, 69');
-    const COLOR_ALERT_WARNING = resolveThemeColor(['--now-alert--warning--color', '--now-color_alert--warning-4'], '253, 126, 20');
-    const COLOR_ALERT_CRITICAL = resolveThemeColor(['--now-alert--critical--color', '--now-color_alert--critical-3'], '220, 53, 69');
+    const COLOR_ALERT_SUCCESS = resolveThemeColor(
+        ['--now-alert--success--color', '--now-color_alert--low-3'],
+        '40, 167, 69'
+    );
+    const COLOR_ALERT_WARNING = resolveThemeColor(
+        ['--now-alert--warning--color', '--now-color_alert--warning-4'],
+        '253, 126, 20'
+    );
+    const COLOR_ALERT_CRITICAL = resolveThemeColor(
+        ['--now-alert--critical--color', '--now-color_alert--critical-3'],
+        '220, 53, 69'
+    );
 
     (function injectContextMenuStyles() {
         const style = document.createElement('style');
@@ -81,7 +98,13 @@ function link(scope, element, attrs, controller) {
             '.we-custom-menu { position: fixed; margin: 0; padding: 0; border: none; background: transparent; outline: none; overflow: visible; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 13px; z-index: 2147483647; }',
             '.we-custom-menu a, .we-custom-menu button, .we-custom-menu li, .we-custom-menu span { outline: none !important; outline-width: 0 !important; outline-style: none !important; outline-offset: 0 !important; box-shadow: none !important; -webkit-focus-ring-color: transparent !important; }',
             '.we-custom-menu a:focus, .we-custom-menu a:focus-visible, .we-custom-menu a:active, .we-custom-menu a:hover, .we-custom-menu button:focus, .we-custom-menu button:focus-visible, .we-custom-menu button:active, .we-custom-menu button:hover, .we-custom-menu li:focus, .we-custom-menu li:focus-visible, .we-custom-menu li:active, .we-custom-menu li:hover { outline: none !important; outline-width: 0 !important; outline-style: none !important; outline-offset: 0 !important; box-shadow: none !important; -webkit-focus-ring-color: transparent !important; text-decoration: none !important; }',
-            '.we-menu-container { width: 285px; overflow: hidden; position: relative; background: ' + COLOR_MENU_BG + '; color: ' + COLOR_TEXT_PRIMARY + '; border-radius: 10px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.08) !important; border: 1px solid ' + COLOR_BORDER + '; transition: height 0.22s cubic-bezier(0.25, 1, 0.5, 1); max-height: calc(100vh - 16px); }',
+            '.we-menu-container { width: 285px; overflow: hidden; position: relative; background: ' +
+                COLOR_MENU_BG +
+                '; color: ' +
+                COLOR_TEXT_PRIMARY +
+                '; border-radius: 10px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.08) !important; border: 1px solid ' +
+                COLOR_BORDER +
+                '; transition: height 0.22s cubic-bezier(0.25, 1, 0.5, 1); max-height: calc(100vh - 16px); }',
             '.we-slider-track { display: flex; transition: transform 0.22s cubic-bezier(0.25, 1, 0.5, 1); align-items: flex-start; }',
             '.we-panel { width: 285px; flex-shrink: 0; overflow-x: hidden; overscroll-behavior: none; scrollbar-width: thin; scrollbar-color: rgba(0,0,0,0.2) transparent; }',
             '.we-panel::-webkit-scrollbar { width: 4px; }',
@@ -92,19 +115,31 @@ function link(scope, element, attrs, controller) {
             '.we-menu-list > li { margin: 0; }',
             '.we-menu-list > li:not(.we-menu-header):not(.we-back-li) > a { display: flex; align-items: center; justify-content: flex-start; padding: 6px 14px !important; margin: 0 !important; border: none !important; line-height: 1.35; text-decoration: none !important; color: inherit; cursor: pointer; transition: background 0.1s ease; outline: none !important; }',
             '.we-menu-list > li:not(.we-menu-header):not(.we-back-li) > a:hover, .we-menu-list > li:not(.we-menu-header):not(.we-back-li) > a:focus, .we-menu-list > li:not(.we-menu-header):not(.we-back-li) > a:active { background-color: rgba(0,0,0,0.08) !important; text-decoration: none !important; border: none !important; padding: 6px 14px !important; margin: 0 !important; outline: none !important; }',
-            '.we-menu-list > li:not(.we-menu-header):not(.we-back-li) > a:hover .we-row-icon, .we-menu-list > li:not(.we-menu-header):not(.we-back-li) > a:focus .we-row-icon, .we-menu-list > li:not(.we-menu-header):not(.we-back-li) > a:active .we-row-icon { color: ' + COLOR_PRIMARY_ACCENT + '; }',
+            '.we-menu-list > li:not(.we-menu-header):not(.we-back-li) > a:hover .we-row-icon, .we-menu-list > li:not(.we-menu-header):not(.we-back-li) > a:focus .we-row-icon, .we-menu-list > li:not(.we-menu-header):not(.we-back-li) > a:active .we-row-icon { color: ' +
+                COLOR_PRIMARY_ACCENT +
+                '; }',
             '.we-row-icon { width: 18px; min-width: 18px; text-align: center; margin-right: 8px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; }',
             '.we-row-icon--primary { color: ' + COLOR_PRIMARY_ACCENT + '; }',
             '.we-row-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }',
             '.we-row-badge { margin-left: auto; flex-shrink: 0; }',
             '.we-menu-list code { font-family: SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; padding: 1px 4px; border-radius: 3px; background: rgba(0,0,0,0.06); color: inherit; }',
-            '.we-menu-header.bg-primary { min-height: 42px; box-sizing: border-box; padding: 9px 12px 9px 14px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; border-radius: 0 !important; margin-bottom: 6px; background-color: ' + COLOR_PRIMARY_ACCENT + ' !important; color: ' + COLOR_BTN_PRIMARY_TEXT + ' !important; }',
+            '.we-menu-header.bg-primary { min-height: 42px; box-sizing: border-box; padding: 9px 12px 9px 14px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; border-radius: 0 !important; margin-bottom: 6px; background-color: ' +
+                COLOR_PRIMARY_ACCENT +
+                ' !important; color: ' +
+                COLOR_BTN_PRIMARY_TEXT +
+                ' !important; }',
             '.we-menu-header.bg-primary.we-back-header { padding: 0; cursor: pointer; }',
-            '.we-menu-header.bg-primary .we-header-title { font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: ' + COLOR_BTN_PRIMARY_TEXT + ' !important; display: flex; align-items: center; min-width: 0; flex: 1 1 auto; margin-right: 8px; }',
+            '.we-menu-header.bg-primary .we-header-title { font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: ' +
+                COLOR_BTN_PRIMARY_TEXT +
+                ' !important; display: flex; align-items: center; min-width: 0; flex: 1 1 auto; margin-right: 8px; }',
             '.we-menu-header.bg-primary .we-header-title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }',
             '.we-menu-header.bg-primary .we-cog-btn { width: 24px; height: 24px; flex-shrink: 0; padding: 0 !important; margin: 0 !important; font-size: 16px; line-height: 1; border: none !important; background: none !important; cursor: pointer; color: rgba(255, 255, 255, 0.85); outline: none !important; box-shadow: none !important; display: inline-flex; align-items: center; justify-content: center; }',
-            '.we-menu-header.bg-primary .we-cog-btn:hover, .we-menu-header.bg-primary .we-cog-btn:focus, .we-menu-header.bg-primary .we-cog-btn:active { color: ' + COLOR_BTN_PRIMARY_TEXT + ' !important; background-color: rgba(255, 255, 255, 0.2) !important; border-radius: 4px; outline: none !important; box-shadow: none !important; border: none !important; padding: 0 !important; margin: 0 !important; }',
-            '.we-section-header { padding: 6px 14px 2px 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: ' + COLOR_TEXT_SECONDARY + '; display: flex; align-items: center; }',
+            '.we-menu-header.bg-primary .we-cog-btn:hover, .we-menu-header.bg-primary .we-cog-btn:focus, .we-menu-header.bg-primary .we-cog-btn:active { color: ' +
+                COLOR_BTN_PRIMARY_TEXT +
+                ' !important; background-color: rgba(255, 255, 255, 0.2) !important; border-radius: 4px; outline: none !important; box-shadow: none !important; border: none !important; padding: 0 !important; margin: 0 !important; }',
+            '.we-section-header { padding: 6px 14px 2px 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: ' +
+                COLOR_TEXT_SECONDARY +
+                '; display: flex; align-items: center; }',
             '.we-submenu-arrow { margin-left: auto; opacity: 0.6; font-size: 11px; flex-shrink: 0; padding-left: 6px; }',
             '.we-timing-bars { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; margin-left: 6px; flex-shrink: 0; cursor: help; vertical-align: middle; }',
             '.we-timing-bars svg { display: block; overflow: visible; }',
@@ -113,21 +148,28 @@ function link(scope, element, attrs, controller) {
             '.we-menu-header .we-timing-bars .we-tb-bar { fill: rgba(255, 255, 255, 0.3); }',
             '.we-timing-bars--green .we-tb-bar-1 { fill: ' + COLOR_ALERT_SUCCESS + '; }',
             '.we-menu-header .we-timing-bars--green .we-tb-bar-1 { fill: #4ade80; }',
-            '.we-timing-bars--orange .we-tb-bar-1, .we-timing-bars--orange .we-tb-bar-2 { fill: ' + COLOR_ALERT_WARNING + '; }',
+            '.we-timing-bars--orange .we-tb-bar-1, .we-timing-bars--orange .we-tb-bar-2 { fill: ' +
+                COLOR_ALERT_WARNING +
+                '; }',
             '.we-menu-header .we-timing-bars--orange .we-tb-bar-1, .we-menu-header .we-timing-bars--orange .we-tb-bar-2 { fill: #fbbf24; }',
-            '.we-timing-bars--red .we-tb-bar-1, .we-timing-bars--red .we-tb-bar-2, .we-timing-bars--red .we-tb-bar-3 { fill: ' + COLOR_ALERT_CRITICAL + '; }',
+            '.we-timing-bars--red .we-tb-bar-1, .we-timing-bars--red .we-tb-bar-2, .we-timing-bars--red .we-tb-bar-3 { fill: ' +
+                COLOR_ALERT_CRITICAL +
+                '; }',
             '.we-menu-header .we-timing-bars--red .we-tb-bar-1, .we-menu-header .we-timing-bars--red .we-tb-bar-2, .we-menu-header .we-timing-bars--red .we-tb-bar-3 { fill: #f87171; }',
-            '.we-back-row { display: flex !important; align-items: center; justify-content: space-between; width: 100%; min-height: 42px; box-sizing: border-box; padding: 9px 12px 9px 14px !important; margin: 0 !important; border: none !important; font-weight: 600; color: ' + COLOR_BTN_PRIMARY_TEXT + ' !important; text-decoration: none !important; border-radius: 0 !important; background: transparent; transition: background 0.1s ease; outline: none !important; box-shadow: none !important; }',
+            '.we-back-row { display: flex !important; align-items: center; justify-content: space-between; width: 100%; min-height: 42px; box-sizing: border-box; padding: 9px 12px 9px 14px !important; margin: 0 !important; border: none !important; font-weight: 600; color: ' +
+                COLOR_BTN_PRIMARY_TEXT +
+                ' !important; text-decoration: none !important; border-radius: 0 !important; background: transparent; transition: background 0.1s ease; outline: none !important; box-shadow: none !important; }',
             '.we-back-row:hover, .we-back-row:focus, .we-back-row:active { background-color: rgba(0, 0, 0, 0.2) !important; text-decoration: none !important; padding: 9px 12px 9px 14px !important; margin: 0 !important; border: none !important; outline: none !important; box-shadow: none !important; }',
-            '.we-back-left { display: inline-flex; align-items: center; font-size: 13px; font-weight: 600; color: ' + COLOR_BTN_PRIMARY_TEXT + '; }',
+            '.we-back-left { display: inline-flex; align-items: center; font-size: 13px; font-weight: 600; color: ' +
+                COLOR_BTN_PRIMARY_TEXT +
+                '; }',
             '.we-back-arrow { margin-right: 6px; font-size: 11px; }',
             '.we-back-title { margin-left: auto; font-size: 11px; color: rgba(255, 255, 255, 0.85); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
             '.we-tooltip { position: fixed; z-index: 10; max-width: 220px; padding: 6px 9px; border-radius: 6px; background: rgba(20, 20, 24, 0.95); color: #fff; font-size: 11px; line-height: 1.5; white-space: pre-line; pointer-events: none; opacity: 0; transform: translateY(2px); transition: opacity 0.08s ease, transform 0.08s ease; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25); }',
-            '.we-tooltip--visible { opacity: 1; transform: translateY(0); }'
+            '.we-tooltip--visible { opacity: 1; transform: translateY(0); }',
         ].join(' ');
         document.head.appendChild(style);
-    }());
-
+    })();
 
     ///////////////////////////////////////////
     // 2. Shared constants
@@ -135,25 +177,24 @@ function link(scope, element, attrs, controller) {
 
     const SHOW_SCOPE_MENUS_KEY = 'showScopeMenus';
     const WIDGET_OBSERVER_DELAY = 1000; // ms – wait for Angular to finish linking
-    const PROCESSING_TIMEOUT_MS = 500;  // ms – abort slow scope serialisation
-    const MAX_SCOPE_DEPTH = 5;    // max recursion depth for removeFunctions / deepSearch
-    const MAX_SCOPE_PROPS = 100;  // max top-level scope properties collected
-    const MAX_OBJ_PROPS = 50;   // max properties serialised per nested object
-    const MAX_ARRAY_ITEMS = 50;   // max array items serialised
-    const MAX_TREE_KEYS = 100;  // max keys rendered in a single tree node
-    const MAX_SEARCH_RESULTS = 100;  // max deepSearch hits returned
-    const STRING_PREVIEW_LENGTH = 50;   // chars shown before "show more"
+    const PROCESSING_TIMEOUT_MS = 500; // ms – abort slow scope serialisation
+    const MAX_SCOPE_DEPTH = 5; // max recursion depth for removeFunctions / deepSearch
+    const MAX_SCOPE_PROPS = 100; // max top-level scope properties collected
+    const MAX_OBJ_PROPS = 50; // max properties serialised per nested object
+    const MAX_ARRAY_ITEMS = 50; // max array items serialised
+    const MAX_TREE_KEYS = 100; // max keys rendered in a single tree node
+    const MAX_SEARCH_RESULTS = 100; // max deepSearch hits returned
+    const STRING_PREVIEW_LENGTH = 50; // chars shown before "show more"
     const NESTED_COLORS = ['#28a745', '#dc3545', '#fd7e14', '#6f42c1', '#20c997'];
     const ROOT_BUTTON_COLOR = '#007bff';
-    const MONOSPACE_FONTS = 'ui-monospace,Menlo,Monaco,"Cascadia Mono","Segoe UI Mono","Roboto Mono","Oxygen Mono","Ubuntu Mono","Source Code Pro","Fira Mono","Droid Sans Mono","Consolas","Courier New",monospace';
-
+    const MONOSPACE_FONTS =
+        'ui-monospace,Menlo,Monaco,"Cascadia Mono","Segoe UI Mono","Roboto Mono","Oxygen Mono","Ubuntu Mono","Source Code Pro","Fira Mono","Droid Sans Mono","Consolas","Courier New",monospace';
 
     ///////////////////////////////////////////
     // 3. Utils — small leaf helpers with no dependencies on other modules
     ///////////////////////////////////////////
 
     const Utils = (function () {
-
         /**
          * Escapes a string for safe use inside a RegExp constructor.
          * @param   {string} string
@@ -181,19 +222,19 @@ function link(scope, element, attrs, controller) {
         function assignConsoleVar(name, value) {
             try {
                 window[name] = value;
-            } catch (_e) { /* non-writable property — skip */ }
+            } catch (_e) {
+                /* non-writable property — skip */
+            }
         }
 
         return { escapeRegExp, escapeHtml, assignConsoleVar };
-    }());
-
+    })();
 
     ///////////////////////////////////////////
     // 4. UrlHelpers — editor URL builders
     ///////////////////////////////////////////
 
     const UrlHelpers = (function () {
-
         /**
          * Returns the Widget Editor+ URL for the given widget sys_id.
          * Uses the current NOW.scope to build a scoped page ID where applicable.
@@ -228,7 +269,10 @@ function link(scope, element, attrs, controller) {
          * @returns {string}
          */
         function getAssistantUrl(sysId) {
-            return '/ui_page.do?sys_id=584ed242cd934914bffa4b0bb3fb2974&record_table=sp_widget&record_sys_id=' + encodeURIComponent(sysId);
+            return (
+                '/ui_page.do?sys_id=584ed242cd934914bffa4b0bb3fb2974&record_table=sp_widget&record_sys_id=' +
+                encodeURIComponent(sysId)
+            );
         }
 
         /**
@@ -237,12 +281,20 @@ function link(scope, element, attrs, controller) {
          * @returns {string}
          */
         function getCompareUrl(sysId) {
-            return '/ui_page.do?sys_id=51ec3d258363b61070b8b5dfeeaad36b&table=sp_widget&record_id=' + encodeURIComponent(sysId);
+            return (
+                '/ui_page.do?sys_id=51ec3d258363b61070b8b5dfeeaad36b&table=sp_widget&record_id=' +
+                encodeURIComponent(sysId)
+            );
         }
 
-        return { getEditorPlusUrl, getSPEditorUrl, getEditorPlatformUrl, getAssistantUrl, getCompareUrl };
-    }());
-
+        return {
+            getEditorPlusUrl,
+            getSPEditorUrl,
+            getEditorPlatformUrl,
+            getAssistantUrl,
+            getCompareUrl,
+        };
+    })();
 
     ///////////////////////////////////////////
     // 5. LoadTimeTracker — widget load-time overlay mode
@@ -251,7 +303,7 @@ function link(scope, element, attrs, controller) {
     const LoadTimeTracker = (function () {
         let _active = false;
         const _WE_LT = 'data-we-load-times'; // attribute used to tag every injected element
-        const _WE_LT_THRESHOLD = 750;        // ms — widgets at or above this are highlighted red
+        const _WE_LT_THRESHOLD = 750; // ms — widgets at or above this are highlighted red
 
         /**
          * Counts $$watchers on a widget's controller scope and its descendants, excluding nested widgets' own subtrees.
@@ -271,7 +323,7 @@ function link(scope, element, attrs, controller) {
                     walk(child, false);
                     child = child.$$nextSibling;
                 }
-            }(rootScope, true));
+            })(rootScope, true);
             return total;
         }
 
@@ -286,7 +338,8 @@ function link(scope, element, attrs, controller) {
 
             const style = document.createElement('style');
             style.setAttribute(_WE_LT, '1');
-            style.textContent = '[widget="widget"] { outline: 1px dashed rgba(200,0,0,0.5) !important; position: relative !important; }';
+            style.textContent =
+                '[widget="widget"] { outline: 1px dashed rgba(200,0,0,0.5) !important; position: relative !important; }';
             document.head.appendChild(style);
 
             const widgets = Array.from(document.querySelectorAll('[widget="widget"]'));
@@ -300,7 +353,9 @@ function link(scope, element, attrs, controller) {
                         if (!s || !s.widget) {
                             continue;
                         }
-                    } catch (_ex) { continue; }
+                    } catch (_ex) {
+                        continue;
+                    }
 
                     const widget = s.widget;
                     const uid = (widget.rectangle_id || 'w') + '_' + s.$id;
@@ -350,7 +405,8 @@ function link(scope, element, attrs, controller) {
                     const refreshBtn = document.createElement('button');
                     refreshBtn.textContent = '⟳';
                     refreshBtn.title = 'Re-measure load time';
-                    refreshBtn.style.cssText = 'border:1px solid #ccc;background:#fff;border-radius:50%;width:18px;height:18px;line-height:1;font-size:12px;cursor:pointer;padding:0;flex-shrink:0;';
+                    refreshBtn.style.cssText =
+                        'border:1px solid #ccc;background:#fff;border-radius:50%;width:18px;height:18px;line-height:1;font-size:12px;cursor:pointer;padding:0;flex-shrink:0;';
                     (function (capturedScope, capturedSpan) {
                         refreshBtn.addEventListener('click', function () {
                             capturedSpan.textContent = '…';
@@ -372,11 +428,18 @@ function link(scope, element, attrs, controller) {
                     if (!isNested) {
                         timeSpan.textContent = 'refreshing…';
                         const t0 = performance.now();
-                        try { await s.server.refresh(); } catch (_ex) { }
+                        try {
+                            await s.server.refresh();
+                        } catch (_ex) {}
                         const ms = parseInt(performance.now() - t0);
                         timeSpan.textContent = ms + 'ms';
                         timeSpan.style.color = ms >= _WE_LT_THRESHOLD ? 'red' : 'green';
-                        widgetData.push({ name: widget.name, sys_id: widget.sys_id, rectangle: widget.rectangle_id || '', load_time_ms: ms });
+                        widgetData.push({
+                            name: widget.name,
+                            sys_id: widget.sys_id,
+                            rectangle: widget.rectangle_id || '',
+                            load_time_ms: ms,
+                        });
                     }
                 }
 
@@ -389,39 +452,50 @@ function link(scope, element, attrs, controller) {
                     'position:fixed;bottom:20px;right:20px;z-index:99999;',
                     'background:#fff;border:1px solid #ccc;border-radius:6px;',
                     'padding:14px 16px 12px;font-size:12px;font-family:' + MONOSPACE_FONTS + ';',
-                    'max-width:480px;box-shadow:0 2px 10px rgba(0,0,0,0.15);'
+                    'max-width:480px;box-shadow:0 2px 10px rgba(0,0,0,0.15);',
                 ].join('');
 
                 const titleEl = document.createElement('strong');
-                titleEl.textContent = slow.length > 0
-                    ? 'Slow widgets (>' + _WE_LT_THRESHOLD + 'ms)'
-                    : 'No slow widgets found (≥' + _WE_LT_THRESHOLD + 'ms)';
+                titleEl.textContent =
+                    slow.length > 0
+                        ? 'Slow widgets (>' + _WE_LT_THRESHOLD + 'ms)'
+                        : 'No slow widgets found (≥' + _WE_LT_THRESHOLD + 'ms)';
                 panel.appendChild(titleEl);
 
                 if (slow.length > 0) {
                     const table = document.createElement('table');
                     table.style.cssText = 'margin-top:8px;border-collapse:collapse;width:100%;';
-                    table.innerHTML = '<thead><tr>' +
+                    table.innerHTML =
+                        '<thead><tr>' +
                         '<th style="padding:3px 6px;text-align:left;">Name</th>' +
                         '<th style="padding:3px 6px;text-align:right;">Load (ms)</th>' +
                         '</tr></thead>';
                     const tbody = document.createElement('tbody');
                     slow.forEach((e) => {
                         const tr = document.createElement('tr');
-                        tr.innerHTML = '<td style="padding:3px 6px;"><a href="/nav_to.do?uri=sp_widget.do%3Fsys_id%3D' + encodeURIComponent(e.sys_id) + '" target="_blank">' + Utils.escapeHtml(e.name) + '</a></td>' +
-                            '<td style="padding:3px 6px;text-align:right;color:red;">' + e.load_time_ms + '</td>';
+                        tr.innerHTML =
+                            '<td style="padding:3px 6px;"><a href="/nav_to.do?uri=sp_widget.do%3Fsys_id%3D' +
+                            encodeURIComponent(e.sys_id) +
+                            '" target="_blank">' +
+                            Utils.escapeHtml(e.name) +
+                            '</a></td>' +
+                            '<td style="padding:3px 6px;text-align:right;color:red;">' +
+                            e.load_time_ms +
+                            '</td>';
                         tbody.appendChild(tr);
                     });
                     table.appendChild(tbody);
                     panel.appendChild(table);
-
                 }
 
                 const closeBtn = document.createElement('button');
                 closeBtn.textContent = '×';
                 closeBtn.title = 'Dismiss';
-                closeBtn.style.cssText = 'position:absolute;top:6px;right:8px;background:none;border:none;font-size:16px;line-height:1;cursor:pointer;';
-                closeBtn.addEventListener('click', function () { panel.parentNode && panel.parentNode.removeChild(panel); });
+                closeBtn.style.cssText =
+                    'position:absolute;top:6px;right:8px;background:none;border:none;font-size:16px;line-height:1;cursor:pointer;';
+                closeBtn.addEventListener('click', function () {
+                    panel.parentNode && panel.parentNode.removeChild(panel);
+                });
                 panel.appendChild(closeBtn);
 
                 document.body.appendChild(panel);
@@ -445,8 +519,7 @@ function link(scope, element, attrs, controller) {
         }
 
         return { activate, deactivate, isActive };
-    }());
-
+    })();
 
     ///////////////////////////////////////////
     // 6. Menu item configuration
@@ -463,12 +536,14 @@ function link(scope, element, attrs, controller) {
                 const existing = document.querySelectorAll('.scope-context-menu-button, .scope-context-menu');
                 if (existing.length > 0) {
                     localStorage.setItem(SHOW_SCOPE_MENUS_KEY, 'false');
-                    existing.forEach((el) => { el.remove(); });
+                    existing.forEach((el) => {
+                        el.remove();
+                    });
                 } else {
                     ScopeButtons.show();
                     localStorage.setItem(SHOW_SCOPE_MENUS_KEY, 'true');
                 }
-            }
+            },
         },
         {
             label: function () {
@@ -480,7 +555,7 @@ function link(scope, element, attrs, controller) {
                 } else {
                     LoadTimeTracker.activate();
                 }
-            }
+            },
         },
     ];
 
@@ -491,26 +566,22 @@ function link(scope, element, attrs, controller) {
      * @returns {Array}
      */
     function getFilteredMenuItems() {
-        return MENU_ITEM_CONFIGS
-            .filter((item) => {
-                if (item.condition && !item.condition()) {
-                    return false;
-                }
-                return true;
-            })
-            .map((item) => {
-                const label = typeof item.label === 'function' ? item.label() : item.label;
-                return [label, item.fn];
-            });
+        return MENU_ITEM_CONFIGS.filter((item) => {
+            if (item.condition && !item.condition()) {
+                return false;
+            }
+            return true;
+        }).map((item) => {
+            const label = typeof item.label === 'function' ? item.label() : item.label;
+            return [label, item.fn];
+        });
     }
-
 
     ///////////////////////////////////////////
     // 7. ScopeResolver — Angular scope/widget resolution from a DOM element
     ///////////////////////////////////////////
 
     const ScopeResolver = (function () {
-
         /**
          * Whether a scope owns widget-controller properties directly (c, data, options,
          * or widget as own properties) — i.e. it's a widget's own controller scope, not
@@ -521,10 +592,12 @@ function link(scope, element, attrs, controller) {
         function ownsWidgetProps(sc) {
             if (!sc) return false;
             try {
-                return Object.prototype.hasOwnProperty.call(sc, 'c') ||
+                return (
+                    Object.prototype.hasOwnProperty.call(sc, 'c') ||
                     Object.prototype.hasOwnProperty.call(sc, 'data') ||
                     Object.prototype.hasOwnProperty.call(sc, 'options') ||
-                    Object.prototype.hasOwnProperty.call(sc, 'widget');
+                    Object.prototype.hasOwnProperty.call(sc, 'widget')
+                );
             } catch (_e) {
                 return false;
             }
@@ -547,11 +620,12 @@ function link(scope, element, attrs, controller) {
                     return curr;
                 }
                 // If $parent shares the exact same 'c', 'data', or 'widget', then curr is an inherited child scope (e.g. ng-repeat, ng-if)
-                if (curr.$parent && (
-                    (curr.c && curr.$parent.c === curr.c) ||
-                    (curr.data && curr.$parent.data === curr.data) ||
-                    (curr.widget && curr.$parent.widget === curr.widget)
-                )) {
+                if (
+                    curr.$parent &&
+                    ((curr.c && curr.$parent.c === curr.c) ||
+                        (curr.data && curr.$parent.data === curr.data) ||
+                        (curr.widget && curr.$parent.widget === curr.widget))
+                ) {
                     curr = curr.$parent;
                     continue;
                 }
@@ -647,7 +721,7 @@ function link(scope, element, attrs, controller) {
                         }
                         widgetName = s.widget?.name || s.rectangle?.widget?.name || '';
                     }
-                } catch (_ex) { }
+                } catch (_ex) {}
 
                 if (el.hasAttribute) {
                     instanceTitle = el.getAttribute('sn-atf-area') || '';
@@ -659,7 +733,12 @@ function link(scope, element, attrs, controller) {
                     if (widgetName && instanceTitle && instanceTitle !== widgetName) {
                         label = widgetName + ' [' + instanceTitle + ']';
                     }
-                    results.push({ el: el, sysId: sysId, name: label, widgetName: widgetName || instanceTitle || sysId });
+                    results.push({
+                        el: el,
+                        sysId: sysId,
+                        name: label,
+                        widgetName: widgetName || instanceTitle || sysId,
+                    });
                 }
 
                 el = el.parentElement;
@@ -674,11 +753,17 @@ function link(scope, element, attrs, controller) {
                         seenSysIds.add(w.sys_id);
                         const wName = w.name || w.sys_id;
                         // No DOM element owns this scope, so capture it directly.
-                        results.push({ el: targetEl, scope: s, sysId: w.sys_id, name: wName, widgetName: wName });
+                        results.push({
+                            el: targetEl,
+                            scope: s,
+                            sysId: w.sys_id,
+                            name: wName,
+                            widgetName: wName,
+                        });
                     }
                     s = s.$parent;
                 }
-            } catch (_e) { }
+            } catch (_e) {}
 
             return results;
         }
@@ -706,7 +791,9 @@ function link(scope, element, attrs, controller) {
                             return rect.widget.sys_id;
                         }
                     }
-                } catch (_ex) { /* angular not ready or detached node — keep walking */ }
+                } catch (_ex) {
+                    /* angular not ready or detached node — keep walking */
+                }
                 cursor = cursor.parentElement;
             }
             // Fallback: no rectangle-bearing ancestor at all (e.g. header/footer
@@ -743,22 +830,29 @@ function link(scope, element, attrs, controller) {
                     if (rect) {
                         return rect.id || rect.sys_id || null;
                     }
-                } catch (_ex) { /* angular not ready or detached node — keep walking */ }
+                } catch (_ex) {
+                    /* angular not ready or detached node — keep walking */
+                }
                 el = el.parentElement;
             }
             return null;
         }
 
-        return { resolveToWidgetControllerScope, getActualWidgetScope, getEmbeddedWidgetInfos, getWidgetSysId, getInstanceSysId, ownsWidgetProps };
-    }());
-
+        return {
+            resolveToWidgetControllerScope,
+            getActualWidgetScope,
+            getEmbeddedWidgetInfos,
+            getWidgetSysId,
+            getInstanceSysId,
+            ownsWidgetProps,
+        };
+    })();
 
     ///////////////////////////////////////////
     // 8. TreeViewer — collapsible object tree + search used by the scope inspector
     ///////////////////////////////////////////
 
     const TreeViewer = (function () {
-
         /**
          * Builds a collapsible HTML tree from a plain object or array.
          * Matching keys/values are highlighted when filterText is provided.
@@ -777,13 +871,11 @@ function link(scope, element, attrs, controller) {
                 paddingLeft: '1em',
                 maxWidth: '100%',
                 overflowWrap: 'break-word',
-                wordBreak: 'break-word'
+                wordBreak: 'break-word',
             });
 
             const isArray = Array.isArray(obj);
-            let keys = isArray
-                ? Object.keys(obj)
-                : Object.keys(obj).sort((a, b) => a.localeCompare(b));
+            let keys = isArray ? Object.keys(obj) : Object.keys(obj).sort((a, b) => a.localeCompare(b));
 
             if (filterText) {
                 const lowerFilter = filterText.toLowerCase();
@@ -800,14 +892,19 @@ function link(scope, element, attrs, controller) {
                             return String(value).toLowerCase().includes(lowerFilter);
                         }
                         return Object.keys(value).some((k) => k.toLowerCase().includes(lowerFilter));
-                    } catch (_e) { return false; }
+                    } catch (_e) {
+                        return false;
+                    }
                 });
             }
 
             if (keys.length === 0 && filterText) {
                 const noMatch = document.createElement('li');
                 noMatch.textContent = 'No matches found for "' + filterText + '"';
-                Object.assign(noMatch.style, { color: '#999', fontStyle: 'italic' });
+                Object.assign(noMatch.style, {
+                    color: '#999',
+                    fontStyle: 'italic',
+                });
                 ul.appendChild(noMatch);
                 return ul;
             }
@@ -821,28 +918,36 @@ function link(scope, element, attrs, controller) {
                 const li = document.createElement('li');
 
                 let value;
-                try { value = obj[key]; } catch (_e) { value = '[Unreadable]'; }
+                try {
+                    value = obj[key];
+                } catch (_e) {
+                    value = '[Unreadable]';
+                }
                 if (typeof value === 'function') {
                     continue;
                 }
 
-                const valueType = Array.isArray(value) ? 'array'
-                    : value === null ? 'null'
-                        : typeof value;
+                const valueType = Array.isArray(value) ? 'array' : value === null ? 'null' : typeof value;
 
                 if ((valueType === 'object' || valueType === 'array') && value !== null && !seen.has(value)) {
                     const toggle = document.createElement('span');
                     toggle.textContent = '▶';
-                    Object.assign(toggle.style, { cursor: 'pointer', marginRight: '4px' });
+                    Object.assign(toggle.style, {
+                        cursor: 'pointer',
+                        marginRight: '4px',
+                    });
 
                     const labelSpan = document.createElement('span');
                     labelSpan.style.cursor = 'pointer';
 
                     const safeKey = Utils.escapeHtml(key);
                     const typeInfo = ' [' + valueType + ']';
-                    const countInfo = valueType === 'object'
-                        ? '(' + Object.keys(value).length + ')'
-                        : valueType === 'array' ? '(' + value.length + ')' : '';
+                    const countInfo =
+                        valueType === 'object'
+                            ? '(' + Object.keys(value).length + ')'
+                            : valueType === 'array'
+                              ? '(' + value.length + ')'
+                              : '';
 
                     let keyHtml = safeKey;
                     if (filterText && key.toLowerCase().includes(filterText.toLowerCase())) {
@@ -851,10 +956,15 @@ function link(scope, element, attrs, controller) {
                             '<span style="background-color:yellow;font-weight:bold;">$1</span>'
                         );
                     }
-                    labelSpan.innerHTML = '<strong class="scope-node-key">' + keyHtml + '</strong>' + typeInfo + countInfo;
+                    labelSpan.innerHTML =
+                        '<strong class="scope-node-key">' + keyHtml + '</strong>' + typeInfo + countInfo;
 
                     const childContainer = document.createElement('ul');
-                    Object.assign(childContainer.style, { display: 'none', listStyle: 'none', paddingLeft: '1em' });
+                    Object.assign(childContainer.style, {
+                        display: 'none',
+                        listStyle: 'none',
+                        paddingLeft: '1em',
+                    });
 
                     (function createToggleHandler(nodeValue, nodeContainer, nodeToggle, nodeFilterText) {
                         function handler(e) {
@@ -876,9 +986,8 @@ function link(scope, element, attrs, controller) {
                     li.appendChild(labelSpan);
                     li.appendChild(childContainer);
                 } else {
-                    const val = (valueType === 'object' || valueType === 'array')
-                        ? '[Circular]'
-                        : JSON.stringify(value, null, 0);
+                    const val =
+                        valueType === 'object' || valueType === 'array' ? '[Circular]' : JSON.stringify(value, null, 0);
 
                     if (valueType === 'string' && value.length > STRING_PREVIEW_LENGTH) {
                         const shortVal = JSON.stringify(value.substring(0, STRING_PREVIEW_LENGTH) + '...', null, 0);
@@ -915,8 +1024,11 @@ function link(scope, element, attrs, controller) {
                         toggleLink.className = 'toggle-string';
                         toggleLink.textContent = 'show more';
                         Object.assign(toggleLink.style, {
-                            marginLeft: '5px', color: '#007bff',
-                            textDecoration: 'none', fontSize: '10px', fontStyle: 'italic'
+                            marginLeft: '5px',
+                            color: '#007bff',
+                            textDecoration: 'none',
+                            fontSize: '10px',
+                            fontStyle: 'italic',
                         });
 
                         container.appendChild(keySpan);
@@ -932,14 +1044,16 @@ function link(scope, element, attrs, controller) {
                                 const isExpanded = this.textContent === 'show less';
                                 const safeShort = Utils.escapeHtml(nodeShortVal);
                                 const safeFull = Utils.escapeHtml(nodeFullVal);
-                                const highlightRe = nodeFilterText && new RegExp('(' + Utils.escapeRegExp(nodeFilterText) + ')', 'gi');
+                                const highlightRe =
+                                    nodeFilterText && new RegExp('(' + Utils.escapeRegExp(nodeFilterText) + ')', 'gi');
                                 const highlight = '<span style="background-color:yellow;font-weight:bold;">$1</span>';
                                 const targetVal = isExpanded ? safeShort : safeFull;
                                 const matchVal = isExpanded ? nodeShortVal : nodeFullVal;
 
-                                nodeValueSpan.innerHTML = (highlightRe && matchVal.toLowerCase().includes(nodeFilterText.toLowerCase()))
-                                    ? targetVal.replace(highlightRe, highlight)
-                                    : targetVal;
+                                nodeValueSpan.innerHTML =
+                                    highlightRe && matchVal.toLowerCase().includes(nodeFilterText.toLowerCase())
+                                        ? targetVal.replace(highlightRe, highlight)
+                                        : targetVal;
                                 this.textContent = isExpanded ? 'show more' : 'show less';
                             });
                         })(value, valueSpan, shortVal, fullVal, filterText);
@@ -964,9 +1078,16 @@ function link(scope, element, attrs, controller) {
                             maxWidth: '100%',
                             display: 'inline-block',
                             overflowWrap: 'break-word',
-                            wordBreak: 'break-word'
+                            wordBreak: 'break-word',
                         });
-                        contentSpan.innerHTML = '<strong class="scope-node-key">' + safeKey3 + '</strong>: ' + safeValHighlighted + ' [' + valueType + ']';
+                        contentSpan.innerHTML =
+                            '<strong class="scope-node-key">' +
+                            safeKey3 +
+                            '</strong>: ' +
+                            safeValHighlighted +
+                            ' [' +
+                            valueType +
+                            ']';
                         li.appendChild(contentSpan);
                     }
                 }
@@ -988,7 +1109,10 @@ function link(scope, element, attrs, controller) {
             if (totalKeys > MAX_TREE_KEYS) {
                 const more = document.createElement('li');
                 more.textContent = '... (' + (totalKeys - MAX_TREE_KEYS) + ' more items)';
-                Object.assign(more.style, { color: '#999', fontStyle: 'italic' });
+                Object.assign(more.style, {
+                    color: '#999',
+                    fontStyle: 'italic',
+                });
                 ul.appendChild(more);
             }
 
@@ -1026,11 +1150,21 @@ function link(scope, element, attrs, controller) {
                 const currentPath = path ? path + '.' + key : key;
 
                 if (key.toLowerCase().includes(lowerTerm)) {
-                    results.push({ path: currentPath, key: key, value: value, isKeyMatch: true });
+                    results.push({
+                        path: currentPath,
+                        key: key,
+                        value: value,
+                        isKeyMatch: true,
+                    });
                 }
                 if (value !== null && typeof value !== 'object' && typeof value !== 'function') {
                     if (String(value).toLowerCase().includes(lowerTerm)) {
-                        results.push({ path: currentPath, key: key, value: value, isKeyMatch: false });
+                        results.push({
+                            path: currentPath,
+                            key: key,
+                            value: value,
+                            isKeyMatch: false,
+                        });
                     }
                 }
                 if (value !== null && typeof value === 'object' && !seen.has(value)) {
@@ -1054,7 +1188,10 @@ function link(scope, element, attrs, controller) {
             const marker = document.createElement('span');
             marker.textContent = ' ← MATCH';
             Object.assign(marker.style, {
-                color: '#e65100', fontWeight: 'bold', fontSize: '11px', marginLeft: '5px'
+                color: '#e65100',
+                fontWeight: 'bold',
+                fontSize: '11px',
+                marginLeft: '5px',
             });
             item.appendChild(marker);
 
@@ -1080,8 +1217,7 @@ function link(scope, element, attrs, controller) {
             for (const item of items) {
                 if (item.textContent.includes(searchKey)) {
                     bestMatch = item;
-                    if (item.textContent.includes(searchKey + ':') ||
-                        item.textContent.includes(searchKey + ' [')) {
+                    if (item.textContent.includes(searchKey + ':') || item.textContent.includes(searchKey + ' [')) {
                         const toggle = item.querySelector('span[style*="cursor: pointer"]');
                         if (toggle && toggle.textContent === '▶') {
                             toggle.click();
@@ -1089,7 +1225,9 @@ function link(scope, element, attrs, controller) {
                         if (remainingPath.length > 0) {
                             const childUl = item.querySelector('ul');
                             if (childUl) {
-                                setTimeout(function () { expandPathInTree(childUl, remainingPath); }, 50);
+                                setTimeout(function () {
+                                    expandPathInTree(childUl, remainingPath);
+                                }, 50);
                                 return;
                             }
                         }
@@ -1121,9 +1259,11 @@ function link(scope, element, attrs, controller) {
 
             for (const item of items) {
                 const itemText = (item.textContent || '').replace(/[▶▼]/g, '').trim();
-                const itemKey = itemText.includes(':') ? itemText.split(':')[0].trim()
-                    : itemText.includes('[') ? itemText.split('[')[0].trim()
-                        : itemText;
+                const itemKey = itemText.includes(':')
+                    ? itemText.split(':')[0].trim()
+                    : itemText.includes('[')
+                      ? itemText.split('[')[0].trim()
+                      : itemText;
 
                 if (itemKey === currentKey) {
                     const toggle = item.querySelector('span[style*="cursor: pointer"]');
@@ -1134,7 +1274,9 @@ function link(scope, element, attrs, controller) {
                         if (remainingPath.length > 0) {
                             const childUl = Array.from(item.children).find((c) => c.tagName === 'UL') ?? null;
                             if (childUl) {
-                                setTimeout(function () { expandPathInTree(childUl, remainingPath); }, 50);
+                                setTimeout(function () {
+                                    expandPathInTree(childUl, remainingPath);
+                                }, 50);
                             }
                         } else {
                             highlightItem(item);
@@ -1152,16 +1294,20 @@ function link(scope, element, attrs, controller) {
             }
         }
 
-        return { createTree, deepSearch, expandPathInTree, highlightItem, searchForNodeByContent };
-    }());
-
+        return {
+            createTree,
+            deepSearch,
+            expandPathInTree,
+            highlightItem,
+            searchForNodeByContent,
+        };
+    })();
 
     ///////////////////////////////////////////
     // 9. ScopeButtons — floating per-widget scope inspector buttons
     ///////////////////////////////////////////
 
     const ScopeButtons = (function () {
-
         /**
          * Injects a floating gear button onto each [widget] element that, when
          * clicked, opens an inspector panel showing the widget's Angular scope.
@@ -1169,9 +1315,7 @@ function link(scope, element, attrs, controller) {
          *   processed; otherwise all [widget="widget"] elements on the page.
          */
         function show(singleElement) {
-            const elements = singleElement
-                ? [singleElement]
-                : document.querySelectorAll('[widget="widget"]');
+            const elements = singleElement ? [singleElement] : document.querySelectorAll('[widget="widget"]');
 
             const occupiedPositions = [];
             const problematicWidgets = new Set();
@@ -1214,8 +1358,7 @@ function link(scope, element, attrs, controller) {
                     while (collision) {
                         collision = false;
                         for (const pos of occupiedPositions) {
-                            if (Math.abs(pos.top - (elTop + offset)) < 30 &&
-                                Math.abs(pos.right - elRight) < 150) {
+                            if (Math.abs(pos.top - (elTop + offset)) < 30 && Math.abs(pos.right - elRight) < 150) {
                                 offset += 30;
                                 collision = true;
                                 break;
@@ -1223,7 +1366,11 @@ function link(scope, element, attrs, controller) {
                         }
                     }
 
-                    occupiedPositions.push({ top: elTop + offset, right: elRight, el: el });
+                    occupiedPositions.push({
+                        top: elTop + offset,
+                        right: elRight,
+                        el: el,
+                    });
                     return { top: offset, level: level };
                 } catch (error) {
                     console.warn('Error calculating button position:', error);
@@ -1235,8 +1382,10 @@ function link(scope, element, attrs, controller) {
                 const logButton = document.createElement('button');
 
                 if (buttonLabel) {
-                    logButton.innerHTML = '<i class="icon-script" style="margin-right:4px;"></i>' + Utils.escapeHtml(buttonLabel);
-                    logButton.style.cssText = 'margin-bottom:10px;margin-left:5px;background:none;border:1px solid black;border-radius:4px;cursor:pointer;';
+                    logButton.innerHTML =
+                        '<i class="icon-script" style="margin-right:4px;"></i>' + Utils.escapeHtml(buttonLabel);
+                    logButton.style.cssText =
+                        'margin-bottom:10px;margin-left:5px;background:none;border:1px solid black;border-radius:4px;cursor:pointer;';
                 } else {
                     logButton.innerHTML = '<i class="icon-script"></i>';
                     logButton.style.cssText = 'background:none;border:none;cursor:pointer;';
@@ -1252,7 +1401,8 @@ function link(scope, element, attrs, controller) {
             function addOpenInEditor(container, widgetScope) {
                 const editorButton = document.createElement('button');
                 editorButton.innerHTML = '<i class="icon-search" style="margin-right:4px;"></i> Open in Widget Editor+';
-                editorButton.style.cssText = 'margin-bottom:10px;margin-left:5px;background:none;border:1px solid black;border-radius:4px;cursor:pointer;';
+                editorButton.style.cssText =
+                    'margin-bottom:10px;margin-left:5px;background:none;border:1px solid black;border-radius:4px;cursor:pointer;';
 
                 container.appendChild(editorButton);
                 editorButton.addEventListener('click', function (e) {
@@ -1280,14 +1430,17 @@ function link(scope, element, attrs, controller) {
                 const pos = calculateButtonPosition(el);
                 const topOffset = pos.top;
                 const level = pos.level;
-                const buttonColor = level > 0
-                    ? NESTED_COLORS[(level - 1) % NESTED_COLORS.length]
-                    : ROOT_BUTTON_COLOR;
-                const nestedIndicator = level > 0
-                    ? '<span style="margin-right:4px;font-size:10px;">' + '●'.repeat(Math.min(level, 3)) + '</span>'
-                    : '';
+                const buttonColor = level > 0 ? NESTED_COLORS[(level - 1) % NESTED_COLORS.length] : ROOT_BUTTON_COLOR;
+                const nestedIndicator =
+                    level > 0
+                        ? '<span style="margin-right:4px;font-size:10px;">' + '●'.repeat(Math.min(level, 3)) + '</span>'
+                        : '';
 
-                btn.innerHTML = nestedIndicator + '<i class="icon-cog" style="margin-right:4px;"></i><span>' + Utils.escapeHtml(widgetName) + '</span>';
+                btn.innerHTML =
+                    nestedIndicator +
+                    '<i class="icon-cog" style="margin-right:4px;"></i><span>' +
+                    Utils.escapeHtml(widgetName) +
+                    '</span>';
 
                 Object.assign(btn.style, {
                     position: 'absolute',
@@ -1306,7 +1459,7 @@ function link(scope, element, attrs, controller) {
                     whiteSpace: 'nowrap',
                     maxWidth: '150px',
                     overflow: 'hidden',
-                    textOverflow: 'ellipsis'
+                    textOverflow: 'ellipsis',
                 });
 
                 el.style.position = 'relative';
@@ -1346,7 +1499,9 @@ function link(scope, element, attrs, controller) {
                     }
 
                     closeActiveMenu();
-                    document.querySelectorAll('.scope-context-menu').forEach((m) => { m.remove(); });
+                    document.querySelectorAll('.scope-context-menu').forEach((m) => {
+                        m.remove();
+                    });
 
                     const menu = document.createElement('div');
                     menu.id = menuId;
@@ -1368,7 +1523,7 @@ function link(scope, element, attrs, controller) {
                         fontSize: '12px',
                         fontFamily: MONOSPACE_FONTS,
                         wordBreak: 'break-word',
-                        overflowWrap: 'break-word'
+                        overflowWrap: 'break-word',
                     });
                     document.body.appendChild(menu);
 
@@ -1378,17 +1533,31 @@ function link(scope, element, attrs, controller) {
 
                     // Slow / problematic widget path
                     if (widgetId && problematicWidgets.has(widgetId)) {
-                        menu.innerHTML = '<div style="color:orange;padding:10px;"><i class="icon-alert" style="margin-right:6px;"></i>This widget was slow to process previously. Showing limited information.</div>';
+                        menu.innerHTML =
+                            '<div style="color:orange;padding:10px;"><i class="icon-alert" style="margin-right:6px;"></i>This widget was slow to process previously. Showing limited information.</div>';
                         const basicInfo = document.createElement('div');
                         Object.assign(basicInfo.style, {
-                            padding: '10px', marginTop: '10px',
-                            background: '#f5f5f5', borderRadius: '4px'
+                            padding: '10px',
+                            marginTop: '10px',
+                            background: '#f5f5f5',
+                            borderRadius: '4px',
                         });
                         basicInfo.innerHTML =
-                            '<div><strong>Type:</strong> ' + Utils.escapeHtml(el.getAttribute('widget') || 'widget') + '</div>' +
-                            '<div><strong>Name:</strong> ' + Utils.escapeHtml(widgetName) + '</div>' +
-                            '<div><strong>ID:</strong> ' + (widgetScope?.$id ?? 'Unknown') + '</div>';
-                        addLogButton(menu, widgetScope, widgetName + ' - ' + (widgetScope?.$id ?? ''), 'Log widget scope to console');
+                            '<div><strong>Type:</strong> ' +
+                            Utils.escapeHtml(el.getAttribute('widget') || 'widget') +
+                            '</div>' +
+                            '<div><strong>Name:</strong> ' +
+                            Utils.escapeHtml(widgetName) +
+                            '</div>' +
+                            '<div><strong>ID:</strong> ' +
+                            (widgetScope?.$id ?? 'Unknown') +
+                            '</div>';
+                        addLogButton(
+                            menu,
+                            widgetScope,
+                            widgetName + ' - ' + (widgetScope?.$id ?? ''),
+                            'Log widget scope to console'
+                        );
                         addOpenInEditor(menu, widgetScope);
                         menu.appendChild(basicInfo);
                         menu.showPopover();
@@ -1411,7 +1580,8 @@ function link(scope, element, attrs, controller) {
                             if (widgetId) {
                                 problematicWidgets.add(widgetId);
                             }
-                            menu.innerHTML = '<div style="color:orange;padding:10px;"><i class="icon-alert" style="margin-right:6px;"></i>Processing took too long and was aborted. Try again for limited information.</div>';
+                            menu.innerHTML =
+                                '<div style="color:orange;padding:10px;"><i class="icon-alert" style="margin-right:6px;"></i>Processing took too long and was aborted. Try again for limited information.</div>';
                             if (!menu.matches(':popover-open')) menu.showPopover();
                             positionMenu();
                         }, PROCESSING_TIMEOUT_MS);
@@ -1439,8 +1609,11 @@ function link(scope, element, attrs, controller) {
                                         .slice(0, MAX_ARRAY_ITEMS)
                                         .filter((item) => typeof item !== 'function')
                                         .map((item) => {
-                                            try { return removeFunctions(item, seen, depth + 1); }
-                                            catch (_e) { return '[Error]'; }
+                                            try {
+                                                return removeFunctions(item, seen, depth + 1);
+                                            } catch (_e) {
+                                                return '[Error]';
+                                            }
                                         });
                                 }
 
@@ -1451,7 +1624,8 @@ function link(scope, element, attrs, controller) {
                                         break;
                                     }
                                     if (propertyCount >= MAX_OBJ_PROPS) {
-                                        result['...'] = '[' + (Object.keys(obj).length - propertyCount) + ' more properties]';
+                                        result['...'] =
+                                            '[' + (Object.keys(obj).length - propertyCount) + ' more properties]';
                                         break;
                                     }
                                     try {
@@ -1478,8 +1652,12 @@ function link(scope, element, attrs, controller) {
                                     return;
                                 }
                                 if (!key.startsWith('$$') && typeof widgetScope[key] !== 'function') {
-                                    try { output[key] = widgetScope[key]; propCount++; }
-                                    catch (err) { output[key] = '[Error: ' + err.message + ']'; }
+                                    try {
+                                        output[key] = widgetScope[key];
+                                        propCount++;
+                                    } catch (err) {
+                                        output[key] = '[Error: ' + err.message + ']';
+                                    }
                                 }
                             });
                         } catch (scopeError) {
@@ -1503,11 +1681,18 @@ function link(scope, element, attrs, controller) {
                         output.$widget = {
                             id: widgetScope.$id,
                             name: widgetName,
-                            type: el.getAttribute('widget') || 'widget'
+                            type: el.getAttribute('widget') || 'widget',
                         };
                         if (widgetScope.$parent) {
-                            try { output.$parent = { $id: widgetScope.$parent.$id }; }
-                            catch (_e) { output.$parent = { $error: 'Could not access parent scope' }; }
+                            try {
+                                output.$parent = {
+                                    $id: widgetScope.$parent.$id,
+                                };
+                            } catch (_e) {
+                                output.$parent = {
+                                    $error: 'Could not access parent scope',
+                                };
+                            }
                         }
 
                         if (!processingTimedOut) {
@@ -1515,14 +1700,26 @@ function link(scope, element, attrs, controller) {
 
                             const header = document.createElement('div');
                             Object.assign(header.style, {
-                                marginBottom: '10px', padding: '5px',
-                                background: '#f5f5f5', borderRadius: '3px',
-                                fontWeight: 'bold', fontSize: '13px'
+                                marginBottom: '10px',
+                                padding: '5px',
+                                background: '#f5f5f5',
+                                borderRadius: '3px',
+                                fontWeight: 'bold',
+                                fontSize: '13px',
                             });
-                            let headerText = (el.getAttribute('widget') || 'widget') + ': ' + widgetName + ' (ID: ' + widgetScope.$id + ')';
+                            let headerText =
+                                (el.getAttribute('widget') || 'widget') +
+                                ': ' +
+                                widgetName +
+                                ' (ID: ' +
+                                widgetScope.$id +
+                                ')';
                             if (level > 0) {
                                 headerText = '[Nested L' + level + '] ' + headerText;
-                                Object.assign(header.style, { background: buttonColor, color: '#fff' });
+                                Object.assign(header.style, {
+                                    background: buttonColor,
+                                    color: '#fff',
+                                });
                             }
                             header.textContent = headerText;
                             menu.appendChild(header);
@@ -1531,11 +1728,17 @@ function link(scope, element, attrs, controller) {
                             addOpenInEditor(menu, widgetScope);
 
                             const searchContainer = document.createElement('div');
-                            Object.assign(searchContainer.style, { marginBottom: '10px', padding: '5px' });
+                            Object.assign(searchContainer.style, {
+                                marginBottom: '10px',
+                                padding: '5px',
+                            });
                             const searchInput = document.createElement('input');
                             Object.assign(searchInput.style, {
-                                width: '100%', padding: '5px',
-                                border: '1px solid #ccc', borderRadius: '3px', fontSize: '12px'
+                                width: '100%',
+                                padding: '5px',
+                                border: '1px solid #ccc',
+                                borderRadius: '3px',
+                                fontSize: '12px',
                             });
                             searchInput.setAttribute('placeholder', 'Search properties\u2026');
                             searchInput.setAttribute('type', 'search');
@@ -1561,25 +1764,40 @@ function link(scope, element, attrs, controller) {
                                     const searchResults = TreeViewer.deepSearch(output, filterText);
                                     const resultsInfo = document.createElement('div');
                                     Object.assign(resultsInfo.style, {
-                                        marginBottom: '10px', fontSize: '12px',
-                                        fontStyle: 'italic', color: '#666'
+                                        marginBottom: '10px',
+                                        fontSize: '12px',
+                                        fontStyle: 'italic',
+                                        color: '#666',
                                     });
 
                                     treeContainer.innerHTML = '';
 
                                     if (searchResults.length > 0) {
-                                        resultsInfo.textContent = 'Found ' + searchResults.length + ' ' + (searchResults.length === 1 ? 'match' : 'matches') + ' for "' + filterText + '"';
+                                        resultsInfo.textContent =
+                                            'Found ' +
+                                            searchResults.length +
+                                            ' ' +
+                                            (searchResults.length === 1 ? 'match' : 'matches') +
+                                            ' for "' +
+                                            filterText +
+                                            '"';
 
                                         const resultsTree = document.createElement('div');
                                         searchResults.forEach((result) => {
                                             const resultItem = document.createElement('div');
                                             Object.assign(resultItem.style, {
                                                 padding: '4px',
-                                                border: '1px solid #eee', borderRadius: '4px', cursor: 'pointer'
+                                                border: '1px solid #eee',
+                                                borderRadius: '4px',
+                                                cursor: 'pointer',
                                             });
 
                                             const pathDisplay = document.createElement('div');
-                                            Object.assign(pathDisplay.style, { marginBottom: '4px', fontSize: '11px', opacity: '0.7' });
+                                            Object.assign(pathDisplay.style, {
+                                                marginBottom: '4px',
+                                                fontSize: '11px',
+                                                opacity: '0.7',
+                                            });
                                             const pathText = result.path.split('.').join(' → ');
                                             if (pathText.toLowerCase().includes(filterText.toLowerCase())) {
                                                 pathDisplay.innerHTML = Utils.escapeHtml(pathText).replace(
@@ -1608,17 +1826,27 @@ function link(scope, element, attrs, controller) {
 
                                             let keyContent = Utils.escapeHtml(result.key);
                                             let valueContent = Utils.escapeHtml(displayValue);
-                                            const highlightRe = new RegExp('(' + Utils.escapeRegExp(filterText) + ')', 'gi');
-                                            const highlightSpan = '<span style="background-color:yellow;font-weight:bold;">$1</span>';
+                                            const highlightRe = new RegExp(
+                                                '(' + Utils.escapeRegExp(filterText) + ')',
+                                                'gi'
+                                            );
+                                            const highlightSpan =
+                                                '<span style="background-color:yellow;font-weight:bold;">$1</span>';
 
                                             if (result.key.toLowerCase().includes(filterText.toLowerCase())) {
                                                 keyContent = keyContent.replace(highlightRe, highlightSpan);
                                             }
-                                            if (typeof result.value === 'string' &&
-                                                result.value.toLowerCase().includes(filterText.toLowerCase())) {
+                                            if (
+                                                typeof result.value === 'string' &&
+                                                result.value.toLowerCase().includes(filterText.toLowerCase())
+                                            ) {
                                                 valueContent = valueContent.replace(highlightRe, highlightSpan);
                                             }
-                                            valueDisplay.innerHTML = '<strong class="scope-node-key">' + keyContent + '</strong>: ' + valueContent;
+                                            valueDisplay.innerHTML =
+                                                '<strong class="scope-node-key">' +
+                                                keyContent +
+                                                '</strong>: ' +
+                                                valueContent;
                                             resultItem.appendChild(valueDisplay);
 
                                             resultItem.addEventListener('click', function () {
@@ -1635,7 +1863,9 @@ function link(scope, element, attrs, controller) {
                                     } else {
                                         resultsInfo.textContent = 'No matches found for "' + filterText + '"';
                                         treeContainer.appendChild(resultsInfo);
-                                        treeContainer.appendChild(TreeViewer.createTree(output, new WeakSet(), filterText));
+                                        treeContainer.appendChild(
+                                            TreeViewer.createTree(output, new WeakSet(), filterText)
+                                        );
                                     }
 
                                     setTimeout(positionMenu, 50);
@@ -1644,11 +1874,16 @@ function link(scope, element, attrs, controller) {
 
                             menu.showPopover();
                             positionMenu();
-                            setTimeout(function () { searchInput.focus(); }, 50);
+                            setTimeout(function () {
+                                searchInput.focus();
+                            }, 50);
                         }
                     } catch (error) {
                         console.error('Error opening widget menu:', error);
-                        menu.innerHTML = '<div style="color:red;padding:10px;">Error opening widget inspector: ' + Utils.escapeHtml(error.message) + '</div>';
+                        menu.innerHTML =
+                            '<div style="color:red;padding:10px;">Error opening widget inspector: ' +
+                            Utils.escapeHtml(error.message) +
+                            '</div>';
                         if (!menu.matches(':popover-open')) menu.showPopover();
                         positionMenu();
                         if (widgetId) {
@@ -1656,16 +1891,19 @@ function link(scope, element, attrs, controller) {
                         }
                     }
 
-                    menu.addEventListener('click', function (e) { e.stopPropagation(); });
+                    menu.addEventListener('click', function (e) {
+                        e.stopPropagation();
+                    });
                 });
             });
 
-            document.addEventListener('click', function () { closeActiveMenu(); });
+            document.addEventListener('click', function () {
+                closeActiveMenu();
+            });
         }
 
         return { show };
-    }());
-
+    })();
 
     ///////////////////////////////////////////
     // 10. ContextMenuState — transient state for the active right-click
@@ -1683,7 +1921,7 @@ function link(scope, element, attrs, controller) {
             embeddedWidgets: [], // [{ el, sysId, name }, ...] innermost-first
             cursorX: 0,
             cursorY: 0,
-            event: null
+            event: null,
         };
 
         function reset(event) {
@@ -1699,7 +1937,8 @@ function link(scope, element, attrs, controller) {
         function captureTarget(target) {
             state.instanceSysId = ScopeResolver.getInstanceSysId(target);
             state.embeddedWidgets = ScopeResolver.getEmbeddedWidgetInfos(target);
-            state.widgetSysId = (state.embeddedWidgets[0] && state.embeddedWidgets[0].sysId) || ScopeResolver.getWidgetSysId(target);
+            state.widgetSysId =
+                (state.embeddedWidgets[0] && state.embeddedWidgets[0].sysId) || ScopeResolver.getWidgetSysId(target);
             state.widgetEl = target.closest ? target.closest('[widget]') : null;
             return !!(state.widgetSysId && state.widgetEl);
         }
@@ -1712,7 +1951,7 @@ function link(scope, element, attrs, controller) {
                 embeddedWidgets: state.embeddedWidgets.slice(),
                 cursorX: state.cursorX,
                 cursorY: state.cursorY,
-                event: state.event
+                event: state.event,
             };
         }
 
@@ -1721,25 +1960,25 @@ function link(scope, element, attrs, controller) {
         }
 
         return { reset, captureTarget, snapshot, hasNativeMenuTrigger };
-    }());
-
+    })();
 
     ///////////////////////////////////////////
     // 11. OverlayManager — SP debug overlay lifecycle
     ///////////////////////////////////////////
 
     const OverlayManager = (function () {
-
         /**
          * Returns true when node is the SP debug context-menu overlay element.
          * @param   {Node} node
          * @returns {boolean}
          */
         function isDebugOverlay(node) {
-            return node.nodeType === 1 &&
+            return (
+                node.nodeType === 1 &&
                 node.getAttribute('role') === 'contentinfo' &&
                 node.classList.contains('dropdown') &&
-                node.classList.contains('clearfix');
+                node.classList.contains('clearfix')
+            );
         }
 
         /**
@@ -1747,9 +1986,13 @@ function link(scope, element, attrs, controller) {
          * stack up when the user opens the context menu multiple times.
          */
         function removeDebugOverlays() {
-            document.querySelectorAll('body > [role="contentinfo"].dropdown.clearfix, dialog[open] [role="contentinfo"].dropdown.clearfix').forEach((el) => {
-                el.parentNode && el.parentNode.removeChild(el);
-            });
+            document
+                .querySelectorAll(
+                    'body > [role="contentinfo"].dropdown.clearfix, dialog[open] [role="contentinfo"].dropdown.clearfix'
+                )
+                .forEach((el) => {
+                    el.parentNode && el.parentNode.removeChild(el);
+                });
         }
 
         /** Closes SP's debug overlay and resets reveal on every spWidgetDebug scope so Angular doesn't re-add it. */
@@ -1758,11 +2001,13 @@ function link(scope, element, attrs, controller) {
                 document.querySelectorAll('span.context').forEach(function (el) {
                     const s = angular.element(el).scope();
                     if (s) {
-                        s.$evalAsync(function () { s.reveal = false; });
+                        s.$evalAsync(function () {
+                            s.reveal = false;
+                        });
                     }
                 });
                 menuContainer?.remove();
-            } catch (_e) { }
+            } catch (_e) {}
         }
 
         // SP can insert the overlay container before its <ul> is populated (or replace/refill
@@ -1781,40 +2026,53 @@ function link(scope, element, attrs, controller) {
                 settleObserver.disconnect();
                 onSettled();
             }
-            settleObserver.observe(overlayEl, { childList: true, subtree: true });
+            settleObserver.observe(overlayEl, {
+                childList: true,
+                subtree: true,
+            });
             timer = setTimeout(finish, SETTLE_QUIET_MS);
         }
 
         // Mirrors spWidgetDebug: sets rectangle.debugModal on its scope so the SP template renders the modal, and reloads on sp.form.record.updated.
         function openWidgetFormModal(sysId) {
             scope.$applyAsync(function () {
-                spUtil.get('widget-options-config', { table: 'sp_widget', sys_id: sysId }).then(function (widgetData) {
-                    let debugScope = null;
-                    document.querySelectorAll('span.context').forEach(function (el) {
-                        const s = angular.element(el).scope();
-                        if (s && s.rectangle !== undefined) {
-                            debugScope = s;
+                spUtil
+                    .get('widget-options-config', {
+                        table: 'sp_widget',
+                        sys_id: sysId,
+                    })
+                    .then(function (widgetData) {
+                        let debugScope = null;
+                        document.querySelectorAll('span.context').forEach(function (el) {
+                            const s = angular.element(el).scope();
+                            if (s && s.rectangle !== undefined) {
+                                debugScope = s;
+                            }
+                        });
+                        if (!debugScope) {
+                            return;
                         }
+                        widgetData.options.afterClose = function () {
+                            debugScope.rectangle.debugModal = null;
+                        };
+                        widgetData.options.afterOpen = function () {};
+                        debugScope.rectangle.debugModal = widgetData;
+                        debugScope.$on('sp.form.record.updated', function () {
+                            debugScope.rectangle.debugModal = null;
+                            scope.$broadcast('sp.page.reload');
+                        });
                     });
-                    if (!debugScope) {
-                        return;
-                    }
-                    widgetData.options.afterClose = function () {
-                        debugScope.rectangle.debugModal = null;
-                    };
-                    widgetData.options.afterOpen = function () { };
-                    debugScope.rectangle.debugModal = widgetData;
-                    debugScope.$on('sp.form.record.updated', function () {
-                        debugScope.rectangle.debugModal = null;
-                        scope.$broadcast('sp.page.reload');
-                    });
-                });
             });
         }
 
-        return { isDebugOverlay, removeDebugOverlays, closeSpOverlay, whenSettled, openWidgetFormModal };
-    }());
-
+        return {
+            isDebugOverlay,
+            removeDebugOverlays,
+            closeSpOverlay,
+            whenSettled,
+            openWidgetFormModal,
+        };
+    })();
 
     ///////////////////////////////////////////
     // 11.5 PortalPicker — "Open page" portal-selection popover
@@ -1853,16 +2111,29 @@ function link(scope, element, attrs, controller) {
             const menu = document.createElement('div');
             menu.setAttribute('popover', 'manual');
             Object.assign(menu.style, {
-                position: 'fixed', left: x + 'px', top: y + 'px',
-                background: '#fff', border: '1px solid #ccc', borderRadius: '6px',
-                padding: '6px', boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
-                minWidth: '200px', maxWidth: '320px', maxHeight: '320px', overflow: 'auto',
-                fontSize: '13px', zIndex: '100000'
+                position: 'fixed',
+                left: x + 'px',
+                top: y + 'px',
+                background: '#fff',
+                border: '1px solid #ccc',
+                borderRadius: '6px',
+                padding: '6px',
+                boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
+                minWidth: '200px',
+                maxWidth: '320px',
+                maxHeight: '320px',
+                overflow: 'auto',
+                fontSize: '13px',
+                zIndex: '100000',
             });
 
             const header = document.createElement('div');
             header.textContent = headerText;
-            Object.assign(header.style, { fontWeight: '600', padding: '4px 8px 8px', color: '#425051' });
+            Object.assign(header.style, {
+                fontWeight: '600',
+                padding: '4px 8px 8px',
+                color: '#425051',
+            });
             menu.appendChild(header);
 
             document.body.appendChild(menu);
@@ -1874,7 +2145,9 @@ function link(scope, element, attrs, controller) {
                     close();
                 }
             };
-            setTimeout(function () { document.addEventListener('click', _closeOnOutsideClick, true); }, 0);
+            setTimeout(function () {
+                document.addEventListener('click', _closeOnOutsideClick, true);
+            }, 0);
 
             return menu;
         }
@@ -1882,7 +2155,11 @@ function link(scope, element, attrs, controller) {
         function addEmptyRow(menu, text) {
             const empty = document.createElement('div');
             empty.textContent = text;
-            Object.assign(empty.style, { padding: '4px 8px', color: '#999', fontStyle: 'italic' });
+            Object.assign(empty.style, {
+                padding: '4px 8px',
+                color: '#999',
+                fontStyle: 'italic',
+            });
             menu.appendChild(empty);
         }
 
@@ -1890,12 +2167,22 @@ function link(scope, element, attrs, controller) {
             const item = document.createElement('button');
             item.textContent = label;
             Object.assign(item.style, {
-                display: 'block', width: '100%', textAlign: 'left',
-                padding: '6px 8px', border: 'none', background: 'none',
-                cursor: 'pointer', borderRadius: '4px', font: 'inherit'
+                display: 'block',
+                width: '100%',
+                textAlign: 'left',
+                padding: '6px 8px',
+                border: 'none',
+                background: 'none',
+                cursor: 'pointer',
+                borderRadius: '4px',
+                font: 'inherit',
             });
-            item.addEventListener('mouseenter', function () { item.style.background = 'rgba(0,0,0,0.05)'; });
-            item.addEventListener('mouseleave', function () { item.style.background = 'none'; });
+            item.addEventListener('mouseenter', function () {
+                item.style.background = 'rgba(0,0,0,0.05)';
+            });
+            item.addEventListener('mouseleave', function () {
+                item.style.background = 'none';
+            });
             item.addEventListener('click', onClick);
             menu.appendChild(item);
         }
@@ -1910,7 +2197,11 @@ function link(scope, element, attrs, controller) {
          * @param {string} sysId  Only applied when this page is the widget's own instance.
          */
         function renderPortalMenu(x, y, page, portals, table, sysId) {
-            const menu = createShell(x, y, page ? ('Open "' + page.title + '" in…') : 'Could not resolve the page for this widget.');
+            const menu = createShell(
+                x,
+                y,
+                page ? 'Open "' + page.title + '" in…' : 'Could not resolve the page for this widget.'
+            );
 
             if (!page) return;
 
@@ -1937,7 +2228,8 @@ function link(scope, element, attrs, controller) {
                     // Only the right-clicked instance's widget was rendered, so only its table/sysId are known.
                     const isCurrent = inst.instanceSysId === currentInstanceSysId;
                     renderPortalMenu(
-                        x, y,
+                        x,
+                        y,
                         { id: inst.pageId, title: inst.pageTitle },
                         portals,
                         isCurrent ? table : null,
@@ -1959,12 +2251,20 @@ function link(scope, element, attrs, controller) {
                 return;
             }
             scope.$applyAsync(function () {
-                scope.server.get({ action: 'getOpenPageOptions', widgetSysId: widgetSysId }).then(function (response) {
-                    // server.get() resolves with the whole widget payload (template, css, data, …),
-                    // not just the server script's "data" object, and doesn't merge into scope.data.
-                    const result = (response && response.data && response.data.openPageOptions) || {};
-                    callback({ instances: result.instances || [], portals: result.portals || [] });
-                });
+                scope.server
+                    .get({
+                        action: 'getOpenPageOptions',
+                        widgetSysId: widgetSysId,
+                    })
+                    .then(function (response) {
+                        // server.get() resolves with the whole widget payload (template, css, data, …),
+                        // not just the server script's "data" object, and doesn't merge into scope.data.
+                        const result = (response && response.data && response.data.openPageOptions) || {};
+                        callback({
+                            instances: result.instances || [],
+                            portals: result.portals || [],
+                        });
+                    });
             });
         }
 
@@ -2032,8 +2332,7 @@ function link(scope, element, attrs, controller) {
         }
 
         return { open, openPage };
-    }());
-
+    })();
 
     ///////////////////////////////////////////
     // 12. CustomMenu — fully custom-built context menu
@@ -2043,11 +2342,26 @@ function link(scope, element, attrs, controller) {
         // Native SP action items we forward clicks into rather than reimplement.
         const NATIVE_ITEM_MATCHERS = [
             { id: 'instanceOptions', match: (t) => t === 'Instance Options' },
-            { id: 'instanceInPageEditor', match: (t) => t.startsWith('Instance in Page Editor') },
-            { id: 'pageInDesigner', match: (t) => t.startsWith('Page in Designer') },
-            { id: 'showWidgetCustomizations', match: (t) => t === 'Show Widget Customizations' || t === 'Hide Widget Customizations' },
-            { id: 'widgetOptionsSchema', match: (t) => t === 'Widget Options Schema' },
-            { id: 'editContainerBackground', match: (t) => t === 'Edit Container Background' }
+            {
+                id: 'instanceInPageEditor',
+                match: (t) => t.startsWith('Instance in Page Editor'),
+            },
+            {
+                id: 'pageInDesigner',
+                match: (t) => t.startsWith('Page in Designer'),
+            },
+            {
+                id: 'showWidgetCustomizations',
+                match: (t) => t === 'Show Widget Customizations' || t === 'Hide Widget Customizations',
+            },
+            {
+                id: 'widgetOptionsSchema',
+                match: (t) => t === 'Widget Options Schema',
+            },
+            {
+                id: 'editContainerBackground',
+                match: (t) => t === 'Edit Container Background',
+            },
         ];
 
         let _shell = null;
@@ -2089,9 +2403,10 @@ function link(scope, element, attrs, controller) {
                 NATIVE_ITEM_MATCHERS.forEach((def) => {
                     if (def.match(text)) {
                         found[def.id] = {
-                            a: a, label: text,
+                            a: a,
+                            label: text,
                             disabled: li.classList.contains('disabled'),
-                            isLink: !!href && href !== '#' && href !== 'javascript:void(0)'
+                            isLink: !!href && href !== '#' && href !== 'javascript:void(0)',
                         };
                     }
                 });
@@ -2118,8 +2433,10 @@ function link(scope, element, attrs, controller) {
                 _lastIcon = null;
             }
 
-            const badgeHtml = opts.badge ? ('<span class="badge we-row-badge">' + opts.badge + '</span>') : '';
-            const linkIconHtml = opts.isLink ? '<i class="icon-open-document-new-tab we-submenu-arrow" aria-hidden="true"></i>' : '';
+            const badgeHtml = opts.badge ? '<span class="badge we-row-badge">' + opts.badge + '</span>' : '';
+            const linkIconHtml = opts.isLink
+                ? '<i class="icon-open-document-new-tab we-submenu-arrow" aria-hidden="true"></i>'
+                : '';
             const labelHtml = '<span class="we-row-label">' + (opts.html || opts.label || '') + '</span>';
             const contentHtml = iconHtml + labelHtml + badgeHtml + linkIconHtml;
             if (opts.href) {
@@ -2132,7 +2449,11 @@ function link(scope, element, attrs, controller) {
                 a.innerHTML = contentHtml;
                 a.addEventListener('click', (e) => {
                     e.preventDefault();
-                    try { opts.onClick && opts.onClick(e); } finally { close(); }
+                    try {
+                        opts.onClick && opts.onClick(e);
+                    } finally {
+                        close();
+                    }
                 });
             }
             li.appendChild(a);
@@ -2145,7 +2466,7 @@ function link(scope, element, attrs, controller) {
             const li = document.createElement('li');
             li.setAttribute('role', 'presentation');
             li.className = 'dropdown-header we-section-header';
-            const iconHtml = iconCls ? ('<i class="' + iconCls + ' we-row-icon"></i>') : '';
+            const iconHtml = iconCls ? '<i class="' + iconCls + ' we-row-icon"></i>' : '';
             li.innerHTML = iconHtml + '<span class="we-row-label">' + Utils.escapeHtml(titleText) + '</span>';
             list.appendChild(li);
             return li;
@@ -2197,17 +2518,27 @@ function link(scope, element, attrs, controller) {
                 let colorClass = 'we-timing-bars--green';
                 if (maxMs > 1000) colorClass = 'we-timing-bars--red';
                 else if (maxMs >= 500) colorClass = 'we-timing-bars--orange';
-                const fmt = (v) => isNaN(v) ? 'n/a' : Math.round(v) + 'ms';
-                const tooltip = 'Server round-trip: ' + fmt(serverMs) +
-                    '\nScript execution: ' + fmt(scriptMs) +
-                    '\nClient render: ' + fmt(clientMs);
-                return '<span class="we-timing-bars ' + colorClass + '" data-we-tooltip="' + Utils.escapeHtml(tooltip) + '">' +
+                const fmt = (v) => (isNaN(v) ? 'n/a' : Math.round(v) + 'ms');
+                const tooltip =
+                    'Server round-trip: ' +
+                    fmt(serverMs) +
+                    '\nScript execution: ' +
+                    fmt(scriptMs) +
+                    '\nClient render: ' +
+                    fmt(clientMs);
+                return (
+                    '<span class="we-timing-bars ' +
+                    colorClass +
+                    '" data-we-tooltip="' +
+                    Utils.escapeHtml(tooltip) +
+                    '">' +
                     '<svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
                     '<rect class="we-tb-bar we-tb-bar-1" x="1" y="8" width="2.5" height="4.5" rx="0.75" />' +
                     '<rect class="we-tb-bar we-tb-bar-2" x="5.25" y="4.5" width="2.5" height="8" rx="0.75" />' +
                     '<rect class="we-tb-bar we-tb-bar-3" x="9.5" y="1" width="2.5" height="11.5" rx="0.75" />' +
                     '</svg>' +
-                    '</span>';
+                    '</span>'
+                );
             }
 
             const PANEL_WIDTH = 285;
@@ -2240,7 +2571,7 @@ function link(scope, element, attrs, controller) {
                 if (top < 4) {
                     top = targetRect.bottom + 8;
                 }
-                let left = targetRect.left + (targetRect.width / 2) - (tipRect.width / 2);
+                let left = targetRect.left + targetRect.width / 2 - tipRect.width / 2;
                 left = Math.max(4, Math.min(left, window.innerWidth - tipRect.width - 4));
                 tooltipEl.style.top = top + 'px';
                 tooltipEl.style.left = left + 'px';
@@ -2289,7 +2620,10 @@ function link(scope, element, attrs, controller) {
                 backA.setAttribute('tabindex', '-1');
                 backA.className = 'we-back-row';
                 backA.href = 'javascript:void(0)';
-                backA.innerHTML = '<span class="we-back-left"><i class="icon-chevron-left we-back-arrow" aria-hidden="true"></i> Back</span><span class="we-back-title">' + Utils.escapeHtml(titleText) + '</span>';
+                backA.innerHTML =
+                    '<span class="we-back-left"><i class="icon-chevron-left we-back-arrow" aria-hidden="true"></i> Back</span><span class="we-back-title">' +
+                    Utils.escapeHtml(titleText) +
+                    '</span>';
                 backA.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -2301,11 +2635,15 @@ function link(scope, element, attrs, controller) {
                 buildItems(subList);
 
                 track.appendChild(subPanel);
-                track.style.width = (PANEL_WIDTH * (nextLevel + 1)) + 'px';
-                navStack.push({ panel: subPanel, list: subList, title: titleText });
+                track.style.width = PANEL_WIDTH * (nextLevel + 1) + 'px';
+                navStack.push({
+                    panel: subPanel,
+                    list: subList,
+                    title: titleText,
+                });
 
                 updateContainerHeight(subPanel);
-                track.style.transform = 'translateX(-' + (nextLevel * PANEL_WIDTH) + 'px)';
+                track.style.transform = 'translateX(-' + nextLevel * PANEL_WIDTH + 'px)';
             }
 
             function navigateBack() {
@@ -2315,13 +2653,13 @@ function link(scope, element, attrs, controller) {
                 const currentLevel = navStack.length - 1;
 
                 updateContainerHeight(current.panel);
-                track.style.transform = 'translateX(-' + (currentLevel * PANEL_WIDTH) + 'px)';
+                track.style.transform = 'translateX(-' + currentLevel * PANEL_WIDTH + 'px)';
 
                 setTimeout(() => {
                     if (popped.panel && popped.panel.parentNode) {
                         popped.panel.parentNode.removeChild(popped.panel);
                     }
-                    track.style.width = (PANEL_WIDTH * navStack.length) + 'px';
+                    track.style.width = PANEL_WIDTH * navStack.length + 'px';
                 }, 220);
             }
 
@@ -2343,7 +2681,11 @@ function link(scope, element, attrs, controller) {
                     _lastIcon = null;
                 }
 
-                a.innerHTML = iconHtml + '<span class="we-row-label">' + Utils.escapeHtml(labelText) + '</span><i class="icon-chevron-right we-submenu-arrow" aria-hidden="true"></i>';
+                a.innerHTML =
+                    iconHtml +
+                    '<span class="we-row-label">' +
+                    Utils.escapeHtml(labelText) +
+                    '</span><i class="icon-chevron-right we-submenu-arrow" aria-hidden="true"></i>';
                 a.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -2365,7 +2707,10 @@ function link(scope, element, attrs, controller) {
             const headerWidgetScope = headerWidgetEl ? ScopeResolver.getActualWidgetScope(headerWidgetEl) : null;
             const titleSpan = document.createElement('span');
             titleSpan.className = 'we-header-title';
-            titleSpan.innerHTML = '<span class="we-header-title-text">' + Utils.escapeHtml(headerName) + '</span>' +
+            titleSpan.innerHTML =
+                '<span class="we-header-title-text">' +
+                Utils.escapeHtml(headerName) +
+                '</span>' +
                 buildTimingIndicatorHtml(headerWidgetScope && headerWidgetScope.widget);
             titleSpan.title = headerName;
             headerLi.appendChild(titleSpan);
@@ -2376,13 +2721,19 @@ function link(scope, element, attrs, controller) {
             cogBtn.setAttribute('data-we-cog', '1');
             cogBtn.setAttribute('title', 'Debug menu preferences');
             cogBtn.innerHTML = '<i class="icon-cog" aria-hidden="true"></i>';
-            cogBtn.addEventListener('mouseenter', () => { cogBtn.querySelector('i').className = 'icon-cog-selected'; });
-            cogBtn.addEventListener('mouseleave', () => { cogBtn.querySelector('i').className = 'icon-cog'; });
+            cogBtn.addEventListener('mouseenter', () => {
+                cogBtn.querySelector('i').className = 'icon-cog-selected';
+            });
+            cogBtn.addEventListener('mouseleave', () => {
+                cogBtn.querySelector('i').className = 'icon-cog';
+            });
             cogBtn.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 close();
-                scope.$applyAsync(function () { controller.openPreferences(); });
+                scope.$applyAsync(function () {
+                    controller.openPreferences();
+                });
             });
             headerLi.appendChild(cogBtn);
             mainList.appendChild(headerLi);
@@ -2390,44 +2741,92 @@ function link(scope, element, attrs, controller) {
             // Reusable helper for Primary Editor Button + "Open with…" Submenu
             function addOpenWithRows(targetList, targetSysId, preferredEditorId, widgetName) {
                 const openWithDefs = [
-                    { id: 'openWithEditorPlus', label: 'Open in Widget Editor+', href: UrlHelpers.getEditorPlusUrl(targetSysId), icon: 'icon-document-code' },
-                    { id: 'openWithEditorSP', label: 'Open in Widget Editor', href: UrlHelpers.getSPEditorUrl(targetSysId), icon: 'icon-brand-now' },
-                    { id: 'openWithFormModal', label: 'Open in Form Modal', href: null, icon: 'icon-new-window' },
-                    { id: 'openWithPlatform', label: 'Open in Platform', href: UrlHelpers.getEditorPlatformUrl(targetSysId), icon: 'icon-form' }
+                    {
+                        id: 'openWithEditorPlus',
+                        label: 'Open in Widget Editor+',
+                        href: UrlHelpers.getEditorPlusUrl(targetSysId),
+                        icon: 'icon-document-code',
+                    },
+                    {
+                        id: 'openWithEditorSP',
+                        label: 'Open in Widget Editor',
+                        href: UrlHelpers.getSPEditorUrl(targetSysId),
+                        icon: 'icon-brand-now',
+                    },
+                    {
+                        id: 'openWithFormModal',
+                        label: 'Open in Form Modal',
+                        href: null,
+                        icon: 'icon-new-window',
+                    },
+                    {
+                        id: 'openWithPlatform',
+                        label: 'Open in Platform',
+                        href: UrlHelpers.getEditorPlatformUrl(targetSysId),
+                        icon: 'icon-form',
+                    },
                 ];
-                const defaultId = openWithDefs.some((d) => d.id === preferredEditorId) ? preferredEditorId : 'openWithEditorPlus';
+                const defaultId = openWithDefs.some((d) => d.id === preferredEditorId)
+                    ? preferredEditorId
+                    : 'openWithEditorPlus';
                 const defaultDef = openWithDefs.find((d) => d.id === defaultId);
 
                 if (defaultDef.href) {
-                    addRow(targetList, { label: defaultDef.label, href: defaultDef.href, icon: defaultDef.icon, iconPrimary: true });
+                    addRow(targetList, {
+                        label: defaultDef.label,
+                        href: defaultDef.href,
+                        icon: defaultDef.icon,
+                        iconPrimary: true,
+                    });
                 } else {
-                    addRow(targetList, { label: defaultDef.label, icon: defaultDef.icon, iconPrimary: true, onClick: () => OverlayManager.openWidgetFormModal(targetSysId) });
+                    addRow(targetList, {
+                        label: defaultDef.label,
+                        icon: defaultDef.icon,
+                        iconPrimary: true,
+                        onClick: () => OverlayManager.openWidgetFormModal(targetSysId),
+                    });
                 }
 
                 const submenuHeaderTitle = widgetName || 'Open with\u2026';
-                addSubmenu(targetList, 'Open with\u2026', submenuHeaderTitle, (subUl) => {
-                    openWithDefs.forEach((def) => {
-                        const iconPrimary = def.id === defaultId;
-                        if (def.href) {
-                            addRow(subUl, { label: def.label, href: def.href, icon: def.icon, iconPrimary: iconPrimary });
-                        } else {
-                            addRow(subUl, { label: def.label, icon: def.icon, iconPrimary: iconPrimary, onClick: () => OverlayManager.openWidgetFormModal(targetSysId) });
-                        }
-                    });
-                    addDivider(subUl);
-                    if (controller.data && controller.data.showAssistantButton) {
-                        addRow(subUl, {
-                            label: 'Widget Editor+ Assistant',
-                            icon: 'icon-ai-sparkle-fill',
-                            href: UrlHelpers.getAssistantUrl(targetSysId)
+                addSubmenu(
+                    targetList,
+                    'Open with\u2026',
+                    submenuHeaderTitle,
+                    (subUl) => {
+                        openWithDefs.forEach((def) => {
+                            const iconPrimary = def.id === defaultId;
+                            if (def.href) {
+                                addRow(subUl, {
+                                    label: def.label,
+                                    href: def.href,
+                                    icon: def.icon,
+                                    iconPrimary: iconPrimary,
+                                });
+                            } else {
+                                addRow(subUl, {
+                                    label: def.label,
+                                    icon: def.icon,
+                                    iconPrimary: iconPrimary,
+                                    onClick: () => OverlayManager.openWidgetFormModal(targetSysId),
+                                });
+                            }
                         });
-                    }
-                    addRow(subUl, {
-                        label: 'Compare+',
-                        icon: 'icon-replace-all',
-                        href: UrlHelpers.getCompareUrl(targetSysId)
-                    });
-                }, 'icon-open-document-new-tab');
+                        addDivider(subUl);
+                        if (controller.data && controller.data.showAssistantButton) {
+                            addRow(subUl, {
+                                label: 'Widget Editor+ Assistant',
+                                icon: 'icon-ai-sparkle-fill',
+                                href: UrlHelpers.getAssistantUrl(targetSysId),
+                            });
+                        }
+                        addRow(subUl, {
+                            label: 'Compare+',
+                            icon: 'icon-replace-all',
+                            href: UrlHelpers.getCompareUrl(targetSysId),
+                        });
+                    },
+                    'icon-open-document-new-tab'
+                );
             }
 
             addOpenWithRows(mainList, widgetSysId, prefs.defaultEditor, headerName);
@@ -2453,11 +2852,16 @@ function link(scope, element, attrs, controller) {
                 ['instanceOptions', 'Instance Options'],
                 ['instanceInPageEditor', 'Instance in Page Editor'],
                 ['pageInDesigner', 'Page in Designer'],
-                ['editContainerBackground', 'Edit Container Background']
+                ['editContainerBackground', 'Edit Container Background'],
             ].forEach(([prefId, fallbackLabel]) => {
                 const item = native[prefId];
                 if (item && !item.disabled) {
-                    pageItems.push({ label: item.label || fallbackLabel, isLink: item.isLink, icon: 'icon-layout', onClick: forwardToNative(item) });
+                    pageItems.push({
+                        label: item.label || fallbackLabel,
+                        isLink: item.isLink,
+                        icon: 'icon-layout',
+                        onClick: forwardToNative(item),
+                    });
                 }
             });
             if (menuContext.instanceSysId) {
@@ -2465,46 +2869,70 @@ function link(scope, element, attrs, controller) {
                     label: 'Open portal',
                     icon: 'icon-panel-display-popout',
                     onClick: () => {
-                        PortalPicker.open(widgetSysId, menuContext.instanceSysId, recordTable, recordSysId, menuContext.cursorX, menuContext.cursorY);
-                    }
+                        PortalPicker.open(
+                            widgetSysId,
+                            menuContext.instanceSysId,
+                            recordTable,
+                            recordSysId,
+                            menuContext.cursorX,
+                            menuContext.cursorY
+                        );
+                    },
                 });
                 pageItems.push({
                     label: 'Open page',
                     icon: 'icon-document',
                     onClick: () => {
                         PortalPicker.openPage(widgetSysId, menuContext.cursorX, menuContext.cursorY);
-                    }
+                    },
                 });
             }
             if (pageItems.length) {
-                addSubmenu(mainList, 'Page & Instance', 'Page & Instance', (subUl) => { pageItems.forEach((opts) => addRow(subUl, opts)); }, 'icon-layout');
+                addSubmenu(
+                    mainList,
+                    'Page & Instance',
+                    'Page & Instance',
+                    (subUl) => {
+                        pageItems.forEach((opts) => addRow(subUl, opts));
+                    },
+                    'icon-layout'
+                );
             }
 
             // Widget Submenu (includes toggle items)
             const widgetItems = [];
             [
                 ['showWidgetCustomizations', 'Show Widget Customizations'],
-                ['widgetOptionsSchema', 'Widget Options Schema']
+                ['widgetOptionsSchema', 'Widget Options Schema'],
             ].forEach(([prefId, fallbackLabel]) => {
                 const item = native[prefId];
                 if (item && !item.disabled) {
-                    widgetItems.push({ label: item.label || fallbackLabel, isLink: item.isLink, icon: 'icon-form', onClick: forwardToNative(item) });
+                    widgetItems.push({
+                        label: item.label || fallbackLabel,
+                        isLink: item.isLink,
+                        icon: 'icon-form',
+                        onClick: forwardToNative(item),
+                    });
                 }
             });
             const toggleItems = [
                 {
-                    label: document.querySelector('.scope-context-menu-button, .scope-context-menu') ? 'Hide scope buttons' : 'Show scope buttons',
+                    label: document.querySelector('.scope-context-menu-button, .scope-context-menu')
+                        ? 'Hide scope buttons'
+                        : 'Show scope buttons',
                     icon: 'icon-workflow',
                     fn: function (_s, _e) {
                         const existing = document.querySelectorAll('.scope-context-menu-button, .scope-context-menu');
                         if (existing.length > 0) {
                             localStorage.setItem(SHOW_SCOPE_MENUS_KEY, 'false');
-                            existing.forEach((el) => { el.remove(); });
+                            existing.forEach((el) => {
+                                el.remove();
+                            });
                         } else {
                             ScopeButtons.show();
                             localStorage.setItem(SHOW_SCOPE_MENUS_KEY, 'true');
                         }
-                    }
+                    },
                 },
                 {
                     label: LoadTimeTracker.isActive() ? 'Hide load times' : 'Show load times',
@@ -2515,26 +2943,40 @@ function link(scope, element, attrs, controller) {
                         } else {
                             LoadTimeTracker.activate();
                         }
-                    }
-                }
+                    },
+                },
             ];
             if (widgetItems.length || toggleItems.length) {
-                addSubmenu(mainList, 'Widget options', 'Widget options', (subUl) => {
-                    widgetItems.forEach((opts) => addRow(subUl, opts));
-                    if (widgetItems.length && toggleItems.length) {
-                        addDivider(subUl);
-                    }
-                    toggleItems.forEach((item) => {
-                        addRow(subUl, { label: item.label, icon: item.icon, onClick: () => item.fn(null, menuContext.event) });
-                    });
-                }, 'icon-application-generic');
+                addSubmenu(
+                    mainList,
+                    'Widget options',
+                    'Widget options',
+                    (subUl) => {
+                        widgetItems.forEach((opts) => addRow(subUl, opts));
+                        if (widgetItems.length && toggleItems.length) {
+                            addDivider(subUl);
+                        }
+                        toggleItems.forEach((item) => {
+                            addRow(subUl, {
+                                label: item.label,
+                                icon: item.icon,
+                                onClick: () => item.fn(null, menuContext.event),
+                            });
+                        });
+                    },
+                    'icon-application-generic'
+                );
             }
 
             if (recordTable && recordSysId) {
                 addRow(mainList, {
                     label: 'Open <code>' + Utils.escapeHtml(recordTable) + '</code> record',
                     icon: 'icon-form',
-                    href: '/nav_to.do?uri=' + encodeURIComponent(recordTable) + '.do%3Fsys_id=' + encodeURIComponent(recordSysId)
+                    href:
+                        '/nav_to.do?uri=' +
+                        encodeURIComponent(recordTable) +
+                        '.do%3Fsys_id=' +
+                        encodeURIComponent(recordSysId),
                 });
             }
 
@@ -2543,27 +2985,35 @@ function link(scope, element, attrs, controller) {
             // Diagnostics Section (no row icons)
             addSectionHeader(mainList, 'Diagnostics', 'icon-code');
 
-            const targetWidgetEl = menuContext.widgetEl || (menuContext.embeddedWidgets.length > 0 ? menuContext.embeddedWidgets[0].el : null);
+            const targetWidgetEl =
+                menuContext.widgetEl ||
+                (menuContext.embeddedWidgets.length > 0 ? menuContext.embeddedWidgets[0].el : null);
             const logVerb = prefs.assignConsoleVars !== false ? 'Add to console: ' : 'Log to console: ';
             if (targetWidgetEl) {
                 addRow(mainList, {
                     label: 'Log to console: <code>$scope.data</code>',
                     onClick: () => {
                         const s = ScopeResolver.getActualWidgetScope(targetWidgetEl);
-                        const wName = (menuContext.embeddedWidgets.length > 0 && menuContext.embeddedWidgets[0].name) || (s && s.widget && s.widget.name) || '';
+                        const wName =
+                            (menuContext.embeddedWidgets.length > 0 && menuContext.embeddedWidgets[0].name) ||
+                            (s && s.widget && s.widget.name) ||
+                            '';
                         const label = wName ? '$scope.data (' + wName + ')' : '$scope.data';
                         console.log('%c' + label + '\n', 'color: #0891b2; font-weight: bold;', s && s.data);
-                    }
+                    },
                 });
                 addRow(mainList, {
                     label: logVerb + '<code>$scope</code>',
                     onClick: () => {
                         const s = ScopeResolver.getActualWidgetScope(targetWidgetEl);
-                        const wName = (menuContext.embeddedWidgets.length > 0 && menuContext.embeddedWidgets[0].name) || (s && s.widget && s.widget.name) || '';
+                        const wName =
+                            (menuContext.embeddedWidgets.length > 0 && menuContext.embeddedWidgets[0].name) ||
+                            (s && s.widget && s.widget.name) ||
+                            '';
                         const label = wName ? '$scope (' + wName + ')' : '$scope';
                         console.log('%c' + label + '\n', 'color: #0891b2; font-weight: bold;', s);
                         if (prefs.assignConsoleVars !== false) Utils.assignConsoleVar('$scope', s);
-                    }
+                    },
                 });
             }
             addRow(mainList, {
@@ -2572,7 +3022,7 @@ function link(scope, element, attrs, controller) {
                     const rootScope = angular.element(document.body).scope();
                     console.log('%c$rootScope\n', 'color: #0891b2; font-weight: bold;', rootScope);
                     if (prefs.assignConsoleVars !== false) Utils.assignConsoleVar('$rootScope', rootScope);
-                }
+                },
             });
 
             // Embedding / Ancestor Widgets Hierarchy as Drill-Down Submenus
@@ -2583,44 +3033,66 @@ function link(scope, element, attrs, controller) {
                 embeddedWidgets.forEach((info) => {
                     const infoScope = info.scope || ScopeResolver.getActualWidgetScope(info.el);
                     const infoIndicatorHtml = buildTimingIndicatorHtml(infoScope && infoScope.widget);
-                    addSubmenu(mainList, info.name, info.name, (parentSubList) => {
-                        const embEditor = prefs.defaultEditor || 'openWithEditorPlus';
+                    addSubmenu(
+                        mainList,
+                        info.name,
+                        info.name,
+                        (parentSubList) => {
+                            const embEditor = prefs.defaultEditor || 'openWithEditorPlus';
 
-                        // 1. Open in default editor & Open with… for the parent widget
-                        addOpenWithRows(parentSubList, info.sysId, embEditor, info.name);
+                            // 1. Open in default editor & Open with… for the parent widget
+                            addOpenWithRows(parentSubList, info.sysId, embEditor, info.name);
 
-                        // 2. Diagnostics for the parent widget (no row icons)
-                        addDivider(parentSubList);
-                        addSectionHeader(parentSubList, 'Diagnostics', 'icon-code');
-                        addRow(parentSubList, {
-                            label: 'Log to console: <code>$scope.data</code>',
-                            onClick: () => {
-                                const s = info.scope || ScopeResolver.getActualWidgetScope(info.el);
-                                console.log('%c$scope.data (' + info.name + ')\n', 'color: #0891b2; font-weight: bold;', s && s.data);
-                            }
-                        });
-                        addRow(parentSubList, {
-                            label: logVerb + '<code>$scope</code>',
-                            onClick: () => {
-                                const s = info.scope || ScopeResolver.getActualWidgetScope(info.el);
-                                console.log('%c$scope (' + info.name + ')\n', 'color: #0891b2; font-weight: bold;', s);
-                                if (prefs.assignConsoleVars !== false) Utils.assignConsoleVar('$scope', s);
-                            }
-                        });
-
-                        // 3. Parent instance options / open page (if available)
-                        const parentInstSysId = ScopeResolver.getInstanceSysId(info.el);
-                        if (parentInstSysId) {
+                            // 2. Diagnostics for the parent widget (no row icons)
                             addDivider(parentSubList);
+                            addSectionHeader(parentSubList, 'Diagnostics', 'icon-code');
                             addRow(parentSubList, {
-                                label: 'Open page\u2026',
-                                icon: 'icon-layout',
+                                label: 'Log to console: <code>$scope.data</code>',
                                 onClick: () => {
-                                    PortalPicker.open(info.sysId, parentInstSysId, recordTable, recordSysId, menuContext.cursorX, menuContext.cursorY);
-                                }
+                                    const s = info.scope || ScopeResolver.getActualWidgetScope(info.el);
+                                    console.log(
+                                        '%c$scope.data (' + info.name + ')\n',
+                                        'color: #0891b2; font-weight: bold;',
+                                        s && s.data
+                                    );
+                                },
                             });
-                        }
-                    }, undefined, infoIndicatorHtml);
+                            addRow(parentSubList, {
+                                label: logVerb + '<code>$scope</code>',
+                                onClick: () => {
+                                    const s = info.scope || ScopeResolver.getActualWidgetScope(info.el);
+                                    console.log(
+                                        '%c$scope (' + info.name + ')\n',
+                                        'color: #0891b2; font-weight: bold;',
+                                        s
+                                    );
+                                    if (prefs.assignConsoleVars !== false) Utils.assignConsoleVar('$scope', s);
+                                },
+                            });
+
+                            // 3. Parent instance options / open page (if available)
+                            const parentInstSysId = ScopeResolver.getInstanceSysId(info.el);
+                            if (parentInstSysId) {
+                                addDivider(parentSubList);
+                                addRow(parentSubList, {
+                                    label: 'Open page\u2026',
+                                    icon: 'icon-layout',
+                                    onClick: () => {
+                                        PortalPicker.open(
+                                            info.sysId,
+                                            parentInstSysId,
+                                            recordTable,
+                                            recordSysId,
+                                            menuContext.cursorX,
+                                            menuContext.cursorY
+                                        );
+                                    },
+                                });
+                            }
+                        },
+                        undefined,
+                        infoIndicatorHtml
+                    );
                 });
             }
 
@@ -2630,13 +3102,22 @@ function link(scope, element, attrs, controller) {
                     const wScope = ScopeResolver.getActualWidgetScope(menuContext.widgetEl);
                     let items = null;
                     let callbackScope = wScope;
-                    if (wScope && wScope.widget && Array.isArray(wScope.widget._weWidgetItems) && wScope.widget._weWidgetItems.length) {
+                    if (
+                        wScope &&
+                        wScope.widget &&
+                        Array.isArray(wScope.widget._weWidgetItems) &&
+                        wScope.widget._weWidgetItems.length
+                    ) {
                         items = wScope.widget._weWidgetItems;
                     } else if (wScope) {
                         let ps = wScope.$parent;
                         while (ps) {
-                            if (ps.widget && ps.widget._customEnhancement &&
-                                Array.isArray(ps.widget._weWidgetItems) && ps.widget._weWidgetItems.length) {
+                            if (
+                                ps.widget &&
+                                ps.widget._customEnhancement &&
+                                Array.isArray(ps.widget._weWidgetItems) &&
+                                ps.widget._weWidgetItems.length
+                            ) {
                                 items = ps.widget._weWidgetItems;
                                 callbackScope = ps;
                                 break;
@@ -2652,12 +3133,16 @@ function link(scope, element, attrs, controller) {
                             } else {
                                 addRow(mainList, {
                                     label: item[0],
-                                    onClick: () => { try { item[1](callbackScope, menuContext.event); } catch (_ex) { } }
+                                    onClick: () => {
+                                        try {
+                                            item[1](callbackScope, menuContext.event);
+                                        } catch (_ex) {}
+                                    },
                                 });
                             }
                         });
                     }
-                } catch (_e) { }
+                } catch (_e) {}
             }
 
             const activeDialog = document.querySelector('dialog[open]');
@@ -2673,15 +3158,21 @@ function link(scope, element, attrs, controller) {
                 if (!navStack.length) return [];
                 const active = navStack[navStack.length - 1];
                 if (!active || !active.panel) return [];
-                return Array.from(active.panel.querySelectorAll('a:not([aria-disabled="true"]), button:not([disabled])'));
+                return Array.from(
+                    active.panel.querySelectorAll('a:not([aria-disabled="true"]), button:not([disabled])')
+                );
             }
 
             function focusItem(el) {
                 if (!el) return;
-                try { el.focus(); } catch (_e) { }
+                try {
+                    el.focus();
+                } catch (_e) {}
             }
 
-            _closeOnOutsideClick = (e) => { if (!shell.contains(e.target)) close(); };
+            _closeOnOutsideClick = (e) => {
+                if (!shell.contains(e.target)) close();
+            };
             _closeOnEscape = (e) => {
                 const items = getActiveActionableItems();
                 const currentIdx = items.indexOf(document.activeElement);
@@ -2692,12 +3183,12 @@ function link(scope, element, attrs, controller) {
                 } else if (e.key === 'ArrowDown') {
                     e.preventDefault();
                     if (!items.length) return;
-                    const nextIdx = currentIdx >= 0 ? ((currentIdx + 1) % items.length) : 0;
+                    const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % items.length : 0;
                     focusItem(items[nextIdx]);
                 } else if (e.key === 'ArrowUp') {
                     e.preventDefault();
                     if (!items.length) return;
-                    const prevIdx = currentIdx >= 0 ? ((currentIdx - 1 + items.length) % items.length) : (items.length - 1);
+                    const prevIdx = currentIdx >= 0 ? (currentIdx - 1 + items.length) % items.length : items.length - 1;
                     focusItem(items[prevIdx]);
                 } else if (e.key === 'Home') {
                     e.preventDefault();
@@ -2737,7 +3228,8 @@ function link(scope, element, attrs, controller) {
                 const maxAvailableH = Math.max(120, window.innerHeight - topPos - pad);
 
                 const list = activePanel.querySelector('.we-menu-list');
-                const naturalH = (list ? list.offsetHeight : activePanel.scrollHeight) || activePanel.scrollHeight || 300;
+                const naturalH =
+                    (list ? list.offsetHeight : activePanel.scrollHeight) || activePanel.scrollHeight || 300;
 
                 if (naturalH + 2 <= maxAvailableH) {
                     const targetH = naturalH + 2;
@@ -2747,7 +3239,7 @@ function link(scope, element, attrs, controller) {
                 } else {
                     container.style.height = maxAvailableH + 'px';
                     activePanel.style.overflowY = 'auto';
-                    activePanel.style.maxHeight = (maxAvailableH - 2) + 'px';
+                    activePanel.style.maxHeight = maxAvailableH - 2 + 'px';
                 }
             }
 
@@ -2794,8 +3286,7 @@ function link(scope, element, attrs, controller) {
         }
 
         return { open, close };
-    }());
-
+    })();
 
     ///////////////////////////////////////////
     // 13. Widget load observer — wires the debug menu into newly-added widgets
@@ -2819,8 +3310,10 @@ function link(scope, element, attrs, controller) {
                                     try {
                                         const v = s.widget._debugContextMenu;
                                         return Array.isArray(v) ? v.slice() : [];
-                                    } catch (_) { return []; }
-                                }());
+                                    } catch (_) {
+                                        return [];
+                                    }
+                                })();
 
                                 // Proxy routes mutators to _widgetItems so assign-empty-then-push patterns persist.
                                 const _MUTATOR_FNS = {
@@ -2828,7 +3321,7 @@ function link(scope, element, attrs, controller) {
                                     unshift: Array.prototype.unshift.bind(_widgetItems),
                                     splice: Array.prototype.splice.bind(_widgetItems),
                                     pop: Array.prototype.pop.bind(_widgetItems),
-                                    shift: Array.prototype.shift.bind(_widgetItems)
+                                    shift: Array.prototype.shift.bind(_widgetItems),
                                 };
                                 // Some widgets push onto an ancestor's _debugContextMenu rather than their own, so if ours is empty, walk up the scope chain for an enhanced ancestor's items.
                                 function _getMergedItems() {
@@ -2837,9 +3330,12 @@ function link(scope, element, attrs, controller) {
                                     if (!widgetSpecific.length) {
                                         let ps = s.$parent;
                                         while (ps) {
-                                            if (ps.widget && ps.widget._customEnhancement &&
+                                            if (
+                                                ps.widget &&
+                                                ps.widget._customEnhancement &&
                                                 Array.isArray(ps.widget._weWidgetItems) &&
-                                                ps.widget._weWidgetItems.length) {
+                                                ps.widget._weWidgetItems.length
+                                            ) {
                                                 widgetSpecific = ps.widget._weWidgetItems;
                                                 break;
                                             }
@@ -2864,12 +3360,14 @@ function link(scope, element, attrs, controller) {
                                     has: function (_target, prop) {
                                         if (Object.prototype.hasOwnProperty.call(_MUTATOR_FNS, prop)) return true;
                                         return prop in _getMergedItems();
-                                    }
+                                    },
                                 });
 
                                 try {
                                     Object.defineProperty(s.widget, '_debugContextMenu', {
-                                        get: function () { return _proxyView; },
+                                        get: function () {
+                                            return _proxyView;
+                                        },
                                         set: function (value) {
                                             _widgetItems.length = 0;
                                             if (Array.isArray(value)) {
@@ -2879,7 +3377,7 @@ function link(scope, element, attrs, controller) {
                                             }
                                         },
                                         enumerable: true,
-                                        configurable: true
+                                        configurable: true,
                                     });
                                     /* Expose _widgetItems so child widget proxies can read parent items. */
                                     s.widget._weWidgetItems = _widgetItems;
@@ -2887,8 +3385,10 @@ function link(scope, element, attrs, controller) {
                                     s.widget._debugContextMenu = getFilteredMenuItems();
                                 }
 
-                                if (localStorage.getItem(SHOW_SCOPE_MENUS_KEY) === 'true' &&
-                                    window.location.pathname !== '/sp_config') {
+                                if (
+                                    localStorage.getItem(SHOW_SCOPE_MENUS_KEY) === 'true' &&
+                                    window.location.pathname !== '/sp_config'
+                                ) {
                                     ScopeButtons.show(node);
                                 }
                             }
@@ -2900,46 +3400,55 @@ function link(scope, element, attrs, controller) {
         observer.observe(document, { childList: true, subtree: true });
     })();
 
-
     ///////////////////////////////////////////
     // 14. CTRL+right-click debug menu injection — event wiring
     ///////////////////////////////////////////
 
-    document.addEventListener('contextmenu', function (e) {
-        // stopPropagation isolates a right-click on an already-open menu item (e.g. "Copy Link Address") from our own teardown logic and other listeners, so only the browser's native context menu proceeds.
-        const menuItem = e.target.closest && e.target.closest('.we-custom-menu, [role="contentinfo"].dropdown ul.dropdown-menu, dialog[open] ul.dropdown-menu');
-        if (menuItem) {
-            e.stopPropagation();
-            return;
-        }
-        ContextMenuState.reset(e);
+    document.addEventListener(
+        'contextmenu',
+        function (e) {
+            // stopPropagation isolates a right-click on an already-open menu item (e.g. "Copy Link Address") from our own teardown logic and other listeners, so only the browser's native context menu proceeds.
+            const menuItem =
+                e.target.closest &&
+                e.target.closest(
+                    '.we-custom-menu, [role="contentinfo"].dropdown ul.dropdown-menu, dialog[open] ul.dropdown-menu'
+                );
+            if (menuItem) {
+                e.stopPropagation();
+                return;
+            }
+            ContextMenuState.reset(e);
 
-        if (!e.ctrlKey) {
-            return;
-        }
-        const contextMenuMode = (controller.data && controller.data.contextMenuMode) || 'enhanced';
-        if (contextMenuMode === 'off') {
-            // Suppress both the browser's native menu and SP's own debug overlay.
-            e.preventDefault();
-            e.stopPropagation();
-            return;
-        }
-        if (contextMenuMode === 'standard') {
-            // Leave Ctrl+Right-click entirely to the legacy Service Portal debug menu.
-            return;
-        }
-        // Only clean up stale overlays when SP will actually create a new one.
-        OverlayManager.removeDebugOverlays();
-        if (!ContextMenuState.captureTarget(e.target)) {
-            return;
-        }
-        e.preventDefault(); // suppress the browser's native context menu — CustomMenu replaces it entirely
-        if (!ContextMenuState.hasNativeMenuTrigger()) {
-            // Header/footer widgets lack SP's span.context, so SP never creates a debug overlay for them.
-            setTimeout(function () { CustomMenu.open(null); }, 50);
-        }
-        // Otherwise SP still builds (and reveals) its native overlay as before; bodyObserver below hides it and hands off to CustomMenu.
-    }, true);
+            if (!e.ctrlKey) {
+                return;
+            }
+            const contextMenuMode = (controller.data && controller.data.contextMenuMode) || 'enhanced';
+            if (contextMenuMode === 'off') {
+                // Suppress both the browser's native menu and SP's own debug overlay.
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+            if (contextMenuMode === 'standard') {
+                // Leave Ctrl+Right-click entirely to the legacy Service Portal debug menu.
+                return;
+            }
+            // Only clean up stale overlays when SP will actually create a new one.
+            OverlayManager.removeDebugOverlays();
+            if (!ContextMenuState.captureTarget(e.target)) {
+                return;
+            }
+            e.preventDefault(); // suppress the browser's native context menu — CustomMenu replaces it entirely
+            if (!ContextMenuState.hasNativeMenuTrigger()) {
+                // Header/footer widgets lack SP's span.context, so SP never creates a debug overlay for them.
+                setTimeout(function () {
+                    CustomMenu.open(null);
+                }, 50);
+            }
+            // Otherwise SP still builds (and reveals) its native overlay as before; bodyObserver below hides it and hands off to CustomMenu.
+        },
+        true
+    );
 
     const bodyObserver = new MutationObserver((mutations) => {
         if (((controller.data && controller.data.contextMenuMode) || 'enhanced') !== 'enhanced') {
@@ -2959,11 +3468,13 @@ function link(scope, element, attrs, controller) {
             return;
         }
         // A ghost overlay can linger if SP re-adds one via digest before our reveal=false $evalAsync runs; this keeps only the freshly-opened overlay.
-        document.querySelectorAll('body > [role="contentinfo"].dropdown, dialog[open] [role="contentinfo"].dropdown').forEach((existing) => {
-            if (!addedOverlays.includes(existing)) {
-                existing.remove();
-            }
-        });
+        document
+            .querySelectorAll('body > [role="contentinfo"].dropdown, dialog[open] [role="contentinfo"].dropdown')
+            .forEach((existing) => {
+                if (!addedOverlays.includes(existing)) {
+                    existing.remove();
+                }
+            });
         // If SP added multiple overlays in one tick, discard all but the last.
         for (let i = 0; i < addedOverlays.length - 1; i++) {
             addedOverlays[i].parentNode && addedOverlays[i].parentNode.removeChild(addedOverlays[i]);

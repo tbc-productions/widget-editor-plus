@@ -744,6 +744,27 @@ test('whole-widget save clears drafts while keeping newer and related edits dirt
     assert.equal(h.draft().entries.find(e => e.field === 'template').base, 'submitted');
 });
 
+test('whole-widget save normalises empty headers and still detects newer edits', () => {
+    for (const newerEdits of [false, true]) {
+        const h = harness();
+        Object.assign(h.$scope.widget, { id: null, description: null, controller_as: null, static: undefined, extra_text: null, extra_boolean: undefined });
+        h.$scope.additionalWidgetFields = [{ name: 'extra_text', type: 'string' }, { name: 'extra_boolean', type: 'boolean' }];
+        h.$scope.visibleItems = [];
+        h.$scope.headerDirty = {};
+        const captureStart = source.indexOf('                function _captureAdditionalHeaderValues(');
+        vm.runInContext(source.slice(captureStart, source.indexOf('                $scope.onPublicChange =', captureStart)), h.context);
+        const payloadStart = source.indexOf('                function _buildSavePayload(');
+        vm.runInContext(source.slice(payloadStart, source.indexOf('                // Guards against a stale', payloadStart)), h.context);
+        const acceptStart = source.indexOf('                function _acceptWidgetSave(');
+        vm.runInContext(source.slice(acceptStart, source.indexOf('                $scope.saveAll =', acceptStart)), h.context);
+        h.run('var payload = _buildSavePayload()');
+        if (newerEdits) Object.assign(h.$scope.widget, { description: 'Newer edit', is_public: true, extra_text: 'Newer extra', extra_boolean: true });
+        h.run('_acceptWidgetSave(payload)');
+        for (const field of ['name', 'id', 'controller_as', 'static', 'roles']) assert.equal(h.$scope.headerDirty[field], false, field);
+        for (const field of ['description', 'is_public', 'extra_text', 'extra_boolean']) assert.equal(h.$scope.headerDirty[field], newerEdits, field);
+    }
+});
+
 test('widget Save removes every draft for this widget and user, even with autosave off', () => {
     const h = harness();
     const draft = recovered(h);
@@ -1008,7 +1029,7 @@ test('draft comparison maps related fields to platform fields in the same Compar
 test('Compare+ accepts a new related record snapshot with an empty, read-only saved side', () => {
     const compareSource = fs.readFileSync('src/fluent/generated/other/sys-ui-page/widget_editor_compare.client.js', 'utf8');
     const start = compareSource.indexOf('            var _openerSnap = null;');
-    const end = compareSource.indexOf("            _pending++;\n            _ajax('getVersionsForTable'", start);
+    const end = start + compareSource.slice(start).search(/\s*_pending\+\+;\s*_ajax\('getVersionsForTable'/);
     const localStorage = storage();
     localStorage.setItem('_weDiffSnap_test', JSON.stringify({ _unsaved: true, _newRecord: true, id: 'new-template', template: '<div>Draft</div>' }));
     const context = {

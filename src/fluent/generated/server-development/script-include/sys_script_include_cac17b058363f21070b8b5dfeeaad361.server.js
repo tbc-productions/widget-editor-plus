@@ -83,9 +83,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 name: gr.getValue('name'),
                 id: gr.getValue('id'),
                 servicenow: isServiceNow,
-                deprecated: deprecatedFilter
-                    ? deprecatedFilter.match(gr, false)
-                    : false,
+                deprecated: deprecatedFilter ? deprecatedFilter.match(gr, false) : false,
                 canWrite: gr.canWrite() && !isServiceNow,
             });
         }
@@ -121,9 +119,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                     name: gr.getValue('name'),
                     id: gr.getValue('id'),
                     servicenow: isServiceNow,
-                    deprecated: deprecatedFilter
-                        ? deprecatedFilter.match(gr, false)
-                        : false,
+                    deprecated: deprecatedFilter ? deprecatedFilter.match(gr, false) : false,
                     canWrite: gr.canWrite() && !isServiceNow,
                 });
             }
@@ -196,10 +192,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         var isHeaderFooter = sysClassName === 'sp_header_footer';
 
         var sysPolicy = gr.getValue('sys_policy') || '';
-        var sysPolicyDisplay = sysPolicy
-            ? gr.getDisplayValue('sys_policy')
-            : '';
-        var isServiceNow = gr.getValue('servicenow') == '1';
+        var sysPolicyDisplay = sysPolicy ? gr.getDisplayValue('sys_policy') : '';
 
         // Oldest sys_update_version for this widget → "est. year" + founder name
         var widgetOrigin = null;
@@ -232,9 +225,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         widgetVolGr.query();
         if (widgetVolGr.next()) {
             widgetVolLevel = widgetVolGr.getValue('volatility_level') || '';
-            widgetVolDisplay = widgetVolLevel
-                ? widgetVolGr.getDisplayValue('volatility_level')
-                : '';
+            widgetVolDisplay = widgetVolLevel ? widgetVolGr.getDisplayValue('volatility_level') : '';
         }
 
         // Only flag if the update set is still in progress; follows the reverted_from chain to the version whose update set the content actually reflects.
@@ -313,12 +304,8 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             sys_class_name: sysClassName,
             is_header_footer: isHeaderFooter,
             'static': isHeaderFooter && gr.getValue('static') == '1',
-            option_schema_has_value: this._hasProperJsonObjectValue(
-                gr.getValue('option_schema')
-            ),
-            demo_data_has_value: this._hasProperJsonObjectValue(
-                gr.getValue('demo_data')
-            ),
+            option_schema_has_value: this._hasProperJsonObjectValue(gr.getValue('option_schema')),
+            demo_data_has_value: this._hasProperJsonObjectValue(gr.getValue('demo_data')),
             has_active_instances: hasActiveInstances,
         };
 
@@ -358,8 +345,6 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         }
         return this._answer({ success: true, includes: result });
     },
-
-
 
     /**
      * Returns all active syntax_editor_macro records for use as Monaco snippet completions.
@@ -548,10 +533,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             }
 
             this._setWidgetFieldValue(gr, field, value);
-            gr.setValue(
-                'sys_mod_count',
-                parseInt(gr.getValue('sys_mod_count') || '0', 10) + 1
-            );
+            gr.setValue('sys_mod_count', parseInt(gr.getValue('sys_mod_count') || '0', 10) + 1);
             if (!gr.update()) {
                 return this._answer({
                     success: false,
@@ -595,9 +577,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             });
         }
 
-        var targetRecord = this._parseCustomerUpdateTarget(
-            update.getValue('payload')
-        );
+        var targetRecord = this._parseCustomerUpdateTarget(update.getValue('payload'));
         if (!targetRecord) {
             return this._answer({
                 success: false,
@@ -606,8 +586,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         }
 
         var name = update.getValue('name');
-        var updateSet = update.getValue('update_set') ||
-            update.getValue('remote_update_set');
+        var updateSet = update.getValue('update_set') || update.getValue('remote_update_set');
         var payload = update.getValue('payload');
         var target = null;
 
@@ -694,7 +673,10 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         var updateId = this.getParameter('update_id');
         var update = new GlideRecordSecure('sys_update_xml');
         if (!updateId || !update.get(updateId)) {
-            return this._answer({ success: false, error: 'Customer update not found.' });
+            return this._answer({
+                success: false,
+                error: 'Customer update not found.',
+            });
         }
 
         var target = this._parseCustomerUpdateTarget(update.getValue('payload'));
@@ -717,7 +699,10 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         var updateId = this.getParameter('update_id');
         var update = new GlideRecordSecure('sys_update_xml');
         if (!updateId || !update.get(updateId)) {
-            return this._answer({ success: false, error: 'Customer update not found.' });
+            return this._answer({
+                success: false,
+                error: 'Customer update not found.',
+            });
         }
 
         var target = this._parseCustomerUpdateTarget(update.getValue('payload'), update.getValue('name'));
@@ -776,8 +761,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 sys_created_on: gr.getValue('sys_created_on'),
                 sys_created_by: gr.getValue('sys_created_by'),
                 update_set_name: gr.source.name.getValue(),
-                update_set_sys_id:
-                    gr.getValue('source') || gr.source.sys_id.getValue(),
+                update_set_sys_id: gr.getValue('source') || gr.source.sys_id.getValue(),
                 update_set_state: gr.source.state.getValue(),
                 update_set_state_label: gr.source.state.getDisplayValue(),
                 state: gr.getValue('state'),
@@ -820,8 +804,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             sys_created_on: gr.getValue('sys_created_on'),
             sys_created_by: gr.getValue('sys_created_by'),
             update_set_name: gr.source.name.getValue(),
-            update_set_sys_id:
-                gr.getValue('source') || gr.source.sys_id.getValue(),
+            update_set_sys_id: gr.getValue('source') || gr.source.sys_id.getValue(),
             fields: this._parseVersionPayload(gr.getValue('payload')),
         });
     },
@@ -843,10 +826,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
      */
     getDiffFieldDefs: function () {
         var table = String(this.getParameter('table') || 'sp_widget');
-        if (
-            this.DIFF_ALLOWED_TABLES.length > 0 &&
-            this.DIFF_ALLOWED_TABLES.indexOf(table) === -1
-        ) {
+        if (this.DIFF_ALLOWED_TABLES.length > 0 && this.DIFF_ALLOWED_TABLES.indexOf(table) === -1) {
             return this._answer({
                 success: false,
                 error: 'Table not allowed: ' + table,
@@ -914,8 +894,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 }
                 dictMap[dElem] = {
                     type: dictGr.getValue('internal_type') || 'string',
-                    max_length:
-                        parseInt(dictGr.getValue('max_length') || '0', 10) || 0,
+                    max_length: parseInt(dictGr.getValue('max_length') || '0', 10) || 0,
                     reference: dictGr.getValue('reference') || '',
                     choice: parseInt(dictGr.getValue('choice') || '0', 10) || 0,
                     dependent: dictGr.getValue('dependent') || '',
@@ -927,16 +906,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         var demoGr = new GlideRecordSecure(table);
         demoGr.initialize();
 
-        var CODE_TYPES = [
-            'script',
-            'script_plain',
-            'css',
-            'html',
-            'html_script',
-            'html_template',
-            'xml',
-            'json',
-        ];
+        var CODE_TYPES = ['script', 'script_plain', 'css', 'html', 'html_script', 'html_template', 'xml', 'json'];
 
         var _buildDef = function (fname, dict) {
             var fieldType = dict.type || 'string';
@@ -947,7 +917,11 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 label = demoGr[fname].getLabel() || fname;
             } catch (e) {}
             var renderAs = 'text';
-            if (fieldType === 'conditions' || fieldType === 'rebuilt_conditions' || fieldType === 'variable_conditions') {
+            if (
+                fieldType === 'conditions' ||
+                fieldType === 'rebuilt_conditions' ||
+                fieldType === 'variable_conditions'
+            ) {
                 renderAs = 'conditions';
             } else if (fieldType === 'boolean') {
                 renderAs = 'boolean';
@@ -971,11 +945,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 language = 'html';
             } else if (fieldType === 'json') {
                 language = 'json';
-            } else if (
-                fieldType === 'script' ||
-                fieldType === 'script_plain' ||
-                fieldType === 'xml'
-            ) {
+            } else if (fieldType === 'script' || fieldType === 'script_plain' || fieldType === 'xml') {
                 language = 'javascript';
             }
             return {
@@ -1056,12 +1026,12 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
      * Accepts `search` (optional substring to filter by table label or name).
      * @returns {{success: boolean, tables: Array.<{name: string, label: string}>}} Return value.
      */
-    getTablesForDiff: function() {
-        var search   = String(this.getParameter('search') || '').toLowerCase();
-        var page     = parseInt(this.getParameter('page') || '1', 10) || 1;
+    getTablesForDiff: function () {
+        var search = String(this.getParameter('search') || '').toLowerCase();
+        var page = parseInt(this.getParameter('page') || '1', 10) || 1;
         var pageSize = 50;
-        var results  = [];
-        var allowed  = this.DIFF_ALLOWED_TABLES;
+        var results = [];
+        var allowed = this.DIFF_ALLOWED_TABLES;
 
         if (allowed.length > 0) {
             for (var i = 0; i < allowed.length; i++) {
@@ -1072,10 +1042,16 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 dictGr.addQuery('attributes', 'CONTAINS', 'update_synch=true');
                 dictGr.setLimit(1);
                 dictGr.query();
-                if (!dictGr.next()) { continue; }
+                if (!dictGr.next()) {
+                    continue;
+                }
                 var labelGr = new GlideRecord('sys_db_object');
-                var label = labelGr.get('name', tableName) ? (labelGr.getDisplayValue('label') || tableName) : tableName;
-                if (!search || label.toLowerCase().indexOf(search) !== -1 || tableName.toLowerCase().indexOf(search) !== -1) {
+                var label = labelGr.get('name', tableName) ? labelGr.getDisplayValue('label') || tableName : tableName;
+                if (
+                    !search ||
+                    label.toLowerCase().indexOf(search) !== -1 ||
+                    tableName.toLowerCase().indexOf(search) !== -1
+                ) {
                     results.push({ name: tableName, label: label });
                 }
             }
@@ -1098,14 +1074,20 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             while (dbGr.next()) {
                 results.push({
                     name: dbGr.getValue('name'),
-                    label: dbGr.getDisplayValue('label') || dbGr.getValue('name')
+                    label: dbGr.getDisplayValue('label') || dbGr.getValue('name'),
                 });
             }
             var hasMore = results.length > pageSize;
-            if (hasMore) { results.pop(); }
+            if (hasMore) {
+                results.pop();
+            }
         }
 
-        return this._answer({ success: true, tables: results, has_more: hasMore });
+        return this._answer({
+            success: true,
+            tables: results,
+            has_more: hasMore,
+        });
     },
 
     /**
@@ -1120,10 +1102,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     getRecordForDiff: function () {
         var table = String(this.getParameter('table') || 'sp_widget');
         var recordId = String(this.getParameter('record_id') || '');
-        if (
-            this.DIFF_ALLOWED_TABLES.length > 0 &&
-            this.DIFF_ALLOWED_TABLES.indexOf(table) === -1
-        ) {
+        if (this.DIFF_ALLOWED_TABLES.length > 0 && this.DIFF_ALLOWED_TABLES.indexOf(table) === -1) {
             return this._answer({
                 success: false,
                 error: 'Table not allowed: ' + table,
@@ -1140,12 +1119,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         if (!gr.get(recordId)) {
             return this._answer({
                 success: false,
-                error:
-                    'Record not found or access denied (' +
-                    table +
-                    ': ' +
-                    recordId +
-                    ')',
+                error: 'Record not found or access denied (' + table + ': ' + recordId + ')',
             });
         }
 
@@ -1181,7 +1155,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             }
             try {
                 var v = gr.getValue(fName);
-                values[fName] = (v !== null && v !== undefined) ? v : null;
+                values[fName] = v !== null && v !== undefined ? v : null;
                 var fType = fdGr.getValue('internal_type');
                 var fChoice = parseInt(fdGr.getValue('choice') || '0', 10) || 0;
                 if (fType === 'reference' || fType === 'glide_list' || fChoice > 0) {
@@ -1196,9 +1170,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         }
 
         var sysPolicy = gr.getValue('sys_policy') || '';
-        var sysPolicyDisplay = sysPolicy
-            ? gr.getDisplayValue('sys_policy')
-            : '';
+        var sysPolicyDisplay = sysPolicy ? gr.getDisplayValue('sys_policy') : '';
 
         // Find latest update set via sys_update_xml
         var ussId = '',
@@ -1287,14 +1259,14 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                     label: label,
                     type: dictGr.getValue('internal_type') || 'string',
                     reference: dictGr.getValue('reference') || '',
-                    choice: parseInt(dictGr.getValue('choice') || '0', 10) || 0
+                    choice: parseInt(dictGr.getValue('choice') || '0', 10) || 0,
                 };
             }
         }
         return this._answer({
             success: true,
             labels: labels,
-            fields: fields
+            fields: fields,
         });
     },
 
@@ -1303,7 +1275,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
      * Accepts `table` (ServiceNow table name) and `conditions` (JSON string array of field/value pairs).
      * @returns {{success: boolean, results: Object}} Return value.
      */
-    resolveConditionDisplayValues: function() {
+    resolveConditionDisplayValues: function () {
         var table = String(this.getParameter('table') || '');
         var conditionsJson = String(this.getParameter('conditions') || '[]');
         if (!table || !conditionsJson) {
@@ -1312,8 +1284,11 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         var conditions = [];
         try {
             conditions = JSON.parse(conditionsJson);
-        } catch(e) {
-            return this._answer({ success: false, error: 'Invalid conditions JSON' });
+        } catch (e) {
+            return this._answer({
+                success: false,
+                error: 'Invalid conditions JSON',
+            });
         }
 
         var gr = new GlideRecordSecure(table);
@@ -1413,9 +1388,14 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         try {
             variableIds = JSON.parse(variablesJson);
         } catch (e) {
-            return this._answer({ success: false, error: 'Invalid variables JSON' });
+            return this._answer({
+                success: false,
+                error: 'Invalid variables JSON',
+            });
         }
-        variableIds = variableIds.filter(function (id) { return /^[0-9a-f]{32}$/i.test(id); });
+        variableIds = variableIds.filter(function (id) {
+            return /^[0-9a-f]{32}$/i.test(id);
+        });
         if (!variableIds.length) {
             return this._answer({ success: true, variables: {} });
         }
@@ -1453,7 +1433,10 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         try {
             pairs = JSON.parse(pairsJson);
         } catch (e) {
-            return this._answer({ success: false, error: 'Invalid pairs JSON' });
+            return this._answer({
+                success: false,
+                error: 'Invalid pairs JSON',
+            });
         }
 
         var results = {};
@@ -1484,7 +1467,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                         var part = valParts[p].trim();
                         if (/^[0-9a-f]{32}$/i.test(part)) {
                             var refGr = new GlideRecordSecure(refTable);
-                            displayParts.push(refGr.get(part) ? (refGr.getDisplayValue() || part) : part);
+                            displayParts.push(refGr.get(part) ? refGr.getDisplayValue() || part : part);
                         } else {
                             displayParts.push(part);
                         }
@@ -1497,7 +1480,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 choiceGr.addQuery('question', variableId);
                 choiceGr.addQuery('value', val);
                 choiceGr.query();
-                results[key] = choiceGr.next() ? (choiceGr.getValue('text') || val) : val;
+                results[key] = choiceGr.next() ? choiceGr.getValue('text') || val : val;
             } catch (ex) {
                 results[key] = val;
             }
@@ -1512,14 +1495,11 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
      * @returns {{success: boolean, records: Array.<{sys_id: string, name: string}>}} Return value.
      */
     getRecordsForTable: function () {
-        var table    = String(this.getParameter('table') || 'sp_widget');
-        var search   = String(this.getParameter('search') || '');
-        var page     = parseInt(this.getParameter('page') || '1', 10) || 1;
+        var table = String(this.getParameter('table') || 'sp_widget');
+        var search = String(this.getParameter('search') || '');
+        var page = parseInt(this.getParameter('page') || '1', 10) || 1;
         var pageSize = 50;
-        if (
-            this.DIFF_ALLOWED_TABLES.length > 0 &&
-            this.DIFF_ALLOWED_TABLES.indexOf(table) === -1
-        ) {
+        if (this.DIFF_ALLOWED_TABLES.length > 0 && this.DIFF_ALLOWED_TABLES.indexOf(table) === -1) {
             return this._answer({
                 success: false,
                 error: 'Table not allowed: ' + table,
@@ -1543,8 +1523,14 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             });
         }
         var hasMore = records.length > pageSize;
-        if (hasMore) { records.pop(); }
-        return this._answer({ success: true, records: records, has_more: hasMore });
+        if (hasMore) {
+            records.pop();
+        }
+        return this._answer({
+            success: true,
+            records: records,
+            has_more: hasMore,
+        });
     },
 
     /**
@@ -1558,10 +1544,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     getVersionsForTable: function () {
         var table = String(this.getParameter('table') || 'sp_widget');
         var recordId = String(this.getParameter('record_id') || '');
-        if (
-            this.DIFF_ALLOWED_TABLES.length > 0 &&
-            this.DIFF_ALLOWED_TABLES.indexOf(table) === -1
-        ) {
+        if (this.DIFF_ALLOWED_TABLES.length > 0 && this.DIFF_ALLOWED_TABLES.indexOf(table) === -1) {
             return this._answer({
                 success: false,
                 error: 'Table not allowed: ' + table,
@@ -1588,8 +1571,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 sys_created_on: gr.getValue('sys_created_on'),
                 sys_created_by: gr.getValue('sys_created_by'),
                 update_set_name: gr.source.name.getValue(),
-                update_set_sys_id:
-                    gr.getValue('source') || gr.source.sys_id.getValue(),
+                update_set_sys_id: gr.getValue('source') || gr.source.sys_id.getValue(),
                 update_set_state: gr.source.state.getValue(),
                 update_set_state_label: gr.source.state.getDisplayValue(),
                 state: gr.getValue('state'),
@@ -1632,14 +1614,22 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 tempGr.initialize();
                 for (var _fk in parsed.fields) {
                     if (parsed.fields.hasOwnProperty(_fk)) {
-                        try { tempGr.setValue(_fk, parsed.fields[_fk]); } catch (e) {}
+                        try {
+                            tempGr.setValue(_fk, parsed.fields[_fk]);
+                        } catch (e) {}
                     }
                 }
                 for (var _fk2 in parsed.fields) {
-                    if (!parsed.fields.hasOwnProperty(_fk2)) { continue; }
-                    if (parsed.display_values[_fk2]) { continue; } // already resolved by XML attr
+                    if (!parsed.fields.hasOwnProperty(_fk2)) {
+                        continue;
+                    }
+                    if (parsed.display_values[_fk2]) {
+                        continue;
+                    } // already resolved by XML attr
                     var _rawVal = parsed.fields[_fk2];
-                    if (_rawVal === '' || _rawVal === null || _rawVal === undefined) { continue; }
+                    if (_rawVal === '' || _rawVal === null || _rawVal === undefined) {
+                        continue;
+                    }
                     try {
                         var _dv = tempGr.getDisplayValue(_fk2);
                         if (_dv && _dv !== String(_rawVal)) {
@@ -1655,8 +1645,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             sys_created_on: gr.getValue('sys_created_on'),
             sys_created_by: gr.getValue('sys_created_by'),
             update_set_name: gr.source.name.getValue(),
-            update_set_sys_id:
-                gr.getValue('source') || gr.source.sys_id.getValue(),
+            update_set_sys_id: gr.getValue('source') || gr.source.sys_id.getValue(),
             fields: parsed.fields,
             display_values: parsed.display_values,
         });
@@ -1701,9 +1690,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 }
             }
         } catch (e) {
-            gs.error(
-                'WidgetEditorAjax: _parseVersionPayloadAll error: ' + e.message
-            );
+            gs.error('WidgetEditorAjax: _parseVersionPayloadAll error: ' + e.message);
         }
         return { fields: fields, display_values: displayValues };
     },
@@ -1764,8 +1751,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         tGr.addQuery('sp_widget', sysId);
         tGr.query();
         while (tGr.next()) {
-            channelLabels['/sp/rp/sp_ng_template/' + tGr.getUniqueValue()] =
-                tGr.getValue('id') + ' (Angular template)';
+            channelLabels['/sp/rp/sp_ng_template/' + tGr.getUniqueValue()] = tGr.getValue('id') + ' (Angular template)';
         }
 
         var m2m = new GlideRecordSecure('m2m_sp_ng_pro_sp_widget');
@@ -1778,8 +1764,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 continue;
             }
             channelLabels['/sp/rp/sp_angular_provider/' + pId] =
-                (m2m.sp_angular_provider.name.getValue() || pId) +
-                ' (Angular provider)';
+                (m2m.sp_angular_provider.name.getValue() || pId) + ' (Angular provider)';
         }
 
         var channels = Object.keys(channelLabels);
@@ -1838,10 +1823,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             }
             /* Drop entries whose sys_user record was not found */
             for (var di = 0; di < userIds.length; di++) {
-                if (
-                    userMap[userIds[di]] &&
-                    userMap[userIds[di]].name === userIds[di]
-                ) {
+                if (userMap[userIds[di]] && userMap[userIds[di]].name === userIds[di]) {
                     delete userMap[userIds[di]];
                 }
             }
@@ -1884,13 +1866,23 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
 
         if (gr.next()) {
             gr.setValue('use_es_latest', enabled);
-            gr.update();
+            if (!gr.update()) {
+                return this._answer({
+                    success: false,
+                    error: 'Could not save ES12 setting.',
+                });
+            }
         } else {
             gr.initialize();
             gr.setValue('id', sysId);
             gr.setValue('table', 'sp_widget');
             gr.setValue('use_es_latest', enabled);
-            gr.insert();
+            if (!gr.insert()) {
+                return this._answer({
+                    success: false,
+                    error: 'Could not create ES12 setting.',
+                });
+            }
         }
         return this._answer({
             success: true,
@@ -1933,7 +1925,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 template: gr.getValue('template') || '',
                 canDelete: gr.canDelete(),
                 readOnly: tNoWrite,
-                readOnlyReason: tScopeMismatch ? 'scope' : (tNoWrite ? 'access' : ''),
+                readOnlyReason: tScopeMismatch ? 'scope' : tNoWrite ? 'access' : '',
                 scopeName: tScopeMismatch ? gr.getDisplayValue('sys_scope') : '',
                 volatility_level: '',
                 volatility_level_display: '',
@@ -1957,9 +1949,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                     }
                     var vLevel = tVolGr.getValue('volatility_level') || '';
                     templates[vi].volatility_level = vLevel;
-                    templates[vi].volatility_level_display = vLevel
-                        ? tVolGr.getDisplayValue('volatility_level')
-                        : '';
+                    templates[vi].volatility_level_display = vLevel ? tVolGr.getDisplayValue('volatility_level') : '';
                     break;
                 }
             }
@@ -2005,12 +1995,16 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             gr.setValue('template', data.template);
         }
 
-        var resultId = data.sys_id
-            ? (gr.update(), data.sys_id)
-            : gr.insert() + '';
+        var resultId = data.sys_id ? gr.update() : gr.insert();
+        if (!resultId) {
+            return this._answer({
+                success: false,
+                error: 'Could not save template.',
+            });
+        }
         return this._answer({
             success: true,
-            sys_id: resultId,
+            sys_id: String(resultId),
         });
     },
 
@@ -2068,7 +2062,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 canDelete: pGrBatch.canDelete(),
                 linkedToOtherWidgets: false,
                 readOnly: pNoWrite,
-                readOnlyReason: pScopeMismatch ? 'scope' : (pNoWrite ? 'access' : ''),
+                readOnlyReason: pScopeMismatch ? 'scope' : pNoWrite ? 'access' : '',
                 scopeName: pScopeMismatch ? pGrBatch.getDisplayValue('sys_scope') : '',
                 volatility_level: '',
                 volatility_level_display: '',
@@ -2090,9 +2084,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             }
             var pvLevel = pVolGr.getValue('volatility_level') || '';
             providerMap[pvId].volatility_level = pvLevel;
-            providerMap[pvId].volatility_level_display = pvLevel
-                ? pVolGr.getDisplayValue('volatility_level')
-                : '';
+            providerMap[pvId].volatility_level_display = pvLevel ? pVolGr.getDisplayValue('volatility_level') : '';
         }
 
         var m2mOtherGr = new GlideRecordSecure('m2m_sp_ng_pro_sp_widget');
@@ -2101,14 +2093,12 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         m2mOtherGr.query();
         while (m2mOtherGr.next()) {
             var linkedPid = m2mOtherGr.getValue('sp_angular_provider');
-            if (providerMap[linkedPid])
-                providerMap[linkedPid].linkedToOtherWidgets = true;
+            if (providerMap[linkedPid]) providerMap[linkedPid].linkedToOtherWidgets = true;
         }
 
         var providers = [];
         for (var poi = 0; poi < sortedProviderIds.length; poi++) {
-            if (providerMap[sortedProviderIds[poi]])
-                providers.push(providerMap[sortedProviderIds[poi]]);
+            if (providerMap[sortedProviderIds[poi]]) providers.push(providerMap[sortedProviderIds[poi]]);
         }
         return this._answer({
             success: true,
@@ -2153,18 +2143,29 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             gr.setValue('script', data.script);
         }
 
-        var resultId;
-        if (!isNew) {
-            gr.update();
-            resultId = data.sys_id;
-        } else {
-            resultId = gr.insert() + '';
-            if (widgetSysId && resultId) {
-                var m2m = new GlideRecordSecure('m2m_sp_ng_pro_sp_widget');
-                m2m.initialize();
-                m2m.setValue('sp_angular_provider', resultId);
-                m2m.setValue('sp_widget', widgetSysId);
-                m2m.insert();
+        var resultId = isNew ? gr.insert() : gr.update();
+        if (!resultId) {
+            return this._answer({
+                success: false,
+                error: 'Could not save provider.',
+            });
+        }
+        resultId = String(resultId);
+        if (isNew && widgetSysId) {
+            var m2m = new GlideRecordSecure('m2m_sp_ng_pro_sp_widget');
+            m2m.initialize();
+            m2m.setValue('sp_angular_provider', resultId);
+            m2m.setValue('sp_widget', widgetSysId);
+            if (!m2m.insert()) {
+                var removed = gr.deleteRecord();
+                return this._answer({
+                    success: false,
+                    error: removed
+                        ? 'Could not link provider. The new provider was removed; your edits are still unsaved.'
+                        : 'Provider ' +
+                          resultId +
+                          ' was created but could not be linked or removed. Link it using Link existing provider.',
+                });
             }
         }
         return this._answer({
@@ -2212,23 +2213,18 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         var noWrite = !gr.canWrite();
         var readOnly = noWrite;
         var siScopeMismatch = gr.getValue('sys_scope') !== gs.getCurrentApplicationId();
-        var siReadOnlyReason = siScopeMismatch ? 'scope' : (noWrite ? 'access' : '');
+        var siReadOnlyReason = siScopeMismatch ? 'scope' : noWrite ? 'access' : '';
         var siScopeName = siScopeMismatch ? gr.getDisplayValue('sys_scope') : '';
 
         var siVolLevel = '';
         var siVolDisplay = '';
         var siVolGr = new GlideRecordSecure('sys_metadata_volatility');
-        siVolGr.addQuery(
-            'sys_update_name',
-            'sys_script_include_' + gr.getUniqueValue()
-        );
+        siVolGr.addQuery('sys_update_name', 'sys_script_include_' + gr.getUniqueValue());
         siVolGr.setLimit(1);
         siVolGr.query();
         if (siVolGr.next()) {
             siVolLevel = siVolGr.getValue('volatility_level') || '';
-            siVolDisplay = siVolLevel
-                ? siVolGr.getDisplayValue('volatility_level')
-                : '';
+            siVolDisplay = siVolLevel ? siVolGr.getDisplayValue('volatility_level') : '';
         }
 
         return this._answer({
@@ -2271,7 +2267,12 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         }
 
         gr.setValue('script', data.script || '');
-        gr.update();
+        if (!gr.update()) {
+            return this._answer({
+                success: false,
+                error: 'Could not save Script Include.',
+            });
+        }
         return this._answer({ success: true });
     },
 
@@ -2303,9 +2304,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 label: gr.getValue('column_label') || field,
                 type: gr.getValue('internal_type') || '',
                 max_length: maxLen ? parseInt(maxLen, 10) : null,
-                mandatory:
-                    gr.getValue('mandatory') === '1' ||
-                    gr.getValue('mandatory') === 'true',
+                mandatory: gr.getValue('mandatory') === '1' || gr.getValue('mandatory') === 'true',
                 reference: gr.getValue('reference') || null,
             },
         });
@@ -2389,7 +2388,12 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         if (!gr.canDelete()) {
             return this._answer({ success: false, error: 'No delete access' });
         }
-        gr.deleteRecord();
+        if (!gr.deleteRecord()) {
+            return this._answer({
+                success: false,
+                error: 'Could not delete template.',
+            });
+        }
         return this._answer({ success: true });
     },
 
@@ -2433,14 +2437,36 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 error: 'Provider is linked to other widgets',
             });
         }
-        // Remove the m2m link for this widget then delete the provider
+        // Keep widget links intact if deleting the provider fails.
         var m2mDel = new GlideRecordSecure('m2m_sp_ng_pro_sp_widget');
         m2mDel.addQuery('sp_angular_provider', sysId);
         if (widgetSysId) {
             m2mDel.addQuery('sp_widget', widgetSysId);
         }
-        m2mDel.deleteMultiple();
-        gr.deleteRecord();
+        m2mDel.query();
+        while (m2mDel.next()) {
+            if (!m2mDel.canDelete()) {
+                return this._answer({
+                    success: false,
+                    error: 'No delete access on provider link.',
+                });
+            }
+        }
+        if (!gr.deleteRecord()) {
+            return this._answer({
+                success: false,
+                error: 'Could not delete provider.',
+            });
+        }
+        m2mDel.query();
+        while (m2mDel.next()) {
+            if (!m2mDel.deleteRecord()) {
+                return this._answer({
+                    success: false,
+                    error: 'Provider deleted, but its widget link could not be removed.',
+                });
+            }
+        }
         return this._answer({ success: true });
     },
 
@@ -2464,8 +2490,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         if (sysId) {
             m2m.addQuery('sp_widget', sysId);
             m2m.query();
-            while (m2m.next())
-                linkedIds.push(m2m.getValue('sp_angular_provider'));
+            while (m2m.next()) linkedIds.push(m2m.getValue('sp_angular_provider'));
         }
 
         var countGa = new GlideAggregate('sp_angular_provider');
@@ -2536,7 +2561,9 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         m2m.initialize();
         m2m.setValue('sp_angular_provider', providerSysId);
         m2m.setValue('sp_widget', sysId);
-        m2m.insert();
+        if (!m2m.insert()) {
+            return this._answer({ success: false, error: 'Could not link provider.' });
+        }
         return this._answer({
             success: true,
         });
@@ -2567,7 +2594,9 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 error: 'No delete access on m2m record',
             });
         }
-        m2m.deleteRecord();
+        if (!m2m.deleteRecord()) {
+            return this._answer({ success: false, error: 'Could not unlink provider.' });
+        }
         return this._answer({ success: true });
     },
 
@@ -2691,7 +2720,9 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         m2m.initialize();
         m2m.setValue('sp_widget', sysId);
         m2m.setValue('sp_dependency', depSysId);
-        m2m.insert();
+        if (!m2m.insert()) {
+            return this._answer({ success: false, error: 'Could not link dependency.' });
+        }
         return this._answer({ success: true });
     },
 
@@ -2718,7 +2749,9 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         if (!m2m.canDelete()) {
             return this._answer({ success: false, error: 'No delete access' });
         }
-        m2m.deleteRecord();
+        if (!m2m.deleteRecord()) {
+            return this._answer({ success: false, error: 'Could not unlink dependency.' });
+        }
         return this._answer({ success: true });
     },
 
@@ -2749,10 +2782,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             'm2m_sp_ng_pro_sp_widget.sp_widget',
             'sp_ng_template.sp_widget',
         ];
-        var EXCLUDED_TABLES = [
-            'sys_update_version',
-            'm2m_sp_public_widget_allow_table',
-        ];
+        var EXCLUDED_TABLES = ['sys_update_version', 'm2m_sp_public_widget_allow_table'];
         var CUSTOM_EXCLUSIONS = this._getRelatedListExclusions();
 
         var rlGr = new GlideRecordSecure('sys_ui_related_list');
@@ -2783,13 +2813,8 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
 
             var tab = null;
             if (rlValue.indexOf('REL:') === 0) {
-                tab = this._relatedBuildRelTab(
-                    sysId,
-                    rlValue.substring(4),
-                    rlValue
-                );
-                if (tab && EXCLUDED_TABLES.indexOf(tab.table) !== -1)
-                    tab = null;
+                tab = this._relatedBuildRelTab(sysId, rlValue.substring(4), rlValue);
+                if (tab && EXCLUDED_TABLES.indexOf(tab.table) !== -1) tab = null;
             } else {
                 var dotIdx = rlValue.indexOf('.');
                 if (dotIdx < 1) {
@@ -2855,8 +2880,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 evaluator.evaluateScript(relGr, 'query_with');
                 gr.chooseWindow(offset, offset + PAGE_SIZE);
                 gr.query();
-                while (gr.next())
-                    rows.push(this._relatedExtractRow(gr, columns));
+                while (gr.next()) rows.push(this._relatedExtractRow(gr, columns));
             } else {
                 var dotIdx = relatedList.indexOf('.');
                 var table = relatedList.substring(0, dotIdx);
@@ -2866,8 +2890,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 gr2.addQuery(field, sysId);
                 gr2.chooseWindow(offset, offset + PAGE_SIZE);
                 gr2.query();
-                while (gr2.next())
-                    rows.push(this._relatedExtractRow(gr2, columns));
+                while (gr2.next()) rows.push(this._relatedExtractRow(gr2, columns));
             }
         } catch (e) {
             gs.error('Widget Editor getRelatedData error: ' + e.message);
@@ -2923,8 +2946,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             return null;
         }
         var targetTable = relGr.getValue('basic_query_from');
-        var title =
-            relGr.getValue('name') || this._relatedGetTableLabel(targetTable);
+        var title = relGr.getValue('name') || this._relatedGetTableLabel(targetTable);
         var count = this._relatedGetCount(targetTable, null, sysId, relGr);
         var columns = this._relatedGetColumns(targetTable);
         return {
@@ -3308,7 +3330,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
      */
     getMergedUserPref: function (prefName, key, defaultValue) {
         var blob = this._readUserPrefsBlob(prefName);
-        return (key in blob) ? blob[key] : defaultValue;
+        return key in blob ? blob[key] : defaultValue;
     },
 
     /**
@@ -3372,7 +3394,11 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     getDebugMenuPrefs: function () {
         var realUserId = this._getDebugMenuRealUserId();
         if (!realUserId) {
-            return this._answer({ success: true, value: null, real_user_id: null });
+            return this._answer({
+                success: true,
+                value: null,
+                real_user_id: null,
+            });
         }
         var gr = new GlideRecord('sys_user_preference');
         gr.addQuery('user', realUserId);
@@ -3444,9 +3470,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             defaults: defaults,
             application: appName,
             application_sys_id: appSysId || '',
-            additional_widget_fields: this._getAdditionalWidgetFieldDefs(
-                this._buildWidgetFieldAccessProbe()
-            ),
+            additional_widget_fields: this._getAdditionalWidgetFieldDefs(this._buildWidgetFieldAccessProbe()),
         });
     },
 
@@ -3534,10 +3558,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
 
         // Record clone relationship to OOB parent (best-effort)
         try {
-            new SPWidgetCloneUtils().createCloneRelationship(
-                oldSysId,
-                newSysId
-            );
+            new SPWidgetCloneUtils().createCloneRelationship(oldSysId, newSysId);
         } catch (e) {}
 
         return this._answer({
@@ -3718,12 +3739,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         }
         try {
             var parsed = JSON.parse(raw);
-            return (
-                !!parsed &&
-                typeof parsed === 'object' &&
-                !Array.isArray(parsed) &&
-                Object.keys(parsed).length > 0
-            );
+            return !!parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Object.keys(parsed).length > 0;
         } catch (e) {
             return false;
         }
@@ -3816,9 +3832,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         try {
             var xmlDoc = new XMLDocument2();
             xmlDoc.parseXML(payload);
-            var names = this.DELETED_WIDGET_PAYLOAD_FIELDS.concat(
-                this._getConfiguredAdditionalWidgetFields()
-            );
+            var names = this.DELETED_WIDGET_PAYLOAD_FIELDS.concat(this._getConfiguredAdditionalWidgetFields());
             for (var i = 0; i < names.length; i++) {
                 var node = xmlDoc.getFirstNode('//' + names[i]);
                 if (node) {
@@ -3834,9 +3848,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 }
             }
         } catch (e) {
-            gs.error(
-                'WidgetEditorAjax: _parseDeletedWidgetPayload error: ' + e.message
-            );
+            gs.error('WidgetEditorAjax: _parseDeletedWidgetPayload error: ' + e.message);
         }
         return { fields: fields, display_values: displayValues };
     },
@@ -3859,9 +3871,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             return null;
         }
 
-        var parsed = this._parseDeletedWidgetPayload(
-            auditGr.getValue('payload')
-        );
+        var parsed = this._parseDeletedWidgetPayload(auditGr.getValue('payload'));
         var fields = parsed.fields;
         var displayValues = parsed.display_values;
         var isBool = function (v) {
@@ -3870,9 +3880,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
 
         var sysClassName = fields.sys_class_name || 'sp_widget';
         var isHeaderFooter = sysClassName === 'sp_header_footer';
-        var additionalDefs = this._getAdditionalWidgetFieldDefs(
-            this._buildWidgetFieldAccessProbe()
-        );
+        var additionalDefs = this._getAdditionalWidgetFieldDefs(this._buildWidgetFieldAccessProbe());
 
         var widget = {
             sys_id: sysId,
@@ -3908,12 +3916,8 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             sys_class_name: sysClassName,
             is_header_footer: isHeaderFooter,
             'static': isHeaderFooter && isBool(fields['static']),
-            option_schema_has_value: this._hasProperJsonObjectValue(
-                fields.option_schema
-            ),
-            demo_data_has_value: this._hasProperJsonObjectValue(
-                fields.demo_data
-            ),
+            option_schema_has_value: this._hasProperJsonObjectValue(fields.option_schema),
+            demo_data_has_value: this._hasProperJsonObjectValue(fields.demo_data),
             has_active_instances: false,
             deleted: true,
             deleted_on: auditGr.getValue('sys_created_on') || '',
@@ -3923,8 +3927,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         for (var ai = 0; ai < additionalDefs.length; ai++) {
             var addDef = additionalDefs[ai];
             var addVal = fields[addDef.name];
-            widget[addDef.name] =
-                addDef.type === 'boolean' ? isBool(addVal) : addVal || '';
+            widget[addDef.name] = addDef.type === 'boolean' ? isBool(addVal) : addVal || '';
         }
 
         return { widget: widget, additional_widget_fields: additionalDefs };
@@ -3947,8 +3950,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
      * @returns {GlideFilter|null} Filter instance, or null when unconfigured/invalid.
      */
     _getDeprecatedWidgetFilter: function () {
-        var encodedQuery =
-            gs.getProperty(this.DEPRECATED_WIDGET_PROPERTY, '') || '';
+        var encodedQuery = gs.getProperty(this.DEPRECATED_WIDGET_PROPERTY, '') || '';
         encodedQuery = (encodedQuery + '').trim();
         if (!encodedQuery) {
             return null;
@@ -4022,9 +4024,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
      * @returns {Array.<string>} Base + configured additional fields.
      */
     _getAllowedWidgetFields: function () {
-        return this.ALLOWED_WIDGET_FIELDS.concat(
-            this._getConfiguredAdditionalWidgetFields()
-        );
+        return this.ALLOWED_WIDGET_FIELDS.concat(this._getConfiguredAdditionalWidgetFields());
     },
 
     /**
@@ -4073,11 +4073,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
      */
     _isBooleanWidgetType: function (type) {
         var normalised = String(type || '').toLowerCase();
-        return (
-            normalised === 'boolean' ||
-            normalised === 'glide_boolean' ||
-            normalised === 'true_false'
-        );
+        return normalised === 'boolean' || normalised === 'glide_boolean' || normalised === 'true_false';
     },
 
     /**
@@ -4092,12 +4088,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         var normalised = String(value == null ? '' : value)
             .toLowerCase()
             .trim();
-        return (
-            normalised === 'true' ||
-            normalised === '1' ||
-            normalised === 'yes' ||
-            normalised === 'y'
-        );
+        return normalised === 'true' || normalised === '1' || normalised === 'yes' || normalised === 'y';
     },
 
     /**
@@ -4139,7 +4130,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                         instanceSysId: grInstances.getValue('sys_id'),
                         pageId: page.id,
                         pageSysId: page.sysId,
-                        pageTitle: page.title
+                        pageTitle: page.title,
                     });
                 }
             }
@@ -4159,11 +4150,15 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             portals.push({
                 sys_id: grPortal.getValue('sys_id'),
                 title: grPortal.getValue('title'),
-                url_suffix: grPortal.getValue('url_suffix')
+                url_suffix: grPortal.getValue('url_suffix'),
             });
         }
 
-        return this._answer({ success: true, instances: instances, portals: portals });
+        return this._answer({
+            success: true,
+            instances: instances,
+            portals: portals,
+        });
     },
 
     /**
@@ -4189,7 +4184,11 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         if (!grPage.get(grContainer.getValue('sp_page'))) {
             return null;
         }
-        return { id: grPage.getValue('id'), sysId: grPage.getValue('sys_id'), title: grPage.getValue('title') };
+        return {
+            id: grPage.getValue('id'),
+            sysId: grPage.getValue('sys_id'),
+            title: grPage.getValue('title'),
+        };
     },
 
     /**
@@ -4248,12 +4247,16 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             xmlDoc.parseXML(String(payload));
             var root = xmlDoc.getFirstNode('/record_update');
             if (!root) return null;
-            var records = root.getChildNodeIterator(), recordEl = null, table = '';
+            var records = root.getChildNodeIterator(),
+                recordEl = null,
+                table = '';
             while (records.hasNext()) {
                 var candidate = records.next();
                 var nodeName = String(candidate.getNodeName() || '');
                 if (/^[a-z_][a-z0-9_]*$/i.test(nodeName)) {
-                    recordEl = candidate; table = nodeName; break;
+                    recordEl = candidate;
+                    table = nodeName;
+                    break;
                 }
             }
             if (!recordEl) {
@@ -4262,9 +4265,11 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             }
 
             // Read only the target record's direct fields, never a companion record's ID.
-            var fields = {}, children = recordEl.getChildNodeIterator();
+            var fields = {},
+                children = recordEl.getChildNodeIterator();
             while (children.hasNext()) {
-                var child = children.next(), field = String(child.getNodeName());
+                var child = children.next(),
+                    field = String(child.getNodeName());
                 if (field === 'sys_id' || field === 'name' || field === 'element') {
                     fields[field] = String(child.getTextContent() || '').trim();
                 }
@@ -4345,9 +4350,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         if (parts.length === 1) {
             return parts[0].charAt(0).toUpperCase();
         }
-        return (
-            parts[0].charAt(0) + parts[parts.length - 1].charAt(0)
-        ).toUpperCase();
+        return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
     },
 
     type: 'WidgetEditorAjax',

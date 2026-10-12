@@ -21,7 +21,10 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
         var key = '$' + field;
         if (!cache[key]) {
             var raw = String(record.getValue(field) || '');
-            cache[key] = { raw: raw, searchable: caseSensitive ? raw : raw.toLowerCase() };
+            cache[key] = {
+                raw: raw,
+                searchable: caseSensitive ? raw : raw.toLowerCase(),
+            };
         }
         return cache[key];
     },
@@ -42,7 +45,7 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
         // AND/OR conditions are evaluated in order, left to right (no precedence grouping).
         var result = evalFilter(filters[0]);
         for (var i = 1; i < filters.length; i++) {
-            result = filters[i].joiner === 'or' ? (result || evalFilter(filters[i])) : (result && evalFilter(filters[i]));
+            result = filters[i].joiner === 'or' ? result || evalFilter(filters[i]) : result && evalFilter(filters[i]);
         }
         return result;
     },
@@ -70,7 +73,7 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
                 name: gr.getDisplayValue('name') || gr.getValue('name'),
                 description: gr.getValue('description') || '',
                 extendedMatching: gr.getValue('extended_matching') === '1',
-                tableCount: tableCount
+                tableCount: tableCount,
             });
         }
 
@@ -81,13 +84,20 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
         });
 
         var defaultGroupId = String(gs.getProperty('monaco.plus.code_search.default_search_group', '') || '').trim();
-        return this._answer({ success: true, groups: groups,
-            defaultGroupId: this._isSysId(defaultGroupId) ? defaultGroupId : '' });
+        return this._answer({
+            success: true,
+            groups: groups,
+            defaultGroupId: this._isSysId(defaultGroupId) ? defaultGroupId : '',
+        });
     },
 
     getGroupTables: function () {
         var groupId = this._getParam('group_id');
-        if (!this._isSysId(groupId)) return this._answer({ success: false, error: 'Invalid search group.' });
+        if (!this._isSysId(groupId))
+            return this._answer({
+                success: false,
+                error: 'Invalid search group.',
+            });
 
         var rows = [];
         var cfg = new GlideRecord('sn_codesearch_table');
@@ -102,7 +112,7 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
                 table: table,
                 label: this._tableLabel(table),
                 searchFields: this._validFields(table, cfg.getValue('search_fields')).join(','),
-                additionalFilter: cfg.getValue('additional_filter') || ''
+                additionalFilter: cfg.getValue('additional_filter') || '',
             });
         }
         return this._answer({ success: true, tables: rows });
@@ -115,8 +125,16 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
         var term = String(this._getParam('query') || this._getParam('term') || '').trim();
         var limit = parseInt(this._getParam('limit'), 10) || this.MAX_RESULTS_PER_TABLE;
         limit = Math.max(1, Math.min(limit, this.MAX_RESULTS_PER_TABLE));
-        if (!this._isSysId(groupId)) return this._answer({ success: false, error: 'Invalid search group.' });
-        if (!term) return this._answer({ success: false, error: 'Enter code to search for.' });
+        if (!this._isSysId(groupId))
+            return this._answer({
+                success: false,
+                error: 'Invalid search group.',
+            });
+        if (!term)
+            return this._answer({
+                success: false,
+                error: 'Enter code to search for.',
+            });
         var caseSensitive = this._getParam('case_sensitive') === 'true' || this._getParam('case_sensitive') === '1';
         var needle = caseSensitive ? term : term.toLowerCase();
         var activeOnly = this._getParam('active_only') === 'true' || this._getParam('active_only') === '1';
@@ -125,8 +143,13 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
             secondaryFilters = JSON.parse(this._getParam('secondary_filters') || '[]');
             if (!Array.isArray(secondaryFilters) || secondaryFilters.length > 20) throw new Error('Invalid filters');
             secondaryFilters.forEach(function (item, idx) {
-                if (!item || (item.operator !== 'contains' && item.operator !== 'not_contains') ||
-                    typeof item.term !== 'string' || !item.term.trim() || item.term.length > 1000) {
+                if (
+                    !item ||
+                    (item.operator !== 'contains' && item.operator !== 'not_contains') ||
+                    typeof item.term !== 'string' ||
+                    !item.term.trim() ||
+                    item.term.length > 1000
+                ) {
                     throw new Error('Invalid filter');
                 }
                 if (idx > 0 && item.joiner !== 'and' && item.joiner !== 'or') {
@@ -134,7 +157,10 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
                 }
             });
         } catch (invalidFilters) {
-            return this._answer({ success: false, error: 'Provide up to 20 secondary filters with an operator and a non-empty term (maximum 1,000 characters).' });
+            return this._answer({
+                success: false,
+                error: 'Provide up to 20 secondary filters with an operator and a non-empty term (maximum 1,000 characters).',
+            });
         }
 
         var tableConfigId = String(this._getParam('table_config_id') || this._getParam('table') || '').trim();
@@ -144,29 +170,55 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
         var cursor = { sysId: '', scanned: 0, matched: 0 };
         if (batched) {
             batchSize = Number(batchSize);
-            if (!this._isSysId(tableConfigId) || !isFinite(batchSize) || batchSize < 1 || Math.floor(batchSize) !== batchSize) {
-                return this._answer({ success: false, error: 'Provide a table configuration and a positive batch size.' });
+            if (
+                !this._isSysId(tableConfigId) ||
+                !isFinite(batchSize) ||
+                batchSize < 1 ||
+                Math.floor(batchSize) !== batchSize
+            ) {
+                return this._answer({
+                    success: false,
+                    error: 'Provide a table configuration and a positive batch size.',
+                });
             }
             batchSize = Math.min(batchSize, this.MAX_BATCH_RESULTS);
             try {
                 var rawCursor = this._getParam('cursor');
                 if (rawCursor) {
                     cursor = JSON.parse(rawCursor);
-                    if (!cursor || !this._isSysId(cursor.sysId) ||
-                        typeof cursor.scanned !== 'number' || !isFinite(cursor.scanned) ||
-                        cursor.scanned < 1 || cursor.scanned > this.MAX_SCAN_ROWS || Math.floor(cursor.scanned) !== cursor.scanned ||
-                        typeof cursor.matched !== 'number' || !isFinite(cursor.matched) ||
-                        cursor.matched < 0 || cursor.matched > limit || Math.floor(cursor.matched) !== cursor.matched ||
-                        cursor.matched > cursor.scanned) throw new Error('Invalid cursor');
+                    if (
+                        !cursor ||
+                        !this._isSysId(cursor.sysId) ||
+                        typeof cursor.scanned !== 'number' ||
+                        !isFinite(cursor.scanned) ||
+                        cursor.scanned < 1 ||
+                        cursor.scanned > this.MAX_SCAN_ROWS ||
+                        Math.floor(cursor.scanned) !== cursor.scanned ||
+                        typeof cursor.matched !== 'number' ||
+                        !isFinite(cursor.matched) ||
+                        cursor.matched < 0 ||
+                        cursor.matched > limit ||
+                        Math.floor(cursor.matched) !== cursor.matched ||
+                        cursor.matched > cursor.scanned
+                    )
+                        throw new Error('Invalid cursor');
                 }
             } catch (invalidCursor) {
-                return this._answer({ success: false, error: 'Invalid search cursor.' });
+                return this._answer({
+                    success: false,
+                    error: 'Invalid search cursor.',
+                });
             }
         }
         var nextCursor = '';
         var overrides = {};
-        try { overrides = JSON.parse(this._getParam('overrides') || '{}'); } catch (ignore) {}
-        var results = [], searched = 0, skipped = [], totalScanned = 0;
+        try {
+            overrides = JSON.parse(this._getParam('overrides') || '{}');
+        } catch (ignore) {}
+        var results = [],
+            searched = 0,
+            skipped = [],
+            totalScanned = 0;
         var cfg = new GlideRecord('sn_codesearch_table');
         cfg.addQuery('search_group', groupId);
         if (tableConfigId) {
@@ -180,19 +232,34 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
         cfg.query();
         while (cfg.next()) {
             if (totalScanned >= this.MAX_TOTAL_SCAN_ROWS) {
-                skipped.push(String(cfg.getValue('table') || '') + ': search scan budget exceeded, narrow the search group or query.');
+                skipped.push(
+                    String(cfg.getValue('table') || '') +
+                        ': search scan budget exceeded, narrow the search group or query.'
+                );
                 continue;
             }
             var configId = cfg.getUniqueValue();
             var override = overrides[configId] || {};
             if (override.enabled === false) continue;
             var table = String(cfg.getValue('table') || '');
-            if (!this._validTable(table)) { skipped.push(table); continue; }
+            if (!this._validTable(table)) {
+                skipped.push(table);
+                continue;
+            }
             var fields = this._validFields(table, override.searchFields || cfg.getValue('search_fields'));
-            if (!fields.length) { skipped.push(table); continue; }
-            var filter = typeof override.additionalFilter === 'string' ? override.additionalFilter : String(cfg.getValue('additional_filter') || '');
+            if (!fields.length) {
+                skipped.push(table);
+                continue;
+            }
+            var filter =
+                typeof override.additionalFilter === 'string'
+                    ? override.additionalFilter
+                    : String(cfg.getValue('additional_filter') || '');
             var validation = this._validateFilter(table, filter);
-            if (!validation.valid) { skipped.push(table + ': ' + validation.error); continue; }
+            if (!validation.valid) {
+                skipped.push(table + ': ' + validation.error);
+                continue;
+            }
 
             var displayCfg = this._getTableDisplayConfig(table);
             var tableLabel = this._tableLabel(table);
@@ -225,7 +292,9 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
             // a large table could otherwise scan unbounded looking for enough passing rows -
             // cap it well above the result limit to keep the transaction bounded.
             var resultLimit = batched ? Math.min(batchSize, limit - cursor.matched) : limit;
-            var scanLimit = batched ? Math.min(this.MAX_BATCH_SCAN_ROWS, this.MAX_SCAN_ROWS - cursor.scanned) : this.MAX_SCAN_ROWS;
+            var scanLimit = batched
+                ? Math.min(this.MAX_BATCH_SCAN_ROWS, this.MAX_SCAN_ROWS - cursor.scanned)
+                : this.MAX_SCAN_ROWS;
             if (batched) {
                 // Resume after the last candidate examined, including candidates rejected by
                 // secondary filters. Stable key ordering avoids increasingly costly offsets.
@@ -235,9 +304,12 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
                     // ordering must not override the stable sys_id order used for paging.
                     var searchConditions = record.getEncodedQuery();
                     var branches = filter.split('^NQ').map(function (branch) {
-                        var conditions = branch.split('^').filter(function (part) {
-                            return part && part !== 'EQ' && !/^(ORDERBY|GROUPBY)/.test(part);
-                        }).join('^');
+                        var conditions = branch
+                            .split('^')
+                            .filter(function (part) {
+                                return part && part !== 'EQ' && !/^(ORDERBY|GROUPBY)/.test(part);
+                            })
+                            .join('^');
                         return searchConditions + (conditions ? '^' + conditions : '');
                     });
                     record = new GlideRecord(table);
@@ -263,7 +335,9 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
             var batchStarted = Date.now();
             var queryMsBeforeRows = timings.queryMs;
             var processingLimitReached = false;
-            var count = 0, tableScanned = 0, lastScannedId = '';
+            var count = 0,
+                tableScanned = 0,
+                lastScannedId = '';
             while (count < resultLimit && tableScanned < scanLimit && totalScanned < this.MAX_TOTAL_SCAN_ROWS) {
                 // Always examine at least one candidate so an early response advances
                 // the cursor, even when filters reject every result in this batch.
@@ -276,7 +350,8 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
                 tableScanned++;
                 lastScannedId = String(record.getUniqueValue());
                 var fieldValues = {};
-                if (!this._matchesSecondaryFilters(record, fields, secondaryFilters, caseSensitive, fieldValues)) continue;
+                if (!this._matchesSecondaryFilters(record, fields, secondaryFilters, caseSensitive, fieldValues))
+                    continue;
                 var matches = [];
                 for (var f = 0; f < fields.length; f++) {
                     var fieldName = fields[f];
@@ -312,7 +387,9 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
                             var fLabel = fieldLabels['$' + fieldName];
                             if (!fLabel) {
                                 fLabel = fieldName;
-                                try { fLabel = record.getElement(fieldName).getLabel() || fieldName; } catch (efl) {}
+                                try {
+                                    fLabel = record.getElement(fieldName).getLabel() || fieldName;
+                                } catch (efl) {}
                                 fieldLabels['$' + fieldName] = fLabel;
                             }
                             fieldMatch = {
@@ -322,23 +399,29 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
                                 totalLines: snippetInfo.totalLines,
                                 singleLine: snippetInfo.singleLine,
                                 lines: snippetInfo.lines.slice(),
-                                snippet: snippetInfo.text
+                                snippet: snippetInfo.text,
                             };
                             snippetWindowsInField++;
                         } else {
                             var gapLineCount = snippetInfo.startLine - lastShownEndLine - 1;
                             if (gapLineCount > 0) {
                                 if (gapLineCount <= this.MAX_INLINE_SNIPPET_GAP) {
-                                    for (var gapLine = lastShownEndLine + 1; gapLine < snippetInfo.startLine; gapLine++) {
+                                    for (
+                                        var gapLine = lastShownEndLine + 1;
+                                        gapLine < snippetInfo.startLine;
+                                        gapLine++
+                                    ) {
                                         fieldMatch.lines.push({
                                             num: gapLine,
                                             text: snippetInfo.allLines[gapLine - 1],
                                             isMatch: false,
-                                            inBlockComment: snippetInfo.blockCommentStates[gapLine - 1]
+                                            inBlockComment: snippetInfo.blockCommentStates[gapLine - 1],
                                         });
                                     }
                                 } else {
-                                    fieldMatch.lines.push({ separator: true });
+                                    fieldMatch.lines.push({
+                                        separator: true,
+                                    });
                                     fieldMatch.snippet += '\n…\n';
                                     snippetWindowsInField++;
                                 }
@@ -352,11 +435,15 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
                     }
 
                     if (fieldMatch) {
-                        var shownLineCount = fieldMatch.lines.filter(function (l) { return !l.separator; }).length;
+                        var shownLineCount = fieldMatch.lines.filter(function (l) {
+                            return !l.separator;
+                        }).length;
                         fieldMatch.allLinesShown = shownLineCount >= fieldMatch.totalLines;
-                        fieldMatch.snippet = fieldMatch.lines.map(function (l) {
-                            return l.separator ? '…' : l.text;
-                        }).join('\n');
+                        fieldMatch.snippet = fieldMatch.lines
+                            .map(function (l) {
+                                return l.separator ? '…' : l.text;
+                            })
+                            .join('\n');
                         matches.push(fieldMatch);
                     }
                 }
@@ -369,9 +456,12 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
                     // A table with neither field is always considered active, so it's never
                     // excluded by the Active only filter.
                     var hasActiveField = tableHasActive || tableHasUActive;
-                    var isActive = !hasActiveField ||
-                        (tableHasActive && (record.getValue('active') === '1' || record.getValue('active') === 'true')) ||
-                        (tableHasUActive && (record.getValue('u_active') === '1' || record.getValue('u_active') === 'true'));
+                    var isActive =
+                        !hasActiveField ||
+                        (tableHasActive &&
+                            (record.getValue('active') === '1' || record.getValue('active') === 'true')) ||
+                        (tableHasUActive &&
+                            (record.getValue('u_active') === '1' || record.getValue('u_active') === 'true'));
 
                     if (activeOnly && !isActive) {
                         continue;
@@ -381,7 +471,8 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
                     // Primary value
                     var primaryVal = '';
                     if (displayCfg.primaryField && record.isValidField(displayCfg.primaryField)) {
-                        primaryVal = record.getDisplayValue(displayCfg.primaryField) || record.getValue(displayCfg.primaryField);
+                        primaryVal =
+                            record.getDisplayValue(displayCfg.primaryField) || record.getValue(displayCfg.primaryField);
                     }
                     if (!primaryVal) {
                         primaryVal = record.getDisplayValue() || recSysId;
@@ -401,7 +492,7 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
                             secondaryVals.push({
                                 field: sField,
                                 label: sLabel,
-                                value: sVal
+                                value: sVal,
                             });
                         }
                     }
@@ -414,11 +505,13 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
                         secondaryValues: secondaryVals,
                         hasActive: hasActiveField,
                         isActive: hasActiveField ? isActive : null,
-                        updatedOn: record.isValidField('sys_updated_on') ? record.getDisplayValue('sys_updated_on') : '',
+                        updatedOn: record.isValidField('sys_updated_on')
+                            ? record.getDisplayValue('sys_updated_on')
+                            : '',
                         matches: matches,
                         isWidget: isWidget,
                         widgetEditorUrl: isWidget ? '/widget_editor.do?widget_id=' + recSysId : null,
-                        url: '/nav_to.do?uri=' + encodeURIComponent(table + '.do?sys_id=' + recSysId)
+                        url: '/nav_to.do?uri=' + encodeURIComponent(table + '.do?sys_id=' + recSysId),
                     });
                 }
             }
@@ -427,9 +520,14 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
                 var matchedSoFar = cursor.matched + count;
                 // Only probe for another row if the loop stopped at a batch boundary.
                 // The probe is not consumed: the next request resumes after lastScannedId.
-                var hasMore = (count >= resultLimit || tableScanned >= scanLimit || processingLimitReached) && nextRecord();
+                var hasMore =
+                    (count >= resultLimit || tableScanned >= scanLimit || processingLimitReached) && nextRecord();
                 if (hasMore && matchedSoFar < limit && scannedSoFar < this.MAX_SCAN_ROWS) {
-                    nextCursor = JSON.stringify({ sysId: lastScannedId, scanned: scannedSoFar, matched: matchedSoFar });
+                    nextCursor = JSON.stringify({
+                        sysId: lastScannedId,
+                        scanned: scannedSoFar,
+                        matched: matchedSoFar,
+                    });
                 } else if (hasMore && matchedSoFar < limit && scannedSoFar >= this.MAX_SCAN_ROWS) {
                     skipped.push(table + ': search scan budget exceeded, narrow the query or filters.');
                 }
@@ -442,13 +540,25 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
             return valA.localeCompare(valB);
         });
         timings.totalMs = Date.now() - started;
-        return this._answer({ success: true, results: results, searchedTables: searched, skipped: skipped, nextCursor: nextCursor, scanned: totalScanned, timings: timings });
+        return this._answer({
+            success: true,
+            results: results,
+            searchedTables: searched,
+            skipped: skipped,
+            nextCursor: nextCursor,
+            scanned: totalScanned,
+            timings: timings,
+        });
     },
 
     validateFilter: function () {
         var configId = this._getParam('config_id');
         var cfg = this._getConfig(configId);
-        if (!cfg) return this._answer({ success: false, error: 'Configuration not found.' });
+        if (!cfg)
+            return this._answer({
+                success: false,
+                error: 'Configuration not found.',
+            });
         var table = String(cfg.getValue('table'));
         var filter = this._getParam('filter');
         var result = this._validateFilter(table, filter);
@@ -456,7 +566,10 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
             var matchCount = this._countFilterMatches(table, filter);
             result.success = true;
             result.matchCount = matchCount;
-            result.listUrl = matchCount >= 0 ? ('/' + table + '_list.do' + (filter ? ('?sysparm_query=' + encodeURIComponent(filter)) : '')) : null;
+            result.listUrl =
+                matchCount >= 0
+                    ? '/' + table + '_list.do' + (filter ? '?sysparm_query=' + encodeURIComponent(filter) : '')
+                    : null;
             result.message = 'Filter is valid' + (matchCount >= 0 ? ' (' + matchCount + ' records match)' : '.');
         } else {
             result.success = false;
@@ -466,7 +579,11 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
 
     getTableFields: function () {
         var table = this._getParam('table');
-        if (!this._validTable(table)) return this._answer({ success: false, error: 'Invalid table.' });
+        if (!this._validTable(table))
+            return this._answer({
+                success: false,
+                error: 'Invalid table.',
+            });
 
         var hierArr = [];
         try {
@@ -507,7 +624,7 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
                 id: fName,
                 name: fName,
                 label: label,
-                text: label + ' (' + fName + ')'
+                text: label + ' (' + fName + ')',
             });
         }
 
@@ -525,7 +642,7 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
                             id: nm,
                             name: nm,
                             label: lbl,
-                            text: lbl + ' (' + nm + ')'
+                            text: lbl + ' (' + nm + ')',
                         });
                     }
                 }
@@ -560,34 +677,59 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
 
     _validateFilter: function (table, filter) {
         if (!filter) return { valid: true };
-        if (filter.length > 4000) return { valid: false, error: 'Filter exceeds 4,000 characters.' };
+        if (filter.length > 4000)
+            return {
+                valid: false,
+                error: 'Filter exceeds 4,000 characters.',
+            };
         try {
             var gr = new GlideRecord(table);
             if (typeof gr.isValidEncodedQuery === 'function' && !gr.isValidEncodedQuery(filter)) {
-                return { valid: false, error: 'The encoded query contains an invalid field or operator.' };
+                return {
+                    valid: false,
+                    error: 'The encoded query contains an invalid field or operator.',
+                };
             }
             return { valid: true };
-        } catch (e) { return { valid: false, error: 'Invalid encoded query: ' + String(e) }; }
+        } catch (e) {
+            return {
+                valid: false,
+                error: 'Invalid encoded query: ' + String(e),
+            };
+        }
     },
 
     _validFields: function (table, csv) {
-        var out = [], seen = {}, probe = new GlideRecord(table);
-        String(csv || '').split(',').forEach(function (raw) {
-            var field = raw.trim();
-            if (field && !seen[field] && /^[a-zA-Z0-9_]+$/.test(field) && probe.isValidField(field)) {
-                seen[field] = true; out.push(field);
-            }
-        });
+        var out = [],
+            seen = {},
+            probe = new GlideRecord(table);
+        String(csv || '')
+            .split(',')
+            .forEach(function (raw) {
+                var field = raw.trim();
+                if (field && !seen[field] && /^[a-zA-Z0-9_]+$/.test(field) && probe.isValidField(field)) {
+                    seen[field] = true;
+                    out.push(field);
+                }
+            });
         return out;
     },
 
     _validTable: function (table) {
         if (!/^[a-zA-Z0-9_]+$/.test(table)) return false;
-        try { return new GlideRecord(table).isValid(); } catch (e) { return false; }
+        try {
+            return new GlideRecord(table).isValid();
+        } catch (e) {
+            return false;
+        }
     },
 
     _tableLabel: function (table) {
-        try { return new GlideRecord(table).getLabel() || table; } catch (e) { return table; }
+        try {
+            return new GlideRecord(table).getLabel() || table;
+        } catch (e) {
+            return table;
+        }
     },
 
     getFieldContent: function () {
@@ -595,14 +737,23 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
         var sysId = this._getParam('sys_id');
         var field = this._getParam('field');
         if (!this._validTable(table) || !this._isSysId(sysId) || !field || !/^[a-zA-Z0-9_]+$/.test(field)) {
-            return this._answer({ success: false, error: 'Invalid parameters.' });
+            return this._answer({
+                success: false,
+                error: 'Invalid parameters.',
+            });
         }
         var gr = new GlideRecord(table);
         if (!gr.get(sysId)) {
-            return this._answer({ success: false, error: 'Record not found or access denied.' });
+            return this._answer({
+                success: false,
+                error: 'Record not found or access denied.',
+            });
         }
         if (!gr.isValidField(field)) {
-            return this._answer({ success: false, error: 'Field does not exist.' });
+            return this._answer({
+                success: false,
+                error: 'Field does not exist.',
+            });
         }
         var val = String(gr.getValue(field) || '');
         return this._answer({
@@ -613,38 +764,47 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
             table: table,
             tableLabel: this._tableLabel(table),
             sysId: sysId,
-            displayValue: gr.getDisplayValue()
+            displayValue: gr.getDisplayValue(),
         });
     },
 
     _getTableDisplayConfig: function (table) {
         var raw = gs.getProperty('monaco.plus.code_search.display_fields.' + table, '');
         var seen = {};
-        var secondaryFields = String(raw || '').split(',').map(function (field) {
-            return field.trim();
-        }).filter(function (field) {
-            if (!field || seen[field]) return false;
-            seen[field] = true;
-            return true;
-        });
+        var secondaryFields = String(raw || '')
+            .split(',')
+            .map(function (field) {
+                return field.trim();
+            })
+            .filter(function (field) {
+                if (!field || seen[field]) return false;
+                seen[field] = true;
+                return true;
+            });
 
         return {
             primaryField: '',
-            secondaryFields: secondaryFields
+            secondaryFields: secondaryFields,
         };
     },
 
     _prepareSnippetSource: function (value) {
-        var allLines = [], lineStarts = [0];
+        var allLines = [],
+            lineStarts = [0];
         var newline = /\r\n|\r|\n/g;
-        var match, start = 0;
+        var match,
+            start = 0;
         while ((match = newline.exec(value)) !== null) {
             allLines.push(value.slice(start, match.index));
             start = match.index + match[0].length;
             lineStarts.push(start);
         }
         allLines.push(value.slice(start));
-        return { allLines: allLines, lineStarts: lineStarts, blockCommentStates: this._getBlockCommentStates(allLines) };
+        return {
+            allLines: allLines,
+            lineStarts: lineStarts,
+            blockCommentStates: this._getBlockCommentStates(allLines),
+        };
     },
 
     _extractSnippetWithLines: function (value, at, termLen, source) {
@@ -653,7 +813,8 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
         var blockCommentStates = source.blockCommentStates;
         // Offsets refer to the original text, including CRLF. Binary lookup avoids
         // walking from the beginning of a long script for every occurrence.
-        var low = 0, high = source.lineStarts.length - 1;
+        var low = 0,
+            high = source.lineStarts.length - 1;
         while (low < high) {
             var mid = Math.floor((low + high + 1) / 2);
             if (source.lineStarts[mid] <= at) low = mid;
@@ -670,13 +831,13 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
             resultLines.push({
                 num: i + 1,
                 text: allLines[i],
-                isMatch: (i === matchLineIdx),
-                inBlockComment: blockCommentStates[i]
+                isMatch: i === matchLineIdx,
+                inBlockComment: blockCommentStates[i],
             });
         }
 
         var totalLines = allLines.length;
-        var allLinesShown = (resultLines.length >= totalLines);
+        var allLinesShown = resultLines.length >= totalLines;
         return {
             matchLine: matchLineNum,
             startLine: startIdx + 1,
@@ -686,7 +847,11 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
             allLines: allLines,
             blockCommentStates: blockCommentStates,
             lines: resultLines,
-            text: resultLines.map(function (r) { return r.text; }).join('\n')
+            text: resultLines
+                .map(function (r) {
+                    return r.text;
+                })
+                .join('\n'),
         };
     },
 
@@ -737,8 +902,12 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
         return states;
     },
 
-    _isSysId: function (value) { return /^[0-9a-f]{32}$/.test(value); },
-    _answer: function (data) { return this.setAnswer(JSON.stringify(data)); },
+    _isSysId: function (value) {
+        return /^[0-9a-f]{32}$/.test(value);
+    },
+    _answer: function (data) {
+        return this.setAnswer(JSON.stringify(data));
+    },
 
     /* Shared with the main Widget Editor+ tool so lastCodeSearchGroup rides along with its preferences export/import. */
     USER_PREF_NAME: 'monaco_plus.user_prefs',
@@ -764,5 +933,5 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
         return this._answer({ success: true });
     },
 
-    type: 'WidgetEditorCodeSearchAjax'
+    type: 'WidgetEditorCodeSearchAjax',
 });

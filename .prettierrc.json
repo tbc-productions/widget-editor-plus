@@ -1,0 +1,24 @@
+{
+  "tabWidth": 4,
+  "singleQuote": true,
+  "quoteProps": "preserve",
+  "semi": false,
+  "trailingComma": "es5",
+  "embeddedLanguageFormatting": "off",
+  "overrides": [
+    {
+      "files": ["*.js", "*.cjs"],
+      "options": {
+        "semi": true
+      }
+    },
+    {
+      "files": ["*.json", "*.yaml", "*.yml", "tests/**/*.ts"],
+      "options": {
+        "tabWidth": 2,
+        "semi": true
+      }
+    }
+  ],
+  "printWidth": 120
+}

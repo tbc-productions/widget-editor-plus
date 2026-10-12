@@ -34,6 +34,7 @@ Use Node.js 24 LTS, as specified in `.nvmrc` and `package.json`.
 |---|---|
 | `npm run build` | Compile Fluent metadata; run after source changes and inspect relevant `dist/app/update/` output. |
 | `npm run test:unit` | Unit suite; some checks launch a browser. Use relevant test files during development. |
+| `npm run lint` / `npm run format:check` | Check JavaScript correctness and formatting. Use `npm run format` to format runtime scripts and tooling. |
 | `npm run test:e2e` | Playwright against the instance configured in `.env`; fixtures create and remove test records. |
 | `npm run pack` | Package the build and generate retrieved update-set XML in `target/`. |
 | `npm run deploy` | Install on the configured ServiceNow instance. |

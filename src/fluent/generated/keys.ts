@@ -174,6 +174,7 @@ declare global {
                     src_server_script_ts: {
                         table: 'sys_module'
                         id: 'a4e68998db2a415d9539b57cb626d4a9'
+                        deleted: true
                     }
                     'widget-editor-admin-group-module': {
                         table: 'sys_app_module'
@@ -866,6 +867,10 @@ declare global {
                     'widget-editor-table-config-sys-ui-action': {
                         table: 'sys_properties'
                         id: '84bbec5cb748452480fbc560d8613fda'
+                    }
+                    'widget-editor-xml-export': {
+                        table: 'sys_ui_script'
+                        id: 'e610e69550294b6e8c5f8cff99a31c3d'
                     }
                 }
                 composite: [
