@@ -48,8 +48,8 @@ test('packaging dates follow included source changes without taking unrelated ch
         context
     );
     assert.equal(
-        context.getLastGitCommitIso(dir, metadata),
-        '2026-01-01T12:00:00Z'
+        Date.parse(context.getLastGitCommitIso(dir, metadata)),
+        Date.parse('2026-01-01T12:00:00Z')
     );
     for (const [file, date] of [
         ['client.js', '2026-02-01T12:00:00Z'],
@@ -57,12 +57,12 @@ test('packaging dates follow included source changes without taking unrelated ch
     ]) {
         fs.appendFileSync(path.join(dir, file), '\nchanged');
         commit(date);
-        assert.equal(context.getLastGitCommitIso(dir, metadata), date);
+        assert.equal(Date.parse(context.getLastGitCommitIso(dir, metadata)), Date.parse(date));
     }
     fs.writeFileSync(path.join(dir, 'unrelated.js'), 'unrelated');
     commit('2026-04-01T12:00:00Z');
     assert.equal(
-        context.getLastGitCommitIso(dir, metadata),
-        '2026-03-01T12:00:00Z'
+        Date.parse(context.getLastGitCommitIso(dir, metadata)),
+        Date.parse('2026-03-01T12:00:00Z')
     );
 });
