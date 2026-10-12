@@ -5,7 +5,7 @@ const { chromium } = require('@playwright/test');
 
 const source = readUiPageSource('src/fluent/generated/other/sys-ui-page/sys_ui_page_widget_editor_code_search.now.ts');
 const css = source.match(/<style>([\s\S]*?)<\/style>/)[1];
-const scrollCode = source.slice(source.indexOf('            var tableScrollRequest = 0;'), source.indexOf('\n            };', source.indexOf('            vm.scrollToTable =')) + 15);
+const scrollCode = source.slice(source.indexOf('var tableScrollRequest = 0;'), source.indexOf('vm.openConfig = function'));
 
 test('table navigation scrolls only results across viewport and header sizes', async () => {
     const browser = await chromium.launch({ headless: true });

@@ -61,7 +61,7 @@
                         instanceSysId: grInstances.getValue('sys_id'),
                         pageId: page.id,
                         pageSysId: page.sysId,
-                        pageTitle: page.title
+                        pageTitle: page.title,
                     });
                 }
             }
@@ -80,7 +80,7 @@
             result.portals.push({
                 sys_id: grPortal.getValue('sys_id'),
                 title: grPortal.getValue('title'),
-                url_suffix: grPortal.getValue('url_suffix')
+                url_suffix: grPortal.getValue('url_suffix'),
             });
         }
 
@@ -136,6 +136,8 @@
                 data.contextMenuMode = mainPrefs.contextMenuMode;
             }
             data.showAssistantButton = mainPrefs.showAssistantButton === true;
-        } catch (e) { /* keep defaults */ }
+        } catch (e) {
+            /* keep defaults */
+        }
     }
 })();

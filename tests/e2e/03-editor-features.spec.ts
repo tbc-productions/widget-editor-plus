@@ -1,19 +1,8 @@
 import { test, expect, Page, Browser } from '@playwright/test';
+import { expectSavedWidgetField, getTestWidgetSysId } from '../helpers/widget-save';
 
 const EDITOR_PAGE_SYS_ID = '8b2e70458373fe1070b8b5dfeeaad35e';
 
-async function getTestWidgetSysId(request: any, baseURL: string): Promise<string> {
-  const username = process.env.SN_USERNAME;
-  const password = process.env.SN_PASSWORD;
-  if (!username || !password) return '';
-
-  const authHeader = 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64');
-  const res = await request.get(`${baseURL}/api/now/table/sp_widget?sysparm_query=id=e2e_test_widget&sysparm_fields=sys_id`, {
-    headers: { Authorization: authHeader }
-  });
-  const data = await res.json();
-  return data.result?.[0]?.sys_id || '';
-}
 
 function getScopedLocator(page: Page, selector: string) {
   const iframeLocator = page.frameLocator('#gsft_main').locator(selector);
@@ -58,8 +47,8 @@ test.describe('Widget Editor+ Specialised Features', () => {
     const appShell = getScopedLocator(page, '.we-app, #widget-editor-container, .monaco-editor').first();
     await expect(appShell).toBeVisible({ timeout: 30000 });
 
-    // Index 3 corresponds to Server Script (HTML=0, CSS=1, Client=2, Server=3)
-    const serverEditorInput = getScopedLocator(page, '.monaco-editor textarea').nth(3);
+    // Target the Server Script pane regardless of pane order.
+    const serverEditorInput = getScopedLocator(page, '#pane-script .monaco-editor textarea');
     await expect(serverEditorInput).toBeVisible({ timeout: 30000 });
     await serverEditorInput.focus();
 
@@ -84,19 +73,19 @@ test.describe('Widget Editor+ Specialised Features', () => {
     const appShell = getScopedLocator(page, '.we-app, #widget-editor-container, .monaco-editor').first();
     await expect(appShell).toBeVisible({ timeout: 30000 });
 
-    // Make an edit in Server Script pane (nth(3))
-    const serverEditorInput = getScopedLocator(page, '.monaco-editor textarea').nth(3);
+    // Make an edit in the Server Script pane.
+    const serverEditorInput = getScopedLocator(page, '#pane-script .monaco-editor textarea');
     await expect(serverEditorInput).toBeVisible({ timeout: 30000 });
     await serverEditorInput.focus();
-    await page.keyboard.type('\n// Per-field save test comment\n');
+    const marker = `// E2E per-field save ${Date.now()}`;
+    await page.keyboard.press('ControlOrMeta+End');
+    await page.keyboard.type(`\n${marker}\n`);
 
-    // Locate per-field save button on pane header or main Save button
-    const paneSaveButton = getScopedLocator(page, '.we-pane-header button, button')
-      .filter({ hasText: /save/i })
-      .first();
+    const paneSaveButton = getScopedLocator(page, '#pane-script .we-pane-save-btn');
 
     await expect(paneSaveButton).toBeVisible({ timeout: 15000 });
     await paneSaveButton.click();
+    await expectSavedWidgetField(request, baseURL || '', widgetSysId, 'script', marker);
 
     // Verify no critical alert occurs
     const criticalAlert = getScopedLocator(page, '.we-alert-bar--critical').first();

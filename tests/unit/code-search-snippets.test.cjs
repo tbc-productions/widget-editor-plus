@@ -235,7 +235,7 @@ test('code snippet renderer also highlights secondary CONTAINS filter terms with
         'Secondary-filter matches that overlap the primary query match should yield to the primary highlight'
     );
     assert.ok(
-        fnSource.includes("range.kind === 'secondary' ? 'cs-highlight cs-highlight-secondary' : 'cs-highlight'"),
+        /range.kind === 'secondary'\s*\? 'cs-highlight cs-highlight-secondary'\s*: 'cs-highlight'/.test(fnSource),
         'Secondary-filter matches should render with the cs-highlight-secondary mark, distinct from the primary query highlight'
     );
     assert.ok(pageSource.includes('mark.cs-highlight-secondary'), 'CSS should style the secondary highlight distinctly from the primary one');

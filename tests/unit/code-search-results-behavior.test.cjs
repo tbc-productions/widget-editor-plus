@@ -57,7 +57,7 @@ test('advanced conditions round-trip through the URL alongside the query, case a
         'updateUrlParam should clear the filters URL param when there is no query or no valid filters'
     );
     assert.ok(
-        pageSource.includes('if (urlFilters && urlFilters.length) {\n                vm.secondaryFilters = urlFilters;\n                vm.showAdvancedFilters = true;\n            }'),
+        /if \(urlFilters && urlFilters.length\) \{\s*vm.secondaryFilters = urlFilters;\s*vm.showAdvancedFilters = true;\s*\}/.test(pageSource),
         'Filters parsed from the URL on load should populate vm.secondaryFilters and reveal the advanced filters panel'
     );
 

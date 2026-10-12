@@ -17,13 +17,18 @@
     "types": "now-sdk dependencies",
     "test:unit": "node --test tests/unit/*.test.cjs",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "lint": "eslint src scripts tests",
+    "format": "prettier --write 'src/**/*.js' 'scripts/*.js' '*.cjs' '*.json' '.github/workflows/*.yaml'",
+    "format:check": "prettier --check 'src/**/*.js' 'scripts/*.js' '*.cjs' '*.json' '.github/workflows/*.yaml'"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "@servicenow/glide": "27.0.5",
     "@servicenow/sdk": "4.13.3",
     "dotenv": "^18.0.5",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "eslint": "9.39.4",
+    "prettier": "3.6.1"
   }
 }

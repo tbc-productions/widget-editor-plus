@@ -2,15 +2,10 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const ts = require('typescript');
+const { readFluentField } = require('../helpers/fluent-source.cjs');
 
 const path = 'src/fluent/generated/client-development/ui-script/sys_ui_script_ca35f99983f7725070b8b5dfeeaad31e.now.ts';
-let script;
-const compiled = ts.transpileModule(fs.readFileSync(path, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
-vm.runInNewContext(compiled, {
-    exports: {}, require: () => ({ Record: record => { script = record.data.script; } }),
-    Now: { ID: { ca35f99983f7725070b8b5dfeeaad31e: 'bootstrap' } }
-});
+const script = readFluentField(path, 'script');
 
 function setup() {
     const providers = {}, calls = [];

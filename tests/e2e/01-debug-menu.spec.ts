@@ -56,7 +56,9 @@ test.describe('Widget Editor+ Right-Click Debug Menu', () => {
 
     const timingIndicator = header.locator('.we-timing-bars');
     await expect(timingIndicator).toBeVisible({ timeout: 15000 });
-    await expect(timingIndicator).toHaveAttribute('title', /Server round-trip:.*Script execution:.*Client render:/s);
+    await expect(timingIndicator).toHaveAttribute('data-we-tooltip', /Server round-trip:.*Script execution:.*Client render:/s);
+    await timingIndicator.hover();
+    await expect(page.locator('.we-tooltip--visible')).toContainText('Server round-trip:');
   });
 
   test('should hide the generation-time indicator when disabled in Preferences', async ({ page }) => {

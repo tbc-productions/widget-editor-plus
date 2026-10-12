@@ -1029,7 +1029,7 @@ test('draft comparison maps related fields to platform fields in the same Compar
 test('Compare+ accepts a new related record snapshot with an empty, read-only saved side', () => {
     const compareSource = fs.readFileSync('src/fluent/generated/other/sys-ui-page/widget_editor_compare.client.js', 'utf8');
     const start = compareSource.indexOf('            var _openerSnap = null;');
-    const end = compareSource.indexOf("            _pending++;\n            _ajax('getVersionsForTable'", start);
+    const end = start + compareSource.slice(start).search(/\s*_pending\+\+;\s*_ajax\('getVersionsForTable'/);
     const localStorage = storage();
     localStorage.setItem('_weDiffSnap_test', JSON.stringify({ _unsaved: true, _newRecord: true, id: 'new-template', template: '<div>Draft</div>' }));
     const context = {

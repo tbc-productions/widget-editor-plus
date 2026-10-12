@@ -1,5 +1,6 @@
 import * as dotenv from 'dotenv';
 import * as path from 'path';
+import { instanceAuthHeaders } from '../helpers/instance-auth';
 
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
@@ -26,9 +27,8 @@ export async function seedServiceNowTestData(): Promise<ServiceNowTestData | nul
     return null;
   }
 
-  const authHeader = 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64');
   const headers: Record<string, string> = {
-    'Authorization': authHeader,
+    ...instanceAuthHeaders(),
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   };
@@ -69,8 +69,7 @@ export async function seedServiceNowTestData(): Promise<ServiceNowTestData | nul
       updateSetSysId,
     };
   } catch (err) {
-    console.error('[E2E Setup] Error seeding test data:', err);
-    return null;
+    throw new Error('Failed to seed ServiceNow test data.', { cause: err });
   }
 }
 
@@ -91,9 +90,8 @@ export async function cleanupServiceNowTestData(): Promise<void> {
 
   if (!baseURL || !username || !password) return;
 
-  const authHeader = 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64');
   const headers = {
-    'Authorization': authHeader,
+    ...instanceAuthHeaders(),
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   };

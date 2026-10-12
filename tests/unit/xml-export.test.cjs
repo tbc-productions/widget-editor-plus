@@ -6,6 +6,13 @@ const { readFluentField } = require('../helpers/fluent-source.cjs');
 const root = 'src/fluent/generated/';
 const diffPath = root + 'other/sys-ui-page/sys_ui_page_51ec3d258363b61070b8b5dfeeaad36b.now.ts';
 const template = readFluentField;
+const fieldComparison = readFluentField(root + 'client-development/ui-script/sys_ui_script_widget_editor_xml_export.now.ts', 'script');
+
+function loadFieldComparison(context) {
+    context.window = context.window || {};
+    vm.runInNewContext(fieldComparison, context);
+    context.annotateFieldChanges = context.window.WE_XML_EXPORT.annotateFieldChanges;
+}
 
 function resolver({ exists = true, deleted = false, deletionId = '', es12Value = null } = {}) {
     const id = 'a'.repeat(32);
@@ -75,7 +82,8 @@ test('Diff export preserves both selected versions and XML-sensitive field conte
     assert.ok(script, 'client script found');
     const start = script.indexOf('ctrl.exportXml = function');
     const end = script.indexOf('ctrl.revertToLeft = function', start);
-    vm.runInNewContext(script.slice(script.indexOf('function annotateFieldChanges'), script.indexOf('// End field comparison helper.')) + script.slice(start, end), context);
+    loadFieldComparison(context);
+    vm.runInNewContext(script.slice(start, end), context);
     ctrl.exportXml();
     assert.equal(exported.documentElement.tag, 'context_bundle');
     assert.equal(exported.documentElement.attrs.format_version, '2');
@@ -149,8 +157,10 @@ test('ES12 overrides distinguish enabled, disabled, missing and unreadable value
 for (const path of [diffPath, root + 'other/sys-ui-page/sys_ui_page_widget_editor_assistant.now.ts']) {
     test('field comparison handles unchanged, null, redacted, missing and deleted data: ' + path, () => {
         const script = template(path, 'clientScript');
+        assert.match(template(path, 'html'), /<g:requires name="widget_editor_xml_export.jsdbx"/);
+        assert.match(script, /window.WE_XML_EXPORT.annotateFieldChanges/);
         const context = {};
-        vm.runInNewContext(script.slice(script.indexOf('function annotateFieldChanges'), script.indexOf('// End field comparison helper.')), context);
+        loadFieldComparison(context);
         function field(name, text, attrs = {}) {
             return { tagName: name, textContent: text, attrs, children: [],
                 getAttribute(key) { return this.attrs[key] || null; },
@@ -265,7 +275,7 @@ async function exportAssistant(includePreviousUpdates, choiceChecked) {
     const script = template(root + 'other/sys-ui-page/sys_ui_page_widget_editor_assistant.now.ts', 'clientScript');
     context.fetchExportRecordXml = async row => (await context.fetch('/' + row.table + '.do?sys_id=' + row.sys_id)).text();
     vm.createContext(context);
-    vm.runInContext(script.slice(script.indexOf('function annotateFieldChanges'), script.indexOf('// End field comparison helper.')), context);
+    loadFieldComparison(context);
     vm.runInContext(script.slice(script.indexOf('ctrl.generateXml = async function'), script.indexOf('function init()', script.indexOf('ctrl.generateXml = async function'))), context);
     await ctrl.generateXml();
     return exported.documentElement;

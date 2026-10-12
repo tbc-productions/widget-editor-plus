@@ -31,7 +31,7 @@ function getJavaHashCode(str) {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
         const char = str.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
+        hash = (hash << 5) - hash + char;
         hash |= 0;
     }
     return hash;
@@ -110,7 +110,9 @@ function indexSourceFiles(srcRoot) {
                         // Now.ID, so it falls back to its own literal name here, which never matches
                         // a real dist sys_id — the git-history lookup below then silently falls back
                         // to build time, defeating the Preview-collision check entirely.
-                        console.warn(`Warning: Now.ID['${key}'] in ${full} could not be resolved to a real sys_id — its shipped sys_updated_on will fall back to build time instead of its real last-modified date.`);
+                        console.warn(
+                            `Warning: Now.ID['${key}'] in ${full} could not be resolved to a real sys_id — its shipped sys_updated_on will fall back to build time instead of its real last-modified date.`
+                        );
                         sysId = key;
                     }
                     index[sysId] = full;
@@ -127,11 +129,14 @@ function indexSourceFiles(srcRoot) {
 // Preview flag a local customization as a collision instead of silently overwriting it.
 function getLastGitCommitIso(rootDir, filePath) {
     try {
-        const out = execFileSync(
-            'git',
-            ['log', '-1', '--format=%aI', '--', filePath],
-            { cwd: rootDir, encoding: 'utf8' }
-        ).trim();
+        const includes = Array.from(
+            fs.readFileSync(filePath, 'utf8').matchAll(/Now\.include\(['"]([^'"]+)['"]\)/g),
+            (match) => path.resolve(path.dirname(filePath), match[1])
+        );
+        const out = execFileSync('git', ['log', '-1', '--format=%aI', '--', filePath, ...includes], {
+            cwd: rootDir,
+            encoding: 'utf8',
+        }).trim();
         return out || null;
     } catch (e) {
         return null;
@@ -144,11 +149,14 @@ function findPropertyBlockLines(fileContent, propertyName) {
     const nameLineText = `name: '${propertyName}'`;
     let start = 0;
     while (start < lines.length) {
-        if (lines[start].indexOf('Property({') === -1) { start++; continue; }
+        if (lines[start].indexOf('Property({') === -1) {
+            start++;
+            continue;
+        }
         let end = start;
         while (end < lines.length - 1 && lines[end].trim() !== '})') end++;
         if (lines[end].trim() !== '})') return null;
-        if (lines.slice(start, end + 1).some(l => l.includes(nameLineText))) {
+        if (lines.slice(start, end + 1).some((l) => l.includes(nameLineText))) {
             return { startLine: start + 1, endLine: end + 1 }; // 1-indexed, inclusive
         }
         start = end + 1;
@@ -161,8 +169,14 @@ function findPropertyBlockLines(fileContent, propertyName) {
 function valueSectionTracker() {
     let inValue = false;
     return function (body) {
-        if (/^\s*value:/.test(body)) { inValue = true; return true; }
-        if (inValue && /^\s*(description|ignoreCache|roles|\$meta):/.test(body)) { inValue = false; return false; }
+        if (/^\s*value:/.test(body)) {
+            inValue = true;
+            return true;
+        }
+        if (inValue && /^\s*(description|ignoreCache|roles|\$meta):/.test(body)) {
+            inValue = false;
+            return false;
+        }
         return inValue;
     };
 }
@@ -200,7 +214,7 @@ function getLastPropertyValueChangeIso(rootDir, relFilePath, propertyName) {
         const newTracker = valueSectionTracker();
         const oldValueLines = [];
         const newValueLines = [];
-        diff.split('\n').forEach(line => {
+        diff.split('\n').forEach((line) => {
             const prefix = line[0];
             if (prefix !== '+' && prefix !== '-' && prefix !== ' ') return;
             const body = line.slice(1);
@@ -216,18 +230,18 @@ function getLastPropertyValueChangeIso(rootDir, relFilePath, propertyName) {
 }
 
 const TABLE_TYPE_MAP = {
-    'sp_widget': 'Widget',
-    'sys_ui_page': 'UI Page',
-    'sys_ui_script': 'UI Script',
-    'sys_script_include': 'Script Include',
-    'sys_script_client': 'Client Script',
-    'sys_properties': 'System Property',
-    'sys_ui_action': 'UI Action',
-    'sys_security_acl': 'Access Control',
-    'sys_security_acl_role': 'Access Control Role',
-    'sys_app_module': 'Module',
-    'sys_module': 'EcmaScript Module',
-    'sys_app': 'Application'
+    sp_widget: 'Widget',
+    sys_ui_page: 'UI Page',
+    sys_ui_script: 'UI Script',
+    sys_script_include: 'Script Include',
+    sys_script_client: 'Client Script',
+    sys_properties: 'System Property',
+    sys_ui_action: 'UI Action',
+    sys_security_acl: 'Access Control',
+    sys_security_acl_role: 'Access Control Role',
+    sys_app_module: 'Module',
+    sys_module: 'EcmaScript Module',
+    sys_app: 'Application',
 };
 
 function main() {
@@ -255,7 +269,7 @@ function main() {
     const formattedDate = now.toISOString().replace('T', ' ').substring(0, 19);
 
     let xml = `<?xml version="1.0" encoding="UTF-8"?><unload unload_date="${formattedDate}">\n`;
-    
+
     // sys_remote_update_set header
     xml += `<sys_remote_update_set action="INSERT_OR_UPDATE">\n`;
     xml += `<application display_value="Global">global</application>\n`;
@@ -291,7 +305,7 @@ function main() {
     function walk(dir) {
         let results = [];
         const list = fs.readdirSync(dir);
-        list.forEach(file => {
+        list.forEach((file) => {
             file = path.join(dir, file);
             const stat = fs.statSync(file);
             if (stat && stat.isDirectory()) {
@@ -310,7 +324,7 @@ function main() {
 
     const sourceFileIndex = indexSourceFiles(path.join(rootDir, 'src', 'fluent', 'generated'));
 
-    xmlFiles.forEach(file => {
+    xmlFiles.forEach((file) => {
         let content = fs.readFileSync(file, 'utf8').trim();
 
         const updateNameMatch = content.match(/<sys_update_name>(.*?)<\/sys_update_name>/);
@@ -332,12 +346,14 @@ function main() {
         // sys_properties can share one source file across many properties (see the code-search
         // display-fields file), so resolve this specific property's own value-change history
         // instead of the whole file's last commit.
-        const gitDate = (table === 'sys_properties' && relSrcFile)
-            ? (getLastPropertyValueChangeIso(rootDir, relSrcFile, targetName) || getLastGitCommitIso(rootDir, srcFile))
-            : (srcFile ? getLastGitCommitIso(rootDir, srcFile) : null);
-        const recordDate = gitDate
-            ? new Date(gitDate).toISOString().replace('T', ' ').substring(0, 19)
-            : formattedDate;
+        const gitDate =
+            table === 'sys_properties' && relSrcFile
+                ? getLastPropertyValueChangeIso(rootDir, relSrcFile, targetName) ||
+                  getLastGitCommitIso(rootDir, srcFile)
+                : srcFile
+                  ? getLastGitCommitIso(rootDir, srcFile)
+                  : null;
+        const recordDate = gitDate ? new Date(gitDate).toISOString().replace('T', ' ').substring(0, 19) : formattedDate;
         content = content.replace(
             /(<sys_id>[^<]*<\/sys_id>)/,
             `$1\n    <sys_created_on>${recordDate}</sys_created_on>\n    <sys_updated_on>${recordDate}</sys_updated_on>`

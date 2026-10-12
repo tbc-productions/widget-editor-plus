@@ -40,5 +40,10 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Check formatting and lint
+        run: |
+          npm run format:check
+          npm run lint
+
       - name: Run unit tests
         run: npm run test:unit

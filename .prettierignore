@@ -1,0 +1,13 @@
+node_modules/
+dist/
+target/
+playwright/
+playwright-report/
+test-results/
+@types/
+src/fluent/generated/keys.ts
+src/fluent/generated/.claims.json
+*.md
+*.html
+*.scss
+package-lock.json
