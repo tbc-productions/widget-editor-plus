@@ -1,6 +1,6 @@
 # Widget Editor+
 
-Widget Editor+ is a development and diagnostics suite for ServiceNow Service Portal developers. It replaces the standard widget editor with one built around the Microsoft Monaco Editor and ServiceNow-specific IntelliSense, alongside dedicated tools for version diffing (**Compare+**), runtime portal diagnostics (**Debug Context Menu**), cross-table source search (**Code Search+**), and AI context extraction (**Widget Editor+ Assistant**).
+Widget Editor+ is a development and diagnostics suite for ServiceNow Service Portal developers. It replaces the standard widget editor with one built around the Microsoft Monaco Editor and ServiceNow-specific IntelliSense, alongside dedicated tools for version diffing (**Compare+**), historical script attribution (**Credit+**), runtime portal diagnostics (**Debug Context Menu**), cross-table source search (**Code Search+**), and AI context extraction (**Widget Editor+ Assistant**).
 
 > **Zero External Dependencies**: Built entirely with native ServiceNow platform capabilities. All editor functionality, language tooling, and diagnostics rely strictly on libraries already present within the ServiceNow platform (Monaco Editor, AngularJS, Bootstrap, and standard ServiceNow client/server APIs).
 
@@ -13,6 +13,7 @@ Widget Editor+ is a development and diagnostics suite for ServiceNow Service Por
   - [3. Debug Context Menu](#3-debug-context-menu)
   - [4. Code Search+](#4-code-search)
   - [5. Widget Editor+ Assistant](#5-widget-editor-assistant)
+  - [6. Credit+](#6-credit)
 - [Installation & Deployment](#installation--deployment)
   - [Prerequisites](#prerequisites)
   - [Build with ServiceNow SDK](#build-with-servicenow-sdk)
@@ -28,6 +29,7 @@ Widget Editor+ is a development and diagnostics suite for ServiceNow Service Por
 | Component | Purpose |
 |---|---|
 | **Widget Editor+** | Monaco-powered IDE for Service Portal widgets, with ServiceNow client/server IntelliSense |
+| **Credit+** | Admin-only historical script attribution across update sets |
 | **Compare+** | Side-by-side Monaco diff viewer, including a condition-builder diff |
 | **Debug Context Menu** | Runtime diagnostics overlay on live Service Portal pages |
 | **Code Search+** | Cross-table source search with advanced filtering and Monaco-highlighted results |
@@ -88,6 +90,16 @@ Export selected ServiceNow records as XML context for AI tools.
 - Include previous versions, field changes, record links and ES12 context.
 - Estimate token counts, with export blocklists and password redaction.
 - **Export Markdown+**: Copy filtered Customer Updates as linked, grouped Markdown.
+
+---
+
+### 6. Credit+
+
+- Open Credit+ from a Customer Update list context menu, including Updates related lists.
+- Trace script lines across update sets to their captured authors, ignoring whitespace and moved blocks.
+- Expand scripts, HTML templates and conditions independently, with syntax colouring, linked update sets, inline attribution filters and Compare+ comparisons.
+- Open Statistics for builder/destroyer and update-set leaderboards, record age, founder and update-set highlights.
+- Require administrator access for both the viewer and server API.
 
 ---
 

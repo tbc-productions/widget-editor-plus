@@ -1,6 +1,6 @@
 {
   "name": "widget-editor-plus",
-  "version": "1.23.6",
+  "version": "1.24.0",
   "description": "Enhanced Service Portal widget editor with Monaco-powered code editors, real-time user presence, per-field save, version history with diff comparison, and Angular template and provider management.",
   "license": "UNLICENSED",
   "engines": {
@@ -26,6 +26,7 @@
     "@playwright/test": "^1.63.0",
     "@servicenow/glide": "27.0.5",
     "@servicenow/sdk": "4.13.6",
+    "angular": "1.5.11",
     "dotenv": "18.0.7",
     "eslint": "9.39.5",
     "prettier": "3.6.1",

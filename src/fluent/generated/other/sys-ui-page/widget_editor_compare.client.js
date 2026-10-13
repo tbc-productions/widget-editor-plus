@@ -8,6 +8,7 @@
     var APP_TITLE = 'Compare+';
 
     function _syncHistoryEntry(description) {
+        if (isEmbedded) return;
         if (window.WE_HISTORY_SYNC) {
             window.WE_HISTORY_SYNC.set({
                 description: description || '',
@@ -202,6 +203,7 @@
     var version1Id = pageConfig.version_1 || '';
     var version2Id = pageConfig.version_2 || '';
     var daToken = pageConfig.da_token || '';
+    var creditUpdateId = pageConfig.credit_update || '';
     var isEmbedded = pageConfig.da_iframe === 'true';
     var isFromList = pageConfig.da_source === 'list';
 
@@ -240,8 +242,8 @@
     //////// Pure helpers ////////////////////////////////////////////////////////
 
     function _ajax(method, params, cb) {
-        var ga = new GlideAjax('WidgetEditorAjax');
-        ga.addParam('sysparm_name', method);
+        var ga = new GlideAjax(method === 'getCreditComparison' ? 'CreditPlus' : 'WidgetEditorAjax');
+        ga.addParam('sysparm_name', method === 'getCreditComparison' ? 'getComparison' : method);
         for (var k in params) {
             if (params.hasOwnProperty(k)) {
                 ga.addParam(k, params[k]);
@@ -547,6 +549,7 @@
                     ctrl.loadingLeft = false;
                     ctrl.loadingRight = false;
                     ctrl.currentIsUnsaved = false;
+                    ctrl.creditComparison = !!creditUpdateId;
                     ctrl.currentMeta = { date: '', by: '', usn: '' };
                     ctrl.savedMeta = { date: '', by: '', usn: '' };
                     ctrl.openVersionCol = null;
@@ -716,6 +719,7 @@
                     }
 
                     function _validateRightSelection() {
+                        if (creditUpdateId) return;
                         if (_currentRightId !== 'current') {
                             var eligible = _getEligibleRightVersions();
                             if (
@@ -744,7 +748,7 @@
                         document.title = _title;
                         setTimeout(function () {
                             try {
-                                if (window.parent !== window) window.parent.document.title = _title;
+                                if (!isEmbedded && window.parent !== window) window.parent.document.title = _title;
                             } catch (e) {}
                         }, 1000);
                         _syncHistoryEntry(ctrl.recordName + _tableSuffix);
@@ -825,6 +829,7 @@
                                 dateFull: _formatDateFull(lMeta.sys_created_on || '') || '',
                                 usn: lMeta.update_set_name || '',
                                 uss: lMeta.update_set_sys_id || '',
+                                ust: lMeta.update_set_table || 'sys_update_set',
                                 by: lMeta.sys_created_by || '',
                             };
                         }
@@ -835,6 +840,7 @@
                                   dateFull: _formatDateFull(rMeta.sys_created_on || '') || '',
                                   usn: rMeta.update_set_name || '',
                                   uss: rMeta.update_set_sys_id || '',
+                                  ust: rMeta.update_set_table || 'sys_update_set',
                                   by: rMeta.sys_created_by || '',
                               }
                             : ctrl.currentIsUnsaved
@@ -1223,7 +1229,7 @@
                                 return;
                             }
                             // When both versions explicitly provided, ensure older → left, newer → right
-                            if (version1Id && version2Id && _leftVersionData && _rightVersionData) {
+                            if (!creditUpdateId && version1Id && version2Id && _leftVersionData && _rightVersionData) {
                                 if (
                                     (_leftVersionData.sys_created_on || '') > (_rightVersionData.sys_created_on || '')
                                 ) {
@@ -1866,111 +1872,139 @@
                             _onLoaded();
                         });
 
-                        // Load current record state
-                        var _openerSnap = null;
-                        if (daToken) {
-                            try {
-                                var _lsVal = localStorage.getItem('_weDiffSnap_' + daToken);
-                                if (_lsVal) {
-                                    _openerSnap = JSON.parse(_lsVal);
-                                    localStorage.removeItem('_weDiffSnap_' + daToken);
+                        if (creditUpdateId) {
+                            _pending++;
+                            _ajax('getCreditComparison', { sysparm_update: creditUpdateId }, function (data) {
+                                if (data.success && data.table === tableParam && data.record === recordId) {
+                                    _leftVersionData = data.left;
+                                    _rightVersionData = data.right;
+                                    _currentLeftId = ctrl.leftVersionId = data.left.sys_id;
+                                    _currentRightId = ctrl.rightVersionId = data.right.sys_id;
+                                    _versionCache[data.left.sys_id] = data.left;
+                                    _versionCache[data.right.sys_id] = data.right;
+                                    _allVersionsData = [data.right, data.left];
+                                    _recordData = {
+                                        sys_id: recordId,
+                                        name: data.recordName,
+                                        canWrite: false,
+                                        values: data.right.fields,
+                                    };
+                                } else {
+                                    _errors.push(data.error || 'Customer Update comparison is unavailable.');
                                 }
-                            } catch (e) {}
-                        }
+                                _onLoaded();
+                            });
+                        } else {
+                            // Load current record state
+                            var _openerSnap = null;
+                            if (daToken) {
+                                try {
+                                    var _lsVal = localStorage.getItem('_weDiffSnap_' + daToken);
+                                    if (_lsVal) {
+                                        _openerSnap = JSON.parse(_lsVal);
+                                        localStorage.removeItem('_weDiffSnap_' + daToken);
+                                    }
+                                } catch (e) {}
+                            }
 
-                        if (_openerSnap) {
-                            var isNewSnapshot = !!_openerSnap._newRecord && !recordId;
-                            delete _openerSnap._newRecord;
-                            _recordData = {
-                                sys_id: recordId,
-                                name: _openerSnap.name || _openerSnap.id || '',
-                                sys_updated_on: _openerSnap.sys_updated_on || '',
-                                sys_updated_by: _openerSnap.sys_updated_by || '',
-                                canWrite: false,
-                                sys_policy: '',
-                                sys_policy_display: '',
-                                update_set_sys_id: '',
-                                update_set_name: '',
-                                values: _openerSnap,
-                            };
-                            ctrl.currentIsUnsaved = !!_openerSnap._unsaved;
-                            if (isNewSnapshot) {
-                                _savedRecordData = {
-                                    values: {},
+                            if (_openerSnap) {
+                                var isNewSnapshot = !!_openerSnap._newRecord && !recordId;
+                                delete _openerSnap._newRecord;
+                                _recordData = {
+                                    sys_id: recordId,
+                                    name: _openerSnap.name || _openerSnap.id || '',
+                                    sys_updated_on: _openerSnap.sys_updated_on || '',
+                                    sys_updated_by: _openerSnap.sys_updated_by || '',
                                     canWrite: false,
+                                    sys_policy: '',
+                                    sys_policy_display: '',
+                                    update_set_sys_id: '',
+                                    update_set_name: '',
+                                    values: _openerSnap,
                                 };
-                            } else if (_openerSnap._unsaved) {
+                                ctrl.currentIsUnsaved = !!_openerSnap._unsaved;
+                                if (isNewSnapshot) {
+                                    _savedRecordData = {
+                                        values: {},
+                                        canWrite: false,
+                                    };
+                                } else if (_openerSnap._unsaved) {
+                                    _pending++;
+                                    _ajax(
+                                        'getRecordForDiff',
+                                        { table: tableParam, record_id: recordId },
+                                        function (data) {
+                                            if (data.success && data.record) {
+                                                _savedRecordData = data.record;
+                                            }
+                                            _onLoaded();
+                                        }
+                                    );
+                                }
+                            } else {
                                 _pending++;
                                 _ajax('getRecordForDiff', { table: tableParam, record_id: recordId }, function (data) {
                                     if (data.success && data.record) {
-                                        _savedRecordData = data.record;
+                                        _recordData = data.record;
                                     }
                                     _onLoaded();
                                 });
                             }
-                        } else {
+
                             _pending++;
-                            _ajax('getRecordForDiff', { table: tableParam, record_id: recordId }, function (data) {
-                                if (data.success && data.record) {
-                                    _recordData = data.record;
+                            _ajax('getVersionsForTable', { table: tableParam, record_id: recordId }, function (data) {
+                                if (data.success && data.versions) {
+                                    _allVersionsData = data.versions;
+                                }
+                                if (!version1Id) {
+                                    if (_openerSnap && _openerSnap._unsaved) {
+                                        _leftIsCurrentSaved = true;
+                                        _currentLeftId = 'current_saved';
+                                        ctrl.leftVersionId = 'current_saved';
+                                    } else if (_allVersionsData.length > 0) {
+                                        var autoIdx = _allVersionsData.length > 1 ? 1 : 0;
+                                        var autoId = _allVersionsData[autoIdx].sys_id;
+                                        _currentLeftId = autoId;
+                                        ctrl.leftVersionId = autoId;
+                                        _pending++;
+                                        _ajax('getVersionForTable', { version_id: autoId }, function (vd) {
+                                            if (vd.success) {
+                                                _leftVersionData = vd;
+                                                _versionCache[autoId] = vd;
+                                            } else {
+                                                _errors.push('Version load failed: ' + (vd.error || 'no detail'));
+                                            }
+                                            _onLoaded();
+                                        });
+                                    }
                                 }
                                 _onLoaded();
                             });
-                        }
 
-                        _pending++;
-                        _ajax('getVersionsForTable', { table: tableParam, record_id: recordId }, function (data) {
-                            if (data.success && data.versions) {
-                                _allVersionsData = data.versions;
-                            }
-                            if (!version1Id) {
-                                if (_openerSnap && _openerSnap._unsaved) {
-                                    _leftIsCurrentSaved = true;
-                                    _currentLeftId = 'current_saved';
-                                    ctrl.leftVersionId = 'current_saved';
-                                } else if (_allVersionsData.length > 0) {
-                                    var autoIdx = _allVersionsData.length > 1 ? 1 : 0;
-                                    var autoId = _allVersionsData[autoIdx].sys_id;
-                                    _currentLeftId = autoId;
-                                    ctrl.leftVersionId = autoId;
+                            // Load explicit version_1
+                            if (version1Id) {
+                                _pending++;
+                                _ajax('getVersionForTable', { version_id: version1Id }, function (data) {
+                                    if (data.success) {
+                                        _leftVersionData = data;
+                                        _versionCache[version1Id] = data;
+                                    } else {
+                                        _errors.push('Version 1 load failed: ' + (data.error || 'no detail'));
+                                    }
+                                    _onLoaded();
+                                });
+
+                                // Load explicit version_2
+                                if (version2Id) {
                                     _pending++;
-                                    _ajax('getVersionForTable', { version_id: autoId }, function (vd) {
-                                        if (vd.success) {
-                                            _leftVersionData = vd;
-                                            _versionCache[autoId] = vd;
-                                        } else {
-                                            _errors.push('Version load failed: ' + (vd.error || 'no detail'));
+                                    _ajax('getVersionForTable', { version_id: version2Id }, function (data) {
+                                        if (data.success) {
+                                            _rightVersionData = data;
+                                            _versionCache[version2Id] = data;
                                         }
                                         _onLoaded();
                                     });
                                 }
-                            }
-                            _onLoaded();
-                        });
-
-                        // Load explicit version_1
-                        if (version1Id) {
-                            _pending++;
-                            _ajax('getVersionForTable', { version_id: version1Id }, function (data) {
-                                if (data.success) {
-                                    _leftVersionData = data;
-                                    _versionCache[version1Id] = data;
-                                } else {
-                                    _errors.push('Version 1 load failed: ' + (data.error || 'no detail'));
-                                }
-                                _onLoaded();
-                            });
-
-                            // Load explicit version_2
-                            if (version2Id) {
-                                _pending++;
-                                _ajax('getVersionForTable', { version_id: version2Id }, function (data) {
-                                    if (data.success) {
-                                        _rightVersionData = data;
-                                        _versionCache[version2Id] = data;
-                                    }
-                                    _onLoaded();
-                                });
                             }
                         }
                     }
@@ -2076,6 +2110,7 @@
                     };
 
                     ctrl.toggleVersionCol = function (side) {
+                        if (creditUpdateId) return;
                         ctrl.openVersionCol = ctrl.openVersionCol === side ? null : side;
                     };
 
@@ -2830,7 +2865,7 @@
                             $timeout(function () {
                                 var $jq =
                                     typeof $j !== 'undefined' ? $j : typeof jQuery !== 'undefined' ? jQuery : null;
-                                if (!$jq || !$jq.fn || !$jq.fn.select2) {
+                                if (creditUpdateId || !$jq || !$jq.fn || !$jq.fn.select2) {
                                     return;
                                 }
 
@@ -2919,7 +2954,7 @@
                             $timeout(function () {
                                 var $jq =
                                     typeof $j !== 'undefined' ? $j : typeof jQuery !== 'undefined' ? jQuery : null;
-                                if (!$jq || !$jq.fn || !$jq.fn.select2) {
+                                if (creditUpdateId || !$jq || !$jq.fn || !$jq.fn.select2) {
                                     return;
                                 }
 
