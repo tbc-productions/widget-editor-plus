@@ -1018,3 +1018,45 @@ test('expanding a field scrolls only after its editor is ready and ignores colla
         assert.equal(await page.evaluate(() => window.pendingFields.length), 2);
     } finally { await browser.close(); }
 });
+
+test('dragging the shared splitter shrinks every attribution column and keeps headers aligned', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        for (const width of [1920, 1280, 390]) {
+            const page = await browser.newPage(); await initialise(page, width, true);
+            await page.emulateMedia({ reducedMotion: 'reduce' });
+            await page.evaluate(() => {
+                window.fixture.updates[1].author = 'A developer with a very long display name';
+                window.fixture.updates[1].updateSet.name = 'A very long update set name that must never dictate the column width';
+            });
+            await openField(page);
+            const section = await openField(page, 'template');
+            const widths = () => page.locator('.cp-attribution tr:first-child td:not(.cp-time)').evaluateAll(cells => cells.map(cell => cell.getBoundingClientRect().width));
+            const before = await widths();
+            const splitter = part(section, 'cp-splitter');
+            const handle = await splitter.boundingBox(), body = await section.locator('.cp-code-body').boundingBox();
+            await page.mouse.move(handle.x + handle.width / 2, handle.y + 20);
+            await page.mouse.down();
+            await page.mouse.move(body.x + body.width * 0.15, handle.y + 20, { steps: 8 });
+            await page.mouse.up();
+            const after = await widths();
+            assert.equal(after.length, 4);
+            after.forEach((size, index) => assert.ok(size < before[index] * 0.6, 'Every column shrinks with the pane'));
+            assert.equal(await splitter.getAttribute('aria-valuenow'), '15');
+            assert.equal(await page.locator('.cp-splitter[aria-valuenow="15"]').count(), fixture.fields.length);
+            for (const field of ['script', 'template']) {
+                const current = page.locator('.cp-field-section[data-field="' + field + '"]');
+                const columns = await current.evaluate(section => {
+                    const headers = [...section.querySelectorAll('.cp-gutter-head span')].filter(node => getComputedStyle(node).display !== 'none');
+                    const cells = [...section.querySelectorAll('.cp-attribution tr:first-child td')].filter(node => getComputedStyle(node).display !== 'none');
+                    return cells.map((cell, index) => ({ left: cell.getBoundingClientRect().left - headers[index].getBoundingClientRect().left, width: cell.getBoundingClientRect().width - headers[index].getBoundingClientRect().width }));
+                });
+                columns.forEach(column => { assert.ok(Math.abs(column.left) < 1); assert.ok(Math.abs(column.width) < 1); });
+                assert.equal(await current.locator('.cp-attribution .cp-update-set .cp-cell-text').first().evaluate(node => getComputedStyle(node).textOverflow), 'ellipsis');
+            }
+            await splitter.focus(); await page.keyboard.press('Home');
+            assert.equal(await splitter.getAttribute('aria-valuenow'), '10');
+            await page.close();
+        }
+    } finally { await browser.close(); }
+});

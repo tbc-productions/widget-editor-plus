@@ -646,7 +646,7 @@
 
                 var attributionWidth;
                 function resizeAttribution(width) {
-                    attributionWidth = Math.max(20, Math.min(65, width));
+                    attributionWidth = Math.max(10, Math.min(65, width));
                     page.style.setProperty('--cp-attribution-width', attributionWidth + '%');
                     page.querySelectorAll('.cp-splitter').forEach(function (splitter) {
                         splitter.setAttribute('aria-valuenow', String(Math.round(attributionWidth)));
@@ -734,7 +734,7 @@
                         var width = Number(splitter.getAttribute('aria-valuenow'));
                         if (event.key === 'ArrowLeft') width -= 2;
                         else if (event.key === 'ArrowRight') width += 2;
-                        else if (event.key === 'Home') width = 20;
+                        else if (event.key === 'Home') width = 10;
                         else if (event.key === 'End') width = 65;
                         else return;
                         event.preventDefault();
@@ -903,7 +903,9 @@
                             pendingScrollSection = null;
                             summary.scrollIntoView({
                                 block: 'start',
-                                behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+                                behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+                                    ? 'auto'
+                                    : 'smooth',
                             });
                         });
                     }
