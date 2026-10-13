@@ -787,11 +787,11 @@ test('statistics load only on demand, render safe leaderboards, cache while open
             assert.equal(await page.locator('.cp-stats-board').first().locator('li').count(), 4);
             assert.equal(await page.locator('#cp-statistics img').count(), 0);
             assert.equal(await page.locator('#cp-statistics-heading').textContent(), 'Statistics 📊');
-            assert.deepEqual(await page.locator('.cp-stats-board h3').allTextContents(), ['Builders 👷 · Created by 👤', 'Destroyers 💥 · Created by 👤', 'Expansion packs 🏗️ · Update sets 📦', 'Demolition kits 🧨 · Update sets 📦']);
+            assert.deepEqual(await page.locator('.cp-stats-board h3').allTextContents(), ['Builders 👷 · Created by 👤', 'Destroyers 💥 · Created by 👤', 'Expansions 🏗️ · Update sets 📦', 'Demolitions 🧨 · Update sets 📦']);
             assert.equal(await page.locator('.cp-stats-skeleton').count(), 0);
             assert.match(await page.locator('.cp-stats-facts').textContent(), /42 days/);
             assert.equal(await page.locator('.cp-stats-note').count(), 0);
-            assert.deepEqual(await page.locator('.cp-stats-board').first().locator('li [aria-hidden=true]').allTextContents(), ['🥇', '🥈', '🥉']);
+            assert.deepEqual(await page.locator('.cp-stats-board').first().locator('li [aria-hidden=true]').allTextContents(), ['🏆', '🥈', '🥉']);
             assert.match(await page.locator('.cp-stats-facts').textContent(), /Age 👶/);
             assert.match(await page.locator('.cp-stats-facts').textContent(), /Biggest makeover 💄/);
             const links = page.locator('#cp-statistics-content a');
@@ -806,7 +806,12 @@ test('statistics load only on demand, render safe leaderboards, cache while open
             ]);
             assert.equal(await links.evaluateAll(nodes => nodes.every(node => !node.hasAttribute('target'))), true);
             assert.equal(await page.locator('#cp-statistics [title], #cp-statistics .icon-open-document-new-tab').count(), 0);
-            assert.equal(await page.locator('.cp-stats-board').first().locator('li .cp-stats-name').first().textContent(), '<img src=x onerror=alert(1)> 🥇');
+            assert.equal(await page.locator('.cp-stats-board').first().locator('li .cp-stats-name').first().textContent(), '<img src=x onerror=alert(1)>');
+            assert.equal(await page.locator('#cp-statistics a .cp-stats-medal').count(), 0);
+            const rankedUser = page.locator('.cp-stats-board').first().locator('li').nth(1);
+            await rankedUser.locator('a').hover();
+            assert.equal(await rankedUser.locator('.cp-stats-medal').evaluate(node => getComputedStyle(node).textDecorationLine), 'none');
+            assert.equal(await rankedUser.locator('.cp-stats-medal').evaluate(node => parseFloat(getComputedStyle(node).fontSize) > parseFloat(getComputedStyle(node.previousElementSibling).fontSize)), true);
             assert.equal(await page.locator('#cp-statistics').evaluate(node => node.scrollWidth <= node.clientWidth), true);
             await button.click(); await button.click();
             assert.equal(await page.evaluate(() => window.statsRequests.length), 1);

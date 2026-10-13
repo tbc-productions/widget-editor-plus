@@ -112,13 +112,14 @@
             entries.forEach(function (entry, index) {
                 var item = element('li'),
                     row = element('span', undefined, 'cp-stats-entry'),
+                    identity = element('span', undefined, 'cp-stats-identity'),
                     name = statisticsName(entry);
-                row.appendChild(name);
+                identity.appendChild(name);
+                row.appendChild(identity);
                 if (index < 3) {
-                    var medal = element('span', ['🥇', '🥈', '🥉'][index]);
+                    var medal = element('span', ['🏆', '🥈', '🥉'][index], 'cp-stats-medal');
                     medal.setAttribute('aria-hidden', 'true');
-                    name.appendChild(document.createTextNode(' '));
-                    name.appendChild(medal);
+                    identity.appendChild(medal);
                 }
                 row.appendChild(element('span', entry[metric].toLocaleString() + ' lines', 'cp-stats-score'));
                 item.appendChild(row);
@@ -131,8 +132,8 @@
         }
         board('Builders 👷 · Created by 👤', stats.creators, 'added');
         board('Destroyers 💥 · Created by 👤', stats.destroyers, 'removed');
-        board('Expansion packs 🏗️ · Update sets 📦', stats.creatorSets, 'added');
-        board('Demolition kits 🧨 · Update sets 📦', stats.destroyerSets, 'removed');
+        board('Expansions 🏗️ · Update sets 📦', stats.creatorSets, 'added');
+        board('Demolitions 🧨 · Update sets 📦', stats.destroyerSets, 'removed');
         statisticsContent.appendChild(boards);
     }
 
