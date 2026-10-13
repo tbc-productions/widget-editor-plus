@@ -27,6 +27,11 @@ function harness(entries = [], admin = true, scriptFields = ['script', 'client_s
     const context = { Class: { create: () => function () {} }, AbstractAjaxProcessor: {},
         Object: Object.assign(Object.create(Object), { extendsObject: (_base, methods) => methods }),
         gs: { hasRole: role => role === 'admin' && admin },
+        GlideDateTime: function (value) {
+            const time = Date.parse((value || '2026-10-14 12:00:00').replace(' ', 'T') + 'Z');
+            this.isValid = () => Number.isFinite(time);
+            this.getNumericValue = () => time;
+        },
         XMLDocument2: function () {
             let parsed;
             this.parseXML = text => {
@@ -64,6 +69,8 @@ function harness(entries = [], admin = true, scriptFields = ['script', 'client_s
                     return { size: () => elements.length, get: index => elements[index] };
                 };
                 this.getValue = key => current[key] || '';
+                this.get = id => { current = rows.find(entry => entry.sys_id === id); return !!current; };
+                this.getElement = key => ({ canRead: () => current[key + 'Readable'] !== false });
                 this.getUniqueValue = () => current.sys_id;
                 this.getDisplayValue = () => current[display];
                 this.canRead = () => current.readable !== false;
@@ -109,6 +116,7 @@ test('admin guards deny every public entry before querying records', () => {
     assert.equal(JSON.parse(api.validateLaunch()).success, false);
     assert.equal(JSON.parse(api.getCredit()).success, false);
     assert.equal(JSON.parse(api.getComparison()).success, false);
+    assert.equal(JSON.parse(api.getStatistics()).success, false);
     assert.equal(JSON.parse(api.getTables()).success, false);
     assert.equal(JSON.parse(api.getRecords()).success, false);
     assert.throws(() => api.buildUpdate(ids[0]), /Administrator/);
@@ -490,4 +498,91 @@ test('inline comparison selects the requested earlier update from the same recor
     }
     api.getParameter = name => ({ sysparm_update: ids[1], sysparm_from_update: ids[1] })[name] || '';
     assert.match(JSON.parse(api.getComparison()).error, /different update set/);
+});
+
+
+test('statistics rank all fields and all update sets, count removers, and ignore whitespace and moves', () => {
+    const fields = ['script', 'client_script', { name: 'template', label: 'Template', type: 'html_template' }];
+    const xml = (script, client, template, author) => payload(script, author, '<template><![CDATA[' + template + ']]></template><sys_created_by>founder</sys_created_by><sys_created_on>2026-10-01 00:00:00</sys_created_on>').replace('<client_script/>', '<client_script><![CDATA[' + client + ']]></client_script>');
+    const entries = [
+        update(0, '', { payload: xml('a();\nb();', 'c();', '<p/>', 'original') }),
+        update(1, '', { payload: xml(' b();\n a();', 'c();\nx();', '', 'bob') }),
+        update(2, '', { payload: xml('a();', '', '<q/>', 'alice') }),
+        update(3, '', { sys_updated_by: 'bob', payload: xml('a();', '', '<q/>', 'alice').replace('INSERT_OR_UPDATE', 'DELETE') })
+    ];
+    const sets = entries.map((entry, i) => ({ table: 'sys_update_set', id: entry.update_set, name: 'Set ' + i }));
+    const { api } = harness(entries, true, fields, sets);
+    api.getParameter = () => ids[0]; // Older selection still includes the entire history.
+    const stats = JSON.parse(api.getStatistics());
+    assert.equal(stats.success, true, stats.error);
+    assert.equal(stats.added, 6); assert.equal(stats.removed, 6);
+    assert.deepEqual(stats.creators.map(entry => [entry.name, entry.added]), [['original', 4], ['alice', 1], ['bob', 1]]);
+    assert.deepEqual(stats.destroyers.map(entry => [entry.name, entry.removed]), [['alice', 3], ['bob', 3], ['original', 0]]);
+    assert.deepEqual(stats.creatorSets.map(entry => entry.added), [4, 1, 1, 0]);
+    assert.deepEqual(stats.destroyerSets.map(entry => entry.removed), [3, 2, 1, 0]);
+    assert.equal(stats.updateSetCount, 4); assert.equal(stats.contributorCount, 3);
+    assert.equal(stats.fieldCount, 3); assert.equal(stats.founder, 'founder'); assert.equal(stats.ageDays, 13);
+    assert.equal(stats.creationSource, 'snapshot'); assert.equal(stats.gaps, 0);
+    assert.equal(stats.biggestMakeover.name, 'Set 0');
+});
+
+test('statistics use readable record creation metadata, and do not infer a founder or age', () => {
+    const entries = [update(0, 'hello();')];
+    const record = { sys_id: recordId, sys_created_by: 'live founder', sys_created_on: '2026-10-02 12:00:01' };
+    const get = row => JSON.parse(harness(entries, true, undefined, [], { records: { sp_widget: row ? [row] : [] } }).api.getStatistics());
+    assert.equal(get(record).ageDays, 11);
+    assert.equal(get(record).founder, 'live founder');
+    assert.equal(get(record).creationSource, 'record');
+    assert.equal(get({ ...record, sys_created_byReadable: false }).founder, '');
+    for (const date of ['', 'bad', '2027-01-01 00:00:00']) assert.equal(get({ ...record, sys_created_on: date }).ageDays, null);
+    assert.equal(get(null).ageDays, null); assert.equal(get(null).founder, '');
+    assert.equal(get(null).unknownSetCount, 1);
+});
+
+test('statistics fail safely on invalid histories and limits, and skip field gaps', () => {
+    const stat = (entries, fields) => JSON.parse(harness(entries, true, fields).api.getStatistics());
+    assert.equal(stat([update(0, 'bad', { payload: '<broken>' }), update(1, 'ok();')]).success, false);
+    assert.equal(stat([update(0, 'a();'), update(1, 'b();', { sys_updated_on: '2026-10-01 00:00:00' })]).success, false);
+    assert.equal(stat([update(0, 'a();', { payload: payload('a();').replace(recordId, 'f'.repeat(32)) }), update(1, 'b();')]).success, false);
+    assert.match(stat([update(0, 'x\n'.repeat(5001))]).error, /5,000/);
+    assert.match(stat([update(0, Array.from({length:1100}, (_, i) => 'a' + i).join('\n')), update(1, Array.from({length:1100}, (_, i) => 'b' + i).join('\n'))]).error, /budget/);
+    const result = stat([update(0, 'a();'), update(1, '', { payload: payload('').replace('<script><![CDATA[]]></script>', '') }), update(2, 'a();\nb();')], ['script']);
+    assert.equal(result.success, true, result.error); assert.equal(result.gaps, 1);
+    assert.equal(result.added, 1); assert.equal(result.removed, 0);
+    assert.equal(stat([update(0, '')]).creators[0].added, 0);
+});
+
+
+test('statistics include every user and update set, including zero totals', () => {
+    const entries = ids.map((id, index) => update(index, '', { payload: payload('line();\n'.repeat(index + 1), 'author' + index) }));
+    const stats = JSON.parse(harness(entries).api.getStatistics());
+    assert.equal(stats.success, true, stats.error);
+    for (const key of ['creators', 'destroyers', 'creatorSets', 'destroyerSets']) assert.equal(stats[key].length, 4);
+    assert.equal(stats.destroyers.every(entry => entry.removed === 0), true);
+});
+
+
+test('statistics resolve readable users by exact username for leaders and founder in one query', () => {
+    const entries = [update(0, 'one();', { payload: payload('one();', 'user,one', '<sys_created_by>founder</sys_created_by>') }), update(1, 'two();')];
+    const users = [
+        { sys_id: '1'.repeat(32), user_name: 'user,one' },
+        { sys_id: '2'.repeat(32), user_name: 'founder' },
+        { sys_id: '3'.repeat(32), user_name: 'second', readable: false },
+        { sys_id: '4'.repeat(32), user_name: 'unrelated' }
+    ];
+    const { api, queries } = harness(entries, true, undefined, [], { records: { sys_user: users } });
+    const result = JSON.parse(api.getStatistics());
+    assert.equal(result.success, true, result.error);
+    assert.equal(result.founderUserId, users[1].sys_id);
+    assert.equal(result.creators.find(entry => entry.name === 'user,one').userId, users[0].sys_id);
+    assert.equal(result.creators.find(entry => entry.name === 'second').userId, '');
+    assert.equal(queries.filter(table => table === 'sys_user').length, 1);
+    users[0].user_nameReadable = false;
+    assert.equal(JSON.parse(api.getStatistics()).creators.find(entry => entry.name === 'user,one').userId, '');
+});
+
+test('missing customer updates return a distinct empty-history code', () => {
+    const { api } = harness();
+    api.getParameter = key => ({ sysparm_table: 'sp_widget', sysparm_record: recordId, sysparm_context: 'true' })[key] || '';
+    assert.equal(JSON.parse(api.getCredit()).errorCode, 'no_customer_updates');
 });

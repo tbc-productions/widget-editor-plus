@@ -4,6 +4,7 @@
     if (!page) return;
     var config = window.WE_CREDIT_CONFIG || {},
         params = new URLSearchParams(window.location.search);
+    var openStatisticsOnLoad = params.get('sysparm_statistics') === 'true';
     var launchUrl = window.location.pathname.substring(1) + window.location.search,
         notifiedTitle = '',
         notifiedUrl = '';
@@ -32,11 +33,203 @@
         return node;
     }
 
+    var statisticsButton = document.getElementById('cp-statistics-button'),
+        statisticsPanel = document.getElementById('cp-statistics'),
+        statisticsStatus = document.getElementById('cp-statistics-status'),
+        statisticsContent = document.getElementById('cp-statistics-content'),
+        statisticsRetry = document.getElementById('cp-statistics-retry'),
+        statisticsRequest = 0,
+        statisticsTimer,
+        statisticsLoading = false,
+        statisticsLoaded = false;
+
+    function setStatisticsOpen(open) {
+        statisticsPanel.hidden = !open;
+        statisticsButton.classList.toggle('active', open);
+        statisticsButton.setAttribute('aria-pressed', String(open));
+        statisticsButton.setAttribute('aria-expanded', String(open));
+    }
+
+    function resetStatistics() {
+        statisticsRequest++;
+        window.clearTimeout(statisticsTimer);
+        statisticsLoading = statisticsLoaded = false;
+        setStatisticsOpen(false);
+        statisticsPanel.setAttribute('aria-busy', 'false');
+        statisticsButton.disabled = true;
+        statisticsContent.textContent = '';
+        statisticsStatus.textContent = '';
+        statisticsRetry.hidden = true;
+    }
+
+    function renderStatistics(stats) {
+        var facts = element('dl', undefined, 'cp-stats-facts');
+        function statisticsName(entry) {
+            var reference = entry.userId ? { id: entry.userId, table: 'sys_user' } : entry.updateSet,
+                linked =
+                    reference &&
+                    /^[0-9a-f]{32}$/i.test(reference.id) &&
+                    ['sys_update_set', 'sys_remote_update_set', 'sys_user'].indexOf(reference.table) !== -1,
+                name = element(linked ? 'a' : 'span', entry.name, 'cp-stats-name' + (linked ? ' dc-link' : ''));
+            if (linked) name.href = navUrl(reference.table + '.do?sys_id=' + reference.id);
+            return name;
+        }
+        function fact(label, value, record) {
+            var group = element('div'),
+                detail = element('dd', record ? undefined : value);
+            if (record) detail.appendChild(statisticsName(record));
+            group.appendChild(element('dt', label));
+            group.appendChild(detail);
+            facts.appendChild(group);
+        }
+        var ageIcon =
+            stats.ageDays === null
+                ? '❓'
+                : stats.ageDays < 90
+                  ? '👶'
+                  : stats.ageDays < 365
+                    ? '🧒'
+                    : stats.ageDays < 1000
+                      ? '🧑'
+                      : '🧓';
+        fact('Age ' + ageIcon, stats.ageDays === null ? 'Unknown' : stats.ageDays.toLocaleString() + ' days');
+        fact('Founder 🌱', stats.founder || 'Unknown', {
+            name: stats.founder || 'Unknown',
+            userId: stats.founderUserId,
+        });
+        fact('Update sets 📦', stats.updateSetCount.toLocaleString());
+        fact('Contributors 👥', stats.contributorCount.toLocaleString());
+        fact('Lines created ✨', stats.added.toLocaleString());
+        fact('Lines destroyed 💥', stats.removed.toLocaleString());
+        if (stats.busiestField) fact('Busiest field 🐝', stats.busiestField.name);
+        if (stats.biggestMakeover) fact('Biggest makeover 💄', stats.biggestMakeover.name, stats.biggestMakeover);
+        statisticsContent.appendChild(facts);
+        var boards = element('div', undefined, 'cp-stats-boards');
+        function board(title, entries, metric) {
+            var section = element('section', undefined, 'cp-stats-board');
+            section.appendChild(element('h3', title));
+            var list = element('ol');
+            entries.forEach(function (entry, index) {
+                var item = element('li'),
+                    row = element('span', undefined, 'cp-stats-entry'),
+                    name = statisticsName(entry);
+                row.appendChild(name);
+                if (index < 3) {
+                    var medal = element('span', ['🥇', '🥈', '🥉'][index]);
+                    medal.setAttribute('aria-hidden', 'true');
+                    name.appendChild(document.createTextNode(' '));
+                    name.appendChild(medal);
+                }
+                row.appendChild(element('span', entry[metric].toLocaleString() + ' lines', 'cp-stats-score'));
+                item.appendChild(row);
+                list.appendChild(item);
+            });
+            section.appendChild(
+                entries.length ? list : element('p', 'No lines ' + (metric === 'added' ? 'added.' : 'removed.'))
+            );
+            boards.appendChild(section);
+        }
+        board('Builders 👷 · Created by 👤', stats.creators, 'added');
+        board('Destroyers 💥 · Created by 👤', stats.destroyers, 'removed');
+        board('Expansion packs 🏗️ · Update sets 📦', stats.creatorSets, 'added');
+        board('Demolition kits 🧨 · Update sets 📦', stats.destroyerSets, 'removed');
+        statisticsContent.appendChild(boards);
+    }
+
+    function renderStatisticsLoading() {
+        statisticsContent.textContent = '';
+        var skeleton = element('div', undefined, 'cp-stats-skeleton'),
+            facts = element('div', undefined, 'cp-stats-facts'),
+            boards = element('div', undefined, 'cp-stats-boards');
+        skeleton.setAttribute('aria-hidden', 'true');
+        function bar(width) {
+            var node = element('span', undefined, 'we-skeleton-bar');
+            node.style.width = width;
+            return node;
+        }
+        for (var i = 0; i < 8; i++) {
+            var fact = element('div');
+            fact.appendChild(bar('55%'));
+            fact.appendChild(bar('85%'));
+            facts.appendChild(fact);
+        }
+        for (var j = 0; j < 4; j++) {
+            var board = element('div', undefined, 'cp-stats-board');
+            board.appendChild(bar('60%'));
+            for (var rank = 0; rank < 3; rank++) board.appendChild(bar('100%'));
+            boards.appendChild(board);
+        }
+        skeleton.appendChild(facts);
+        skeleton.appendChild(boards);
+        statisticsContent.appendChild(skeleton);
+    }
+
+    function loadStatistics() {
+        if (!data || statisticsLoading || statisticsLoaded) return;
+        var request = ++statisticsRequest;
+        statisticsLoading = true;
+        statisticsPanel.setAttribute('aria-busy', 'true');
+        statisticsStatus.className = 'cp-sr-only';
+        statisticsStatus.textContent = 'Loading statistics…';
+        renderStatisticsLoading();
+        statisticsRetry.hidden = true;
+        function failed(message) {
+            statisticsLoading = false;
+            statisticsPanel.setAttribute('aria-busy', 'false');
+            statisticsContent.textContent = '';
+            statisticsStatus.className = 'cp-error';
+            statisticsStatus.textContent = message;
+            statisticsRetry.hidden = false;
+        }
+        statisticsTimer = window.setTimeout(function () {
+            if (request !== statisticsRequest) return;
+            statisticsRequest++;
+            failed('The request timed out. Retry statistics.');
+        }, 30000);
+        try {
+            var ga = new GlideAjax('CreditPlus');
+            ga.addParam('sysparm_name', 'getStatistics');
+            ga.addParam('sysparm_update', data.selected);
+            ga.getXMLAnswer(function (answer) {
+                if (request !== statisticsRequest) return;
+                window.clearTimeout(statisticsTimer);
+                try {
+                    var stats = JSON.parse(answer || '{}');
+                    if (!stats.success) {
+                        failed(stats.error || 'Statistics could not be loaded.');
+                        return;
+                    }
+                    statisticsContent.textContent = '';
+                    renderStatistics(stats);
+                    statisticsLoaded = true;
+                    statisticsLoading = false;
+                    statisticsPanel.setAttribute('aria-busy', 'false');
+                    statisticsStatus.textContent = '';
+                } catch (e) {
+                    statisticsContent.textContent = '';
+                    failed('Statistics could not be loaded.');
+                }
+            });
+        } catch (e) {
+            window.clearTimeout(statisticsTimer);
+            failed('Statistics could not be loaded.');
+        }
+    }
+    statisticsButton.addEventListener('click', function () {
+        setStatisticsOpen(statisticsPanel.hidden);
+        updateUrl();
+        updateTitle();
+        if (!statisticsPanel.hidden) loadStatistics();
+    });
+    statisticsRetry.addEventListener('click', loadStatistics);
+
     function navUrl(uri) {
         return '/nav_to.do?uri=' + encodeURIComponent(uri);
     }
 
     function updateUrl() {
+        if (openStatisticsOnLoad || !statisticsPanel.hidden) params.set('sysparm_statistics', 'true');
+        else params.delete('sysparm_statistics');
         if (updateId) params.set('sysparm_update', updateId);
         else params.delete('sysparm_update');
         if (tableName) params.set('sysparm_table', tableName);
@@ -552,15 +745,24 @@
             gutterContent = node('cp-gutter-content');
         var codeMatches = [];
         node('cp-code-label').textContent = entry.label;
-        node('cp-code-label').title = entry.label;
         node('cp-fallback-label').textContent = entry.label;
         function setFieldStatus(message, error) {
+            ['cp-code-loading', 'cp-fallback-loading'].forEach(function (id) {
+                node(id).hidden = true;
+            });
             ['cp-field-status', 'cp-code-status'].forEach(function (id) {
                 node(id).textContent = message;
                 node(id).className = 'cp-field-status' + (error ? ' cp-error' : '');
             });
             node('cp-status-row').hidden = !message;
             node('cp-code-status').hidden = !message;
+        }
+        function setFieldLoading(message) {
+            setFieldStatus('');
+            ['cp-code-loading', 'cp-fallback-loading'].forEach(function (id) {
+                node(id).querySelector('.cp-sr-only').textContent = message;
+                node(id).hidden = false;
+            });
         }
         var splitter = node('cp-splitter');
         splitter.setAttribute('aria-controls', node('cp-code-monaco').id);
@@ -633,7 +835,6 @@
                     'btn btn-default cp-filter-chip'
                 );
                 button.type = 'button';
-                button.title = button.textContent;
                 button.setAttribute('aria-label', 'Clear ' + entry.name.toLowerCase() + ' filter');
                 button.addEventListener('click', function () {
                     if (entry.name === 'Created by') filterAuthor = null;
@@ -701,9 +902,6 @@
                         href: compareUrl(snapshot.id, data),
                     });
                     if (set) {
-            ['cp-code-loading', 'cp-fallback-loading'].forEach(function (id) {
-                node(id).hidden = true;
-            });
                         items.push({ separator: true });
                         items.push({
                             label: 'Open update set',
@@ -711,13 +909,6 @@
                         });
                     }
                 }
-        function setFieldLoading(message) {
-            setFieldStatus('');
-            ['cp-code-loading', 'cp-fallback-loading'].forEach(function (id) {
-                node(id).querySelector('.cp-sr-only').textContent = message;
-                node(id).hidden = false;
-            });
-        }
                 openMenu(event, cell, items);
             }
             cell.addEventListener('contextmenu', show);
@@ -1025,6 +1216,7 @@
         }
         function setData(result) {
             data = result;
+            statisticsButton.disabled = false;
             data.updates.forEach(function (snapshot) {
                 updates[snapshot.id] = snapshot;
             });
@@ -1146,6 +1338,7 @@
 
     function render(result) {
         data = result;
+        statisticsButton.disabled = false;
         tableName = data.table;
         recordId = data.record;
         updateId = data.selected;
@@ -1191,10 +1384,16 @@
         updateSelect.disabled = false;
         syncUpdateDropdown();
         updateScrollOffset();
+        if (openStatisticsOnLoad) {
+            openStatisticsOnLoad = false;
+            setStatisticsOpen(true);
+            loadStatistics();
+        }
         updateTitle();
     }
 
     function load() {
+        resetStatistics();
         closeMenu(false);
         var request = ++sequence;
         retry.disabled = true;
@@ -1211,19 +1410,24 @@
         document.getElementById('cp-record-link').hidden = true;
         document.getElementById('cp-editor-link').hidden = true;
         status.className = '';
+        document.getElementById('cp-status-wrap').className = '';
+        document.getElementById('cp-status-content').className = '';
         status.textContent = 'Loading update sets…';
         syncTitle(config.description || '');
         if (!updateId && (!tableName || !recordId)) {
             status.textContent = tableName ? 'Select a record.' : 'Select a table.';
             return;
         }
-        function failed(message) {
-            status.className = 'cp-error';
+        function failed(message, emptyHistory) {
+            status.className = emptyHistory ? '' : 'cp-error';
+            document.getElementById('cp-status-wrap').className = emptyHistory ? 'dc-no-versions-overlay' : '';
+            document.getElementById('cp-status-content').className = emptyHistory ? 'dc-no-versions-content' : '';
+            if (emptyHistory) updateSelect.textContent = '';
             status.textContent = message;
             retry.disabled = false;
             updateSelect.disabled = updateSelect.options.length === 0;
             syncUpdateDropdown();
-            syncTitle('Unavailable customer update');
+            syncTitle(emptyHistory ? config.description || '' : 'Unavailable customer update');
         }
         var timer = window.setTimeout(function () {
             if (request !== sequence) return;
@@ -1249,7 +1453,10 @@
             }
             retry.disabled = false;
             if (!result.success) {
-                failed(result.error || 'Credit+ could not load this customer update. Reload to try again.');
+                failed(
+                    result.error || 'Credit+ could not load this customer update. Reload to try again.',
+                    result.errorCode === 'no_customer_updates'
+                );
                 return;
             }
             render(result);
@@ -1263,6 +1470,7 @@
         load();
     });
     window.addEventListener('pagehide', function () {
+        resetStatistics();
         closeMenu(false);
         pickerTimers.forEach(function (timer) {
             window.clearTimeout(timer);

@@ -272,6 +272,25 @@
         .cp-field-status:empty { display: none; }
         .cp-table td.cp-empty { padding: 1.5rem 0.75rem; text-align: center; color: rgb(var(--now-color_text--secondary, 82 82 82)); white-space: normal; }
         .cp-field-status { padding: 0.5rem 0.75rem; }
+        .cp-statistics-control { margin-left: auto; flex-shrink: 0; }
+        #cp-statistics { margin-bottom: 1rem; padding: 1rem; border: 1px solid rgb(var(--now-color_border--secondary, 205 212 217)); border-radius: 4px; background: rgb(var(--now-color_background--primary, 255 255 255)); }
+        #cp-statistics h2 { margin: 0 0 1rem; font-size: 1.25rem; }
+        @keyframes we-skeleton-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+        .cp-stats-skeleton .we-skeleton-bar { display: block; height: 1rem; margin: 0.5rem 0 0.75rem; border-radius: 4px; background: rgb(var(--now-color_background--tertiary, 243 244 246)); animation: we-skeleton-pulse 1.4s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) { .cp-stats-skeleton .we-skeleton-bar { animation: none; } }
+        .cp-stats-facts, .cp-stats-boards { display: grid; gap: 1rem; }
+        .cp-stats-facts { grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); margin: 0 0 1.5rem; }
+        .cp-stats-facts dt { color: rgb(var(--now-color_text--secondary, 82 82 82)); font-size: 0.875rem; }
+        .cp-stats-facts dd { margin: 0.25rem 0 0; font-size: 1.125rem; overflow-wrap: anywhere; }
+        .cp-stats-boards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .cp-stats-board { min-width: 0; padding: 0.75rem; border: 1px solid rgb(var(--now-color_border--secondary, 205 212 217)); border-radius: 4px; }
+        .cp-stats-board h3 { margin: 0 0 0.75rem; font-size: 1rem; }
+        .cp-stats-board ol { margin: 0; padding-left: 1.5rem; }
+        .cp-stats-board li { padding: 0.375rem 0; }
+        .cp-stats-entry { display: flex; gap: 1rem; align-items: baseline; }
+        .cp-stats-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .cp-stats-score { white-space: nowrap; font-variant-numeric: tabular-nums; }
+        @media (max-width: 600px) { .cp-stats-boards { grid-template-columns: minmax(0, 1fr); } }
         /* Compare+ version dropdown, with date, update set and author columns. */
         .cp-update-control { flex: 1; }
         #credit-plus .cp-control label { margin: 0; }
@@ -295,6 +314,9 @@
         button, a { touch-action: manipulation; }
         .dc-body { flex: 1; padding: 1rem 1.25rem 2rem; display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; }
         .cp-time { color: rgb(var(--now-color_text--secondary, 82 82 82)); }
+        .dc-no-versions-overlay { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: rgba(var(--now-color_background--primary, 255 255 255), 0.92); backdrop-filter: blur(3px); }
+        .dc-no-versions-content { text-align: center; padding: 2rem; }
+        .dc-no-versions-content p { font-size: var(--now-font-size--lg); color: rgb(var(--now-color_text--secondary, 82 82 82)); margin-bottom: 1rem; }
         #cp-status:empty { display: none; }
         #cp-status.cp-error { border-left: 3px solid rgb(var(--now-color--critical-2, 191 41 41)); padding: 0.75rem 1rem; background: rgba(191, 41, 41, 0.06); }
         #cp-warnings { border: 1px solid rgba(var(--now-color_border--secondary, 205 212 217), 0.8); border-radius: 4px; padding: 0.5rem 0.75rem; color: rgb(var(--now-color_text--secondary, 82 82 82)); }
@@ -318,9 +340,13 @@
         .cp-code.monaco-editor { position: static; background: transparent; outline: none; }
         .cp-code-headings, .cp-code-body { display: grid; grid-template-columns: minmax(0, var(--cp-attribution-width, 34%)) 6px minmax(0, 1fr); }
         .cp-code-headings { background: rgb(var(--now-color_background--secondary, 246 247 249)); border-bottom: 1px solid rgb(var(--now-color_border--secondary, 228 230 235)); font-weight: 600; }
-        .cp-code-headings .cp-code-heading { padding: 0.5rem 0.75rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.375rem; min-width: 0; }
-        .cp-code-heading .cp-heading-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .cp-code-headings .cp-code-heading { padding: 0.5rem 0.75rem; display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 0.375rem; min-width: 0; }
+        .cp-code-heading .cp-heading-label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .cp-code-heading .btn { flex-shrink: 0; }
+        .cp-field-loading { display: inline-block; margin-left: 0.375rem; }
+        .cp-field-loading .icon-loading { display: inline-block; width: 1em; height: 1em; animation: cpSpin 0.75s linear infinite; }
+        @keyframes cpSpin { to { transform: rotate(360deg); } }
+        @media (prefers-reduced-motion: reduce) { .cp-field-loading .icon-loading { animation: none; } }
         .cp-gutter-head { align-items: center; display: grid; grid-template-columns: 28% 23% 49%; }
         .cp-gutter-head span { padding: 0.5rem 0.75rem; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .cp-code-body { height: clamp(20rem, 60vh, 45rem); background: rgb(var(--now-color_background--primary, 255 255 255)); }
@@ -338,10 +364,6 @@
         .cp-context-menu .context_item { display: block; text-decoration: none; cursor: pointer; }
         .cp-context-menu .context_item.is-disabled { cursor: default; }
         .cp-context-menu .icon-open-document-new-tab { margin-left: 0.5rem; }
-        .cp-field-loading { display: inline-block; margin-left: 0.375rem; }
-        .cp-field-loading .icon-loading { display: inline-block; width: 1em; height: 1em; animation: cpSpin 0.75s linear infinite; }
-        @keyframes cpSpin { to { transform: rotate(360deg); } }
-        @media (prefers-reduced-motion: reduce) { .cp-field-loading .icon-loading { animation: none; } }
         .cp-active-filters { display: flex; flex-wrap: wrap; gap: 0.375rem; padding: 0.375rem 0.75rem; }
         .cp-filter-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         /* ServiceNow's Monaco bundle omits the diff highlight styles. Match Compare+. */
@@ -583,11 +605,18 @@
                         <button id="cp-update-button" type="button" class="btn btn-default dc-version-dd-btn" aria-haspopup="listbox" aria-expanded="false" aria-controls="cp-update-menu" disabled="disabled"><span class="dc-version-dd-btn-label">Update set</span><span class="dc-version-dd-btn-chevron"><span class="caret"></span></span></button>
                         <div id="cp-update-menu" class="dc-version-dd-menu" role="listbox" aria-label="Update set" hidden="hidden"></div>
                     </div></div>
+                    <div class="dc-header-btns cp-statistics-control"><button id="cp-statistics-button" type="button" class="btn btn-default" aria-label="Statistics" aria-pressed="false" aria-expanded="false" aria-controls="cp-statistics" disabled="disabled"><i class="icon-chart-pi" aria-hidden="true"></i></button></div>
                 </div>
             </header>
             <div class="dc-body">
-                <p id="cp-status" role="status" aria-live="polite">Loading update sets…</p>
+                <div id="cp-status-wrap"><div id="cp-status-content"><p id="cp-status" role="status" aria-live="polite">Loading update sets…</p></div></div>
                 <details id="cp-warnings" hidden="hidden"><summary>History gaps</summary><div id="cp-warning-text"></div></details>
+                <section id="cp-statistics" aria-labelledby="cp-statistics-heading" hidden="hidden">
+                    <h2 id="cp-statistics-heading">Statistics &#128202;</h2>
+                    <p id="cp-statistics-status" role="status" aria-live="polite"></p>
+                    <button id="cp-statistics-retry" type="button" class="btn btn-default" hidden="hidden">Retry statistics</button>
+                    <div id="cp-statistics-content"></div>
+                </section>
                 <div id="cp-results" hidden="hidden"></div>
                 <template id="cp-field-template">
                     <button id="cp-field-retry" type="button" class="btn btn-default" hidden="hidden">Retry field</button>
@@ -595,7 +624,7 @@
                     <div class="cp-field-code">
                         <div id="cp-active-filters" class="cp-active-filters" hidden="hidden" aria-label="Active filters"></div>
                         <div id="cp-code-view" hidden="hidden">
-                            <div class="cp-code-headings"><div class="cp-gutter-head"><span class="cp-time-heading">Updated</span><span>Created by</span><span>Update set</span></div><span aria-hidden="true"></span><div class="cp-code-heading"><span class="cp-heading-label"><span id="cp-code-label"></span><span id="cp-code-loading" class="cp-field-loading" role="status" aria-live="polite" hidden="hidden"><i class="icon-loading" aria-hidden="true"></i><span class="cp-sr-only">Loading comparison…</span></span></span><button id="cp-diff-close" class="btn btn-default btn-sm" type="button" hidden="hidden">Close comparison</button></div></div>
+                            <div class="cp-code-headings"><div class="cp-gutter-head"><span class="cp-time-heading">Updated</span><span>Created by</span><span>Update set</span></div><span aria-hidden="true"></span><div class="cp-code-heading"><span class="cp-heading-label"><span id="cp-code-label"></span><span id="cp-code-loading" class="cp-field-loading" role="status" aria-live="polite" hidden="hidden"><i class="icon-loading" aria-hidden="true"></i><span class="cp-sr-only">Loading comparison…</span></span></span><button id="cp-diff-close" class="btn btn-default btn-sm" type="button" hidden="hidden">Stop comparing</button></div></div>
                             <div id="cp-code-status" class="cp-field-status" role="status" aria-live="polite" hidden="hidden"></div>
                             <div class="cp-code-body">
                                 <div id="cp-gutter" class="cp-gutter"><div id="cp-gutter-content" class="cp-gutter-content"><table class="cp-table" role="table" aria-label="Historical code line attribution">

@@ -114,6 +114,7 @@ test('fields start collapsed, author is plain text, and Compare+ links open safe
             assert.equal(await compare.getAttribute('href'), null);
             assert.equal(await page.locator('#cp-context-menu [role=menuitem]').last().evaluate(node => node.previousElementSibling.getAttribute('role')), 'separator');
             assert.equal(await page.locator('#cp-inspector').count(), 0);
+            assert.equal(await page.locator('.cp-active-filters button[title], .cp-heading-label [title]').count(), 0);
             assert.equal(await page.locator('#cp-context-menu .icon-open-document-new-tab').count(), 2);
             await page.keyboard.press('Escape');
             assert.equal(await page.locator('#cp-retry .icon-refresh').count(), 1);
@@ -387,7 +388,7 @@ test('Compare+ header pickers search and navigate safely, discarding old record-
                     if (params.sysparm_name === 'getTables') callback(JSON.stringify({ success: true, results: [{ id: 'sp_widget', text: 'Widget' }], has_more: true }));
                     else if (params.sysparm_name === 'getRecords') window.pendingRecords = callback;
                     else if (params.sysparm_record) {
-                        if (params.sysparm_record === '0'.repeat(32)) { callback(JSON.stringify({ success: false, error: 'No Customer Updates for this record.' })); return; }
+                        if (params.sysparm_record === '0'.repeat(32)) { callback(JSON.stringify({ success: false, error: 'No Customer Updates for this record.', errorCode: 'no_customer_updates' })); return; }
                         const id = 'e'.repeat(32);
                         callback(JSON.stringify({ ...fixture, table: params.sysparm_table, tableLabel: 'Script Include', record: params.sysparm_record, recordName: 'Selected include', selected: id, lines: [{ number: 1, text: 'selected();', update: id }], updates: [{ ...fixture.updates[1], id }], updateSets: [{ id, number: 1, name: 'Selected set', time: '2026-10-01 00:00:00' }] }));
                     } else callback(JSON.stringify(fixture));
@@ -417,10 +418,16 @@ test('Compare+ header pickers search and navigate safely, discarding old record-
         assert.equal(await page.evaluate(() => window.pickers['cp-record-input'].result), null, 'Stale results from another table are discarded');
         await page.evaluate(() => window.choosePicker('cp-record-input', { id: '0'.repeat(32), text: 'No history' }));
         assert.match(await page.locator('#cp-status').textContent(), /No Customer Updates/);
+        assert.equal(await page.locator('#cp-status').getAttribute('class'), '');
+        assert.equal(await page.locator('#cp-status-wrap').getAttribute('class'), 'dc-no-versions-overlay');
+        assert.equal(await page.locator('#cp-status-content').getAttribute('class'), 'dc-no-versions-content');
+        assert.equal(await page.locator('#cp-status-wrap').evaluate(node => getComputedStyle(node).justifyContent), 'center');
+        assert.equal(await page.locator('#cp-update-button').isDisabled(), true);
         assert.equal(await page.evaluate(() => window.pickers['cp-record-input'].enabled), true);
         await page.evaluate(() => window.choosePicker('cp-record-input', { id: 'd'.repeat(32), text: 'Selected include' }));
         assert.equal(await page.locator('.cp-field-section[open]').count(), 0);
         assert.equal(await page.title(), 'Credit: Selected include (Script Include) - ServiceNow');
+        assert.equal(await page.locator('#cp-status-wrap').getAttribute('class'), '');
         assert.equal(new URL(page.url()).searchParams.get('sysparm_table'), 'sys_script_include');
         assert.equal(new URL(page.url()).searchParams.get('sysparm_record'), 'd'.repeat(32));
         assert.equal(new URL(page.url()).searchParams.get('sysparm_update'), 'e'.repeat(32));
@@ -639,6 +646,9 @@ test('closing or reloading discards late inline comparisons and timeouts keep at
         await compare();
         assert.equal(await part(section, 'cp-code-label').textContent(), 'Server script');
         assert.equal(await part(section, 'cp-diff-close').evaluate(node => node.parentElement.className), 'cp-code-heading');
+        assert.equal(await part(section, 'cp-diff-close').textContent(), 'Stop comparing');
+        assert.equal(await part(section, 'cp-code-label').getAttribute('title'), null);
+        assert.equal(await part(section, 'cp-diff-close').evaluate(node => { const gap = node.getBoundingClientRect().left - node.previousElementSibling.getBoundingClientRect().right; return gap > 0 && gap <= 8; }), true);
         assert.equal(await part(section, 'cp-code-status').isVisible(), false);
         assert.equal(await part(section, 'cp-code-loading').isVisible(), true);
         assert.equal(await part(section, 'cp-code-loading').textContent(), 'Loading comparison…');
@@ -684,7 +694,7 @@ test('Polaris URL, record title and History follow update selection and survive 
         async function initialiseFrame() {
             const frame = page.frames()[1];
             await frame.evaluate(fixture => {
-                window.historyEntries = []; window.notifications = [];
+                window.historyEntries = []; window.notifications = []; window.statisticsCalls = 0;
                 window.WE_HISTORY_SYNC = { set: entry => window.historyEntries.push(entry) };
                 window.CustomEvent.fireTop = (event, win) => {
                     window.notifications.push(event);
@@ -692,7 +702,12 @@ test('Polaris URL, record title and History follow update selection and survive 
                 };
                 window.GlideAjax = function () {
                     const params = {}; this.addParam = (k,v) => params[k]=v;
-                    this.getXMLAnswer = cb => cb(JSON.stringify({...fixture, selected:params.sysparm_update, field:params.sysparm_field||'script'}));
+                    this.getXMLAnswer = cb => {
+                        if (params.sysparm_name === 'getStatistics') {
+                            window.statisticsCalls++;
+                            cb(JSON.stringify({success:true,ageDays:1,founder:'Ada',created:'',updateSetCount:1,contributorCount:1,added:1,removed:0,creators:[],destroyers:[],creatorSets:[],destroyerSets:[]}));
+                        } else cb(JSON.stringify({...fixture, selected:params.sysparm_update, field:params.sysparm_field||'script'}));
+                    };
                 };
             }, fixture);
             await frame.addScriptTag({ content: client });
@@ -708,9 +723,145 @@ test('Polaris URL, record title and History follow update selection and survive 
         assert.match(entry.title, /My widget \(Widget\)/);
         assert.equal(new URL('https://credit.test/' + entry.url).searchParams.get('sysparm_update'), original);
         assert.ok(entry.match.includes('url=' + child.slice(1)));
+        assert.equal(await frame.evaluate(() => window.statisticsCalls), 0);
+        await frame.getByRole('button', { name: 'Statistics', exact: true }).click();
+        assert.equal(new URL(frame.url()).searchParams.get('sysparm_statistics'), 'true');
+        assert.equal(new URL('https://credit.test/' + decodeURIComponent(new URL(page.url()).pathname.slice(prefix.length))).searchParams.get('sysparm_statistics'), 'true');
+        assert.equal(await frame.locator('#cp-statistics-button').getAttribute('aria-pressed'), 'true');
+        assert.equal(await frame.locator('#cp-statistics-button').evaluate(node => node.classList.contains('active')), true);
         await page.reload();
         frame = await initialiseFrame();
         assert.equal(await frame.locator('#cp-inspect-version').inputValue(), original);
+        assert.equal(await frame.locator('#cp-statistics').isVisible(), true);
+        assert.equal(await frame.evaluate(() => window.statisticsCalls), 1);
+        assert.equal(await frame.locator('#cp-statistics-button').getAttribute('aria-pressed'), 'true');
+        assert.equal(await frame.locator('#cp-statistics-button').evaluate(node => node.classList.contains('active')), true);
+        await frame.getByRole('button', { name: 'Statistics', exact: true }).click();
+        assert.equal(new URL(frame.url()).searchParams.has('sysparm_statistics'), false);
+        assert.equal(new URL('https://credit.test/' + decodeURIComponent(new URL(page.url()).pathname.slice(prefix.length))).searchParams.has('sysparm_statistics'), false);
+        assert.equal(await frame.locator('#cp-statistics-button').getAttribute('aria-pressed'), 'false');
+        assert.equal(await frame.locator('#cp-statistics-button').evaluate(node => node.classList.contains('active')), false);
+        assert.equal(await frame.locator('#cp-statistics').isVisible(), false);
         await page.waitForFunction(() => document.getElementById('shell-title').textContent.includes('My widget (Widget)'));
+    } finally { await browser.close(); }
+});
+
+test('statistics load only on demand, render safe leaderboards, cache while open, and reset on selection', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        for (const width of [1280, 390]) {
+            const page = await browser.newPage(); await initialise(page, width);
+            await page.evaluate(() => {
+                const Original = window.GlideAjax;
+                window.statsRequests = [];
+                window.GlideAjax = function (name) {
+                    const ga = new Original(name), params = {};
+                    this.addParam = (key, value) => { params[key] = value; ga.addParam(key, value); };
+                    this.getXMLAnswer = callback => {
+                        if (params.sysparm_name === 'getStatistics') window.statsRequests.push({ params, callback });
+                        else ga.getXMLAnswer(callback);
+                    };
+                };
+                window.statsFixture = { success: true, ageDays: 42, founder: 'Ada', founderUserId: '3'.repeat(32), creationSource: 'record', created: '2026-09-01 12:00:00', updateSetCount: 12, unknownSetCount: 0, contributorCount: 5, fieldCount: 4, added: 1024, removed: 512, gaps: 0,
+                    creators: [{ name: '<img src=x onerror=alert(1)>', added: 512 }, { name: 'Grace', added: 300, userId: '4'.repeat(32) }, { name: 'Linus', added: 212 }, { name: 'Fourth', added: 0 }], destroyers: [{ name: 'Grace', removed: 512, userId: '4'.repeat(32) }],
+                    creatorSets: [{ name: 'First release', added: 800, updateSet: { id: '1'.repeat(32), table: 'sys_update_set' } }, { name: 'Unknown set', added: 0 }, { name: 'Invalid reference', added: 0, updateSet: { id: 'javascript:alert(1)', table: 'sys_user' } }], destroyerSets: [{ name: 'Imported set', removed: 512, updateSet: { id: '2'.repeat(32), table: 'sys_remote_update_set' } }], busiestField: { name: 'Server script', added: 800, removed: 200 }, biggestMakeover: { name: 'First release', added: 800, removed: 0, updateSet: { id: '1'.repeat(32), table: 'sys_update_set' } } };
+            });
+            assert.equal(await page.evaluate(() => window.statsRequests.length), 0);
+            const button = page.getByRole('button', { name: 'Statistics', exact: true });
+            assert.equal(await button.locator('.icon-chart-pi').count(), 1);
+            assert.equal(await button.evaluate(node => { const dropdown = document.getElementById('cp-update-button').getBoundingClientRect(), icon = node.getBoundingClientRect(); return icon.left >= dropdown.right && icon.top < dropdown.bottom; }), true);
+            await button.click();
+            assert.equal(await page.locator('#cp-statistics-status').textContent(), 'Loading statistics…');
+            assert.equal(await page.locator('.cp-stats-skeleton').getAttribute('aria-hidden'), 'true');
+            assert.equal(await page.locator('.cp-stats-skeleton .we-skeleton-bar').count(), 32);
+            assert.equal(await page.locator('.we-skeleton-bar').first().evaluate(node => getComputedStyle(node).animationName), 'we-skeleton-pulse');
+            await page.screenshot({ path: '/tmp/credit-statistics-loading-' + width + '.png', fullPage: true });
+            await page.emulateMedia({ reducedMotion: 'reduce' });
+            assert.equal(await page.locator('.we-skeleton-bar').first().evaluate(node => getComputedStyle(node).animationName), 'none');
+            await page.emulateMedia({ reducedMotion: 'no-preference' });
+            assert.equal(await page.evaluate(() => window.statsRequests.length), 1);
+            await button.click(); await button.click(); // Do not duplicate in-flight requests.
+            assert.equal(await page.evaluate(() => window.statsRequests.length), 1);
+            await page.evaluate(() => window.statsRequests[0].callback(JSON.stringify(window.statsFixture)));
+            assert.equal(await page.locator('.cp-stats-board').count(), 4);
+            assert.equal(await page.locator('.cp-stats-board').first().locator('li').count(), 4);
+            assert.equal(await page.locator('#cp-statistics img').count(), 0);
+            assert.equal(await page.locator('#cp-statistics-heading').textContent(), 'Statistics 📊');
+            assert.deepEqual(await page.locator('.cp-stats-board h3').allTextContents(), ['Builders 👷 · Created by 👤', 'Destroyers 💥 · Created by 👤', 'Expansion packs 🏗️ · Update sets 📦', 'Demolition kits 🧨 · Update sets 📦']);
+            assert.equal(await page.locator('.cp-stats-skeleton').count(), 0);
+            assert.match(await page.locator('.cp-stats-facts').textContent(), /42 days/);
+            assert.equal(await page.locator('.cp-stats-note').count(), 0);
+            assert.deepEqual(await page.locator('.cp-stats-board').first().locator('li [aria-hidden=true]').allTextContents(), ['🥇', '🥈', '🥉']);
+            assert.match(await page.locator('.cp-stats-facts').textContent(), /Age 👶/);
+            assert.match(await page.locator('.cp-stats-facts').textContent(), /Biggest makeover 💄/);
+            const links = page.locator('#cp-statistics-content a');
+            assert.equal(await links.count(), 6);
+            assert.deepEqual(await links.evaluateAll(nodes => nodes.map(node => node.getAttribute('href'))), [
+                '/nav_to.do?uri=' + encodeURIComponent('sys_user.do?sys_id=' + '3'.repeat(32)),
+                '/nav_to.do?uri=' + encodeURIComponent('sys_update_set.do?sys_id=' + '1'.repeat(32)),
+                '/nav_to.do?uri=' + encodeURIComponent('sys_user.do?sys_id=' + '4'.repeat(32)),
+                '/nav_to.do?uri=' + encodeURIComponent('sys_user.do?sys_id=' + '4'.repeat(32)),
+                '/nav_to.do?uri=' + encodeURIComponent('sys_update_set.do?sys_id=' + '1'.repeat(32)),
+                '/nav_to.do?uri=' + encodeURIComponent('sys_remote_update_set.do?sys_id=' + '2'.repeat(32))
+            ]);
+            assert.equal(await links.evaluateAll(nodes => nodes.every(node => !node.hasAttribute('target'))), true);
+            assert.equal(await page.locator('#cp-statistics [title], #cp-statistics .icon-open-document-new-tab').count(), 0);
+            assert.equal(await page.locator('.cp-stats-board').first().locator('li .cp-stats-name').first().textContent(), '<img src=x onerror=alert(1)> 🥇');
+            assert.equal(await page.locator('#cp-statistics').evaluate(node => node.scrollWidth <= node.clientWidth), true);
+            await button.click(); await button.click();
+            assert.equal(await page.evaluate(() => window.statsRequests.length), 1);
+            await page.screenshot({ path: '/tmp/credit-statistics-' + width + '.png', fullPage: true });
+            await chooseSet(page, original);
+            assert.equal(await page.locator('#cp-statistics').isVisible(), false);
+            await button.click();
+            assert.equal(await page.evaluate(() => window.statsRequests[1].params.sysparm_update), original);
+            await chooseSet(page, update);
+            await page.evaluate(() => window.statsRequests[1].callback(JSON.stringify(window.statsFixture)));
+            assert.equal(await page.locator('#cp-statistics-content').textContent(), '');
+            await button.click();
+            await page.evaluate(() => window.statsRequests[2].callback(JSON.stringify({ success: false, error: 'History unavailable.' })));
+            assert.equal(await page.locator('#cp-statistics-status').textContent(), 'History unavailable.');
+            await page.getByRole('button', { name: 'Retry statistics' }).click();
+            await page.evaluate(() => window.statsRequests[3].callback(JSON.stringify(window.statsFixture)));
+            assert.equal(await page.locator('.cp-stats-board').count(), 4);
+            await page.close();
+        }
+    } finally { await browser.close(); }
+});
+
+test('statistics timeout allows retry and discards the expired response', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage(); await initialise(page);
+        await page.evaluate(() => {
+            const originalTimeout = window.setTimeout;
+            window.setTimeout = (callback, delay) => { if (delay === 30000) { window.expireStats = callback; return 0; } return originalTimeout(callback, delay); };
+            window.statsCallbacks = [];
+            window.GlideAjax = function () { this.addParam = () => {}; this.getXMLAnswer = callback => window.statsCallbacks.push(callback); };
+        });
+        await page.getByRole('button', { name: 'Statistics', exact: true }).click();
+        await page.evaluate(() => window.expireStats());
+        assert.match(await page.locator('#cp-statistics-status').textContent(), /timed out/);
+        assert.equal(await page.locator('.cp-stats-skeleton').count(), 0);
+        await page.evaluate(() => window.statsCallbacks[0](JSON.stringify({success:false,error:'Stale error'})));
+        assert.match(await page.locator('#cp-statistics-status').textContent(), /timed out/);
+        assert.equal(await page.locator('.cp-stats-skeleton').count(), 0);
+        await page.getByRole('button', { name: 'Retry statistics' }).click();
+        await page.evaluate(() => window.statsCallbacks[1]('not JSON'));
+        assert.equal(await page.locator('#cp-statistics-status').textContent(), 'Statistics could not be loaded.');
+    } finally { await browser.close(); }
+});
+
+
+test('statistics age emoji change at the specified day boundaries', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage(); await initialise(page);
+        for (const [ageDays, icon] of [[null, '❓'], [0, '👶'], [89, '👶'], [90, '🧒'], [364, '🧒'], [365, '🧑'], [999, '🧑'], [1000, '🧓']]) {
+            await page.locator('#cp-retry').click();
+            await page.evaluate(ageDays => window.nextAnswer = { success: true, ageDays, founder: '', created: '', updateSetCount: 0, contributorCount: 0, added: 0, removed: 0, creators: [], destroyers: [], creatorSets: [], destroyerSets: [] }, ageDays);
+            await page.getByRole('button', { name: 'Statistics', exact: true }).click();
+            assert.equal(await page.locator('.cp-stats-facts dt').first().textContent(), 'Age ' + icon);
+        }
     } finally { await browser.close(); }
 });

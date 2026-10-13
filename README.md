@@ -98,6 +98,7 @@ Export selected ServiceNow records as XML context for AI tools.
 - Open Credit+ from a Customer Update list context menu, including Updates related lists.
 - Trace script lines across update sets to their captured authors, ignoring whitespace and moved blocks.
 - Expand scripts, HTML templates and conditions independently, with syntax colouring, linked update sets, inline attribution filters and Compare+ comparisons.
+- Open Statistics for builder/destroyer and update-set leaderboards, record age, founder and update-set highlights.
 - Require administrator access for both the viewer and server API.
 
 ---

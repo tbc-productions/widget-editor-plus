@@ -35,6 +35,171 @@ CreditPlus.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 )
             );
         } catch (e) {
+            return JSON.stringify({ success: false, error: e.message, errorCode: e.code || '' });
+        }
+    },
+
+    getStatistics: function () {
+        if (!gs.hasRole('admin')) return JSON.stringify({ success: false, error: 'Administrator access is required.' });
+        try {
+            var selected = this._customerUpdate(this.getParameter('sysparm_update')),
+                target = this._payload(selected),
+                fields = this._fields(target.table),
+                name = String(selected.getValue('name') || '');
+            if (!fields.length || !name) throw new Error('This customer update has no code history.');
+            var history = this._customerUpdates(name, String(selected.getUniqueValue())),
+                authors = Object.create(null),
+                sets = [],
+                fieldTotals = fields.map(function (field) {
+                    return { name: field.label, added: 0, removed: 0 };
+                }),
+                previous = fields.map(function () {
+                    return [];
+                }),
+                budget = { remaining: 10000000 },
+                gaps = 0,
+                added = 0,
+                removed = 0,
+                lastTime = '',
+                knownSets = 0;
+            if (!history.length) throw new Error('No Customer Updates for this record.');
+            for (var h = 0; h < history.length; h++) {
+                var entry = history[h],
+                    parsed = entry.parsed;
+                if (!parsed)
+                    throw new Error('A historical payload is unavailable. Statistics could not be calculated.');
+                if (parsed.table !== target.table || parsed.id !== target.id)
+                    throw new Error('History payloads identify different records.');
+                if (lastTime === entry.orderTime)
+                    throw new Error(
+                        'History contains tied Customer Update timestamps. The order cannot be determined safely.'
+                    );
+                lastTime = entry.orderTime;
+                var author =
+                        authors[entry.author] || (authors[entry.author] = { name: entry.author, added: 0, removed: 0 }),
+                    set = {
+                        name: entry.updateSet ? entry.updateSet.name : 'Unknown update set',
+                        updateSet: entry.updateSet,
+                        added: 0,
+                        removed: 0,
+                    };
+                sets.push(set);
+                if (entry.updateSet) knownSets++;
+                for (var f = 0; f < fields.length; f++) {
+                    var field = fields[f].name;
+                    if (parsed.action !== 'DELETE' && !Object.prototype.hasOwnProperty.call(parsed.values, field)) {
+                        previous[f] = null;
+                        gaps++;
+                        continue;
+                    }
+                    var lines = this._lines(
+                        parsed.action === 'DELETE' ? '' : String(parsed.values[field]).replace(/\r\n?/g, '\n')
+                    );
+                    if (lines.length > 5000) throw new Error('Script exceeds the 5,000 line comparison limit.');
+                    // A field missing from a snapshot breaks the chain; do not invent additions after that gap.
+                    if (previous[f] !== null) {
+                        var mapping = this._match(previous[f], lines, budget),
+                            matched = 0;
+                        for (var i = 0; i < lines.length; i++) if (mapping[i] !== undefined) matched++;
+                        var plus = lines.length - matched,
+                            minus = previous[f].length - matched;
+                        author.added += plus;
+                        author.removed += minus;
+                        set.added += plus;
+                        set.removed += minus;
+                        fieldTotals[f].added += plus;
+                        fieldTotals[f].removed += minus;
+                        added += plus;
+                        removed += minus;
+                    }
+                    previous[f] = lines;
+                }
+            }
+            function rank(entries, metric) {
+                return entries.sort(function (a, b) {
+                    return b[metric] - a[metric] || a.name.localeCompare(b.name);
+                });
+            }
+            function busiest(entries) {
+                return (
+                    entries
+                        .filter(function (entry) {
+                            return entry.added + entry.removed > 0;
+                        })
+                        .sort(function (a, b) {
+                            return b.added + b.removed - a.added - a.removed || a.name.localeCompare(b.name);
+                        })[0] || null
+                );
+            }
+            var first = history[0].parsed.values,
+                founder = String(first.sys_created_by || ''),
+                created = String(first.sys_created_on || ''),
+                record = new GlideRecordSecure(target.table),
+                creationSource = 'snapshot';
+            if (record.get(target.id) && record.canRead()) {
+                founder = record.getElement('sys_created_by').canRead()
+                    ? String(record.getValue('sys_created_by') || '')
+                    : '';
+                created = record.getElement('sys_created_on').canRead()
+                    ? String(record.getValue('sys_created_on') || '')
+                    : '';
+                creationSource = 'record';
+            }
+            var userNames = Object.keys(authors),
+                userIds = Object.create(null);
+            if (founder && userNames.indexOf(founder) === -1) userNames.push(founder);
+            if (userNames.length) {
+                var users = new GlideRecordSecure('sys_user'),
+                    userQuery = users.addQuery('user_name', userNames[0]);
+                for (var u = 1; u < userNames.length; u++) userQuery.addOrCondition('user_name', userNames[u]);
+                users.query();
+                while (users.next()) {
+                    if (!users.canRead() || !users.getElement('user_name').canRead()) continue;
+                    userIds[String(users.getValue('user_name'))] = String(users.getUniqueValue());
+                }
+                Object.keys(authors).forEach(function (name) {
+                    authors[name].userId = userIds[name] || '';
+                });
+            }
+            var ageDays = null;
+            if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(created)) {
+                var birth = new GlideDateTime(created),
+                    now = new GlideDateTime();
+                if (birth.isValid() && birth.getNumericValue() <= now.getNumericValue())
+                    ageDays = Math.floor((now.getNumericValue() - birth.getNumericValue()) / 86400000);
+            }
+            return JSON.stringify({
+                success: true,
+                founder: founder,
+                founderUserId: userIds[founder] || '',
+                created: created,
+                creationSource: creationSource,
+                ageDays: ageDays,
+                updateSetCount: knownSets,
+                unknownSetCount: history.length - knownSets,
+                contributorCount: Object.keys(authors).length,
+                fieldCount: fields.length,
+                added: added,
+                removed: removed,
+                creators: rank(
+                    Object.keys(authors).map(function (key) {
+                        return authors[key];
+                    }),
+                    'added'
+                ),
+                destroyers: rank(
+                    Object.keys(authors).map(function (key) {
+                        return authors[key];
+                    }),
+                    'removed'
+                ),
+                creatorSets: rank(sets.slice(), 'added'),
+                destroyerSets: rank(sets.slice(), 'removed'),
+                busiestField: busiest(fieldTotals),
+                biggestMakeover: busiest(sets),
+                gaps: gaps,
+            });
+        } catch (e) {
             return JSON.stringify({ success: false, error: e.message });
         }
     },
@@ -191,7 +356,11 @@ CreditPlus.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             if (!/^[a-z_][a-z0-9_]*$/i.test(table) || !/^[0-9a-f]{32}$/.test(recordId) || !this._fields(table).length)
                 throw new Error('Choose a valid table and record with code fields.');
             history = this._customerUpdates(table + '_' + recordId, '');
-            if (!history.length) throw new Error('No Customer Updates for this record.');
+            if (!history.length) {
+                var emptyHistory = new Error('No Customer Updates for this record.');
+                emptyHistory.code = 'no_customer_updates';
+                throw emptyHistory;
+            }
             updateId = history[history.length - 1].id;
         }
         var selected = this._customerUpdate(updateId),
