@@ -1056,7 +1056,58 @@ test('dragging the shared splitter shrinks every attribution column and keeps he
             }
             await splitter.focus(); await page.keyboard.press('Home');
             assert.equal(await splitter.getAttribute('aria-valuenow'), '10');
+            await page.keyboard.press('End');
+            if (width > 760) {
+                const timestamps = await page.locator('.cp-attribution tr:first-child .cp-time').evaluateAll(cells => cells.map(cell => ({
+                    width: cell.getBoundingClientRect().width,
+                    cap: parseFloat(cell.closest('.cp-field-section').style.getPropertyValue('--cp-time-width')),
+                    clipped: cell.scrollWidth > cell.clientWidth,
+                    headerWidth: cell.closest('.cp-field-section').querySelector('.cp-time-heading').getBoundingClientRect().width
+                })));
+                timestamps.forEach(time => {
+                    assert.ok(Math.abs(time.width - time.cap) < 1, 'Updated stops growing once a full timestamp fits');
+                    assert.ok(Math.abs(time.width - time.headerWidth) < 1, 'Updated header matches the capped cells');
+                    assert.equal(time.clipped, false, 'Full timestamp fits at the maximum width');
+                });
+                await page.addStyleTag({ content: '#credit-plus .cp-gutter td { padding-left: 19px; padding-right: 19px; }' });
+                await page.evaluate(() => creditEditor.updateOptions({ fontFamily: 'monospace', fontSize: 18, letterSpacing: 1.25 }));
+                await page.waitForFunction(() => document.querySelector('.cp-field-section[data-field="template"] .cp-gutter-content').style.fontSize === '18px');
+                const enlarged = await section.locator('.cp-attribution tr:first-child .cp-time').evaluate(cell => ({
+                    width: cell.getBoundingClientRect().width, clipped: cell.scrollWidth > cell.clientWidth,
+                    headerWidth: cell.closest('.cp-field-section').querySelector('.cp-time-heading').getBoundingClientRect().width
+                }));
+                assert.ok(enlarged.width > timestamps[1].width, 'Cap follows the rendered font and platform padding');
+                assert.equal(enlarged.clipped, false, 'A larger timestamp is still fully visible');
+                assert.ok(Math.abs(enlarged.width - enlarged.headerWidth) < 1);
+            }
             await page.close();
         }
+    } finally { await browser.close(); }
+});
+
+test('Statistics scrolls smoothly after opening, never on closing, and respects reduced motion', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage(); await initialise(page);
+        await page.evaluate(() => {
+            window.statisticsScrolls = [];
+            const panel = document.getElementById('cp-statistics'), scroll = panel.scrollIntoView;
+            panel.scrollIntoView = function (options) {
+                window.statisticsScrolls.push({ behavior: options.behavior, visible: getComputedStyle(panel).display !== 'none' });
+                scroll.call(panel, options);
+            };
+            window.GlideAjax = function () { this.addParam = () => {}; this.getXMLAnswer = () => {}; };
+        });
+        const button = page.getByRole('button', { name: 'Statistics', exact: true });
+        await button.click();
+        await page.waitForFunction(() => statisticsScrolls.length === 1);
+        assert.deepEqual(await page.evaluate(() => statisticsScrolls), [{ behavior: 'smooth', visible: true }]);
+        await button.click();
+        await page.evaluate(() => new Promise(requestAnimationFrame));
+        assert.equal(await page.evaluate(() => statisticsScrolls.length), 1);
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        await button.click();
+        await page.waitForFunction(() => statisticsScrolls.length === 2);
+        assert.deepEqual(await page.evaluate(() => statisticsScrolls[1]), { behavior: 'auto', visible: true });
     } finally { await browser.close(); }
 });

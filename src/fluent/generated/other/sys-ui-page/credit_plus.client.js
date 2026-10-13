@@ -57,17 +57,34 @@
                 }
 
                 var statisticsRequest = 0,
-                    statisticsTimer;
+                    statisticsTimer,
+                    statisticsScrollFrame;
                 ctrl.medals = ['\uD83C\uDFC6', '\uD83E\uDD48', '\uD83E\uDD49'];
                 ctrl.skeletonFacts = [0, 1, 2, 3, 4, 5, 6, 7];
                 ctrl.skeletonBoards = [0, 1, 2, 3];
                 ctrl.skeletonRows = [0, 1, 2];
                 function setStatisticsOpen(open) {
                     ctrl.statistics.open = open;
+                    window.cancelAnimationFrame(statisticsScrollFrame);
+                    if (open)
+                        $scope.$evalAsync(function () {
+                            if ($scope.$$destroyed || !ctrl.statistics.open) return;
+                            window.cancelAnimationFrame(statisticsScrollFrame);
+                            statisticsScrollFrame = window.requestAnimationFrame(function () {
+                                if ($scope.$$destroyed || !ctrl.statistics.open) return;
+                                document.getElementById('cp-statistics').scrollIntoView({
+                                    block: 'start',
+                                    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+                                        ? 'auto'
+                                        : 'smooth',
+                                });
+                            });
+                        });
                 }
                 function resetStatistics() {
                     statisticsRequest++;
                     window.clearTimeout(statisticsTimer);
+                    window.cancelAnimationFrame(statisticsScrollFrame);
                     ctrl.statistics = { open: false, loading: false, loaded: false, error: '', facts: [], boards: [] };
                 }
                 resetStatistics();
@@ -681,6 +698,7 @@
                         scrollFrame,
                         annotationRows = [],
                         annotationFrame,
+                        timeWidthKey,
                         touchY,
                         pending = false,
                         fieldRequest = 0,
@@ -939,6 +957,42 @@
                         gutterContent.style.transform = 'translateY(' + -creditEditor.getScrollTop() + 'px)';
                     }
 
+                    function sizeTimestampColumn(font) {
+                        var cell = annotationRows.length && annotationRows[0].querySelector('.cp-time');
+                        if (!cell || getComputedStyle(cell).display === 'none') return;
+                        var style = getComputedStyle(cell),
+                            key = [
+                                style.font,
+                                style.letterSpacing,
+                                style.paddingLeft,
+                                style.paddingRight,
+                                font.typicalHalfwidthCharacterWidth,
+                            ].join('|');
+                        if (key === timeWidthKey) return;
+                        timeWidthKey = key;
+                        var measure = element('span'),
+                            width = 0;
+                        measure.style.cssText =
+                            'position:absolute;visibility:hidden;white-space:pre;width:max-content;';
+                        cell.appendChild(measure);
+                        data.updates.forEach(function (snapshot) {
+                            measure.textContent = snapshot.time || '';
+                            width = Math.max(width, measure.offsetWidth);
+                        });
+                        measure.remove();
+                        // Preserve the loading width unless the rendered timestamp needs more room.
+                        if (width)
+                            section.style.setProperty(
+                                '--cp-time-width',
+                                Math.ceil(
+                                    Math.max(
+                                        width + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) + 2,
+                                        12.5 * parseFloat(getComputedStyle(document.documentElement).fontSize)
+                                    )
+                                ) + 'px'
+                            );
+                    }
+
                     function layoutAnnotations() {
                         if (!creditEditor) return;
                         var font = creditEditor.getOption(monaco.editor.EditorOption.fontInfo);
@@ -947,6 +1001,7 @@
                         gutterContent.style.fontWeight = font.fontWeight;
                         gutterContent.style.letterSpacing = font.letterSpacing + 'px';
                         gutterContent.style.lineHeight = font.lineHeight + 'px';
+                        sizeTimestampColumn(font);
                         annotationRows.forEach(function (row, index) {
                             // Monaco owns line positions and font metrics; table layout must not accumulate rounding errors.
                             row.style.top = creditEditor.getTopForLineNumber(index + 1) + 'px';
