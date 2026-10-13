@@ -5,7 +5,21 @@ const { chromium } = require('@playwright/test');
 const html = fs.readFileSync('src/fluent/generated/other/sys-ui-page/credit_plus.html', 'utf8');
 assert.match(fs.readFileSync('src/fluent/generated/other/sys-ui-page/widget_editor_compare.html', 'utf8'), /credit_update:\s*_weDiffConfigParams.get\('credit_update'\)/);
 const client = fs.readFileSync('src/fluent/generated/other/sys-ui-page/credit_plus.client.js', 'utf8');
-const markup = html.match(/<style>([\s\S]*?)<\/style>/)[0] + html.match(/<main[\s\S]*?<\/main>/)[0];
+assert.doesNotMatch(client, /[\uD800-\uDBFF][\uDC00-\uDFFF]/, 'Use JavaScript Unicode escapes so emoji survive update-set transport');
+const angularSource = fs.readFileSync(require.resolve('angular/angular.min.js'), 'utf8');
+async function settle(page) {
+    await page.evaluate(() => new Promise(resolve => {
+        const scope = angular.element(document.getElementById('credit-plus')).injector().get('$rootScope');
+        scope.$evalAsync(() => scope.$$postDigest(resolve));
+    }));
+}
+async function installCredit(page) {
+    await page.addScriptTag({ content: angularSource });
+    await page.addScriptTag({ content: client });
+    await settle(page);
+}
+// Jelly may discard whitespace-only text nodes between elements.
+const markup = (html.match(/<style>([\s\S]*?)<\/style>/)[0] + html.match(/<main[\s\S]*?<\/main>/)[0]).replace(/>\s+</g, '><');
 const bootstrap = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 function initialMetadata(description, siteTitle = 'My instance') {
     const escape = text => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -61,6 +75,7 @@ async function openField(page, name = 'script') {
 async function chooseSet(page, id) {
     await page.locator('#cp-update-button').click();
     await page.locator('#cp-update-menu [data-value="' + id + '"]').click();
+    await settle(page);
 }
 function part(section, id) { return section.locator('[id$="' + id.replace(/^cp/, '') + '"]'); }
 async function menuAction(page, cell, label) {
@@ -70,7 +85,7 @@ async function menuAction(page, cell, label) {
 function setCell(section) { return section.locator('[data-context-kind="update set"]').first(); }
 async function initialise(page, width = 1280, monaco = false) {
     await page.setViewportSize({ width, height: 850 });
-    await page.route('https://credit.test/**', route => route.fulfill({ contentType: 'text/html', body: markup }));
+    await page.route('https://credit.test/**', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: markup }));
     await page.goto('https://credit.test/?sysparm_update=' + update);
     if (monaco) await page.evaluate(installMonaco);
     await page.evaluate(fixture => {
@@ -85,7 +100,7 @@ async function initialise(page, width = 1280, monaco = false) {
             };
         };
     }, fixture);
-    await page.addScriptTag({ content: client });
+    await installCredit(page);
 }
 
 test('fields start collapsed, author is plain text, and Compare+ links open safely in a new tab', async () => {
@@ -141,21 +156,30 @@ test('viewer ignores stale responses after a timeout and allows retry', async ()
     const browser = await chromium.launch({ headless: true });
     try {
         const page = await browser.newPage();
-        await page.route('https://credit.test/**', route => route.fulfill({ contentType: 'text/html', body: markup }));
+        await page.route('https://credit.test/**', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: markup }));
         await page.goto('https://credit.test/?sysparm_update=' + update);
         await page.evaluate(() => {
             window.pending = [];
-            window.setTimeout = (callback, delay) => { if (delay === 30000) window.expire = callback; return 1; };
+            const timeout = window.setTimeout;
+            window.setTimeout = (callback, delay) => { if (delay === 30000) { window.expire = callback; return 1; } return timeout(callback, delay); };
             window.clearTimeout = () => {};
             window.GlideAjax = function () { this.addParam = () => {}; this.getXMLAnswer = callback => window.pending.push(callback); };
         });
-        await page.addScriptTag({ content: client });
+        await installCredit(page);
+        assert.equal(await page.locator('#cp-loading').isVisible(), true);
+        assert.equal(await page.locator('#cp-loading svg rect').count(), 5);
+        assert.equal(await page.locator('#cp-status-wrap').isVisible(), false);
+        assert.equal(await page.locator('#cp-loading').evaluate(node => getComputedStyle(node).alignItems), 'center');
         await page.evaluate(() => window.expire());
+        await settle(page);
         assert.match(await page.locator('#cp-status').textContent(), /timed out/);
         await page.locator('#cp-retry').click();
         await page.evaluate(fixture => window.pending[0](JSON.stringify(fixture)), fixture);
+        await settle(page);
         assert.match(await page.locator('#cp-status').textContent(), /Loading/);
         await page.evaluate(fixture => window.pending[1](JSON.stringify(fixture)), fixture);
+        await settle(page);
+        assert.equal(await page.locator('#cp-loading').count(), 0);
         assert.equal(await page.locator('.cp-field-section').count(), 4);
         assert.equal(await page.locator('.cp-field-section[open]').count(), 0);
     } finally { await browser.close(); }
@@ -243,14 +267,14 @@ test('annotations inherit Monaco font metrics and follow geometry changes withou
     const browser = await chromium.launch({ headless: true });
     try {
         const page = await browser.newPage();
-        await page.route('https://credit.test/**', route => route.fulfill({ contentType: 'text/html', body: markup }));
+        await page.route('https://credit.test/**', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: markup }));
         await page.goto('https://credit.test/?sysparm_update=' + update);
         await page.evaluate(installMonaco);
         await page.evaluate(fixture => {
             fixture = { ...fixture, lines: Array.from({ length: 120 }, (_, i) => ({ number: i + 1, text: 'code();', update: fixture.selected })) };
             window.GlideAjax = function () { this.addParam = () => {}; this.getXMLAnswer = callback => callback(JSON.stringify(fixture)); };
         }, fixture);
-        await page.addScriptTag({ content: client });
+        await installCredit(page);
         await openField(page);
         assert.deepEqual(await page.locator('#cp-attribution .cp-cell').first().evaluate(node => {
             const style = getComputedStyle(node); return [style.fontSize, style.lineHeight, style.fontFamily];
@@ -281,7 +305,7 @@ test('Polaris captures the record title before asynchronous credit loading and h
     const browser = await chromium.launch({ headless: true });
     try {
         const page = await browser.newPage();
-        await page.route('https://credit.test/**', route => route.fulfill({ contentType: 'text/html', body: route.request().url().endsWith('/host')
+        await page.route('https://credit.test/**', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: route.request().url().endsWith('/host')
             ? '<span id="shell-title"></span><iframe style="width:100%;height:650px" onload="document.getElementById(\'shell-title\').textContent=this.contentDocument.title" src="/?sysparm_update=' + update + '"></iframe>'
             : initialMetadata('My widget (Widget)') + markup }));
         await page.goto('https://credit.test/host');
@@ -292,7 +316,7 @@ test('Polaris captures the record title before asynchronous credit loading and h
             window.GlideAjax = function () { const params = {}; window.calls.push(params); this.addParam = (key, value) => params[key] = value; this.getXMLAnswer = callback => window.finishLoading = () => callback(JSON.stringify(fixture)); };
         }, fixture);
         assert.equal(await page.locator('#shell-title').textContent(), 'Credit: My widget (Widget) - My instance');
-        await frame.addScriptTag({ content: client });
+        await installCredit(frame);
         assert.equal(await frame.title(), 'Credit: My widget (Widget) - My instance');
         assert.equal(await frame.evaluate(() => window.calls[0].sysparm_update), update);
         assert.equal(await frame.evaluate(() => window.calls[0].sysparm_version), undefined);
@@ -315,7 +339,7 @@ test('initial historical names and instance titles stay text, including closing 
         const page = await browser.newPage();
         const name = 'Widget </script><img src=x onerror="window.injected=true"> \'quotes\' & more';
         const siteTitle = 'Instance </script><script>window.injected=true</script>';
-        await page.route('https://credit.test/**', route => route.fulfill({ contentType: 'text/html', body: route.request().url().endsWith('/host')
+        await page.route('https://credit.test/**', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: route.request().url().endsWith('/host')
             ? '<iframe src="/page"></iframe>' : initialMetadata(name + ' (Widget)', siteTitle) + markup }));
         await page.goto('https://credit.test/host');
         const frame = page.frames()[1];
@@ -338,13 +362,13 @@ test('Compare+ update-set dropdown shows date, set name and author columns and s
             assert.equal(await page.locator('#cp-update-button').getAttribute('aria-expanded'), 'true');
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
             await page.keyboard.press('End'); await page.keyboard.press('Enter');
-            assert.equal(await page.locator('#cp-inspect-version').inputValue(), original);
+            assert.equal(await page.locator('#cp-update-button').getAttribute('data-value'), original);
             assert.equal(new URL(page.url()).searchParams.get('sysparm_update'), original);
             assert.equal(await page.locator('.cp-field-section[open]').count(), 0);
             assert.equal(await page.evaluate(() => window.calls.at(-1).params.sysparm_context), 'true');
             assert.equal(await page.locator('#cp-update-menu .dc-version-dd-item').count(), 3);
             await page.locator('#cp-update-button').focus(); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Home'); await page.keyboard.press('Enter');
-            assert.equal(await page.locator('#cp-inspect-version').inputValue(), 'd'.repeat(32));
+            assert.equal(await page.locator('#cp-update-button').getAttribute('data-value'), 'd'.repeat(32));
             await page.locator('#cp-update-button').click(); await page.keyboard.press('Escape');
             assert.equal(await page.evaluate(() => document.activeElement.id), 'cp-update-button');
             assert.equal(await page.locator('#cp-update-menu').isVisible(), false);
@@ -360,7 +384,7 @@ test('Compare+ header pickers search and navigate safely, discarding old record-
     const browser = await chromium.launch({ headless: true });
     try {
         const page = await browser.newPage();
-        await page.route('https://credit.test/**', route => route.fulfill({ contentType: 'text/html', body: markup }));
+        await page.route('https://credit.test/**', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: markup }));
         await page.goto('https://credit.test/?sysparm_update=' + update);
         await page.evaluate(fixture => {
             window.pickers = {}; window.calls = []; window.pendingRecords = null;
@@ -395,7 +419,7 @@ test('Compare+ header pickers search and navigate safely, discarding old record-
                 };
             };
         }, fixture);
-        await page.addScriptTag({ content: client });
+        await installCredit(page);
         assert.deepEqual(await page.evaluate(() => window.pickers['cp-table-input'].value), { id: 'sp_widget', text: 'Widget' });
         assert.deepEqual(await page.evaluate(() => window.pickers['cp-record-input'].value), { id: fixture.record, text: 'My widget' });
         assert.equal(await page.evaluate(() => window.pickers['cp-table-input'].options.dropdownCssClass), 'dc-table-picker-drop');
@@ -410,7 +434,10 @@ test('Compare+ header pickers search and navigate safely, discarding old record-
         assert.equal(await page.evaluate(() => window.calls.at(-1).sysparm_table), 'sp_widget');
         await page.evaluate(() => window.choosePicker('cp-table-input', { id: 'sys_script_include', text: 'Script Include' }));
         assert.equal(await page.locator('#cp-status').textContent(), 'Select a record.');
-        assert.equal(await page.locator('#cp-inspect-version option').count(), 0);
+        assert.equal(await page.locator('#cp-status-wrap').getAttribute('class'), 'dc-no-versions-overlay');
+        assert.equal(await page.locator('#cp-status-content').getAttribute('class'), 'dc-no-versions-content');
+        assert.equal(await page.locator('#cp-loading').count(), 0);
+        assert.equal(await page.locator('#cp-update-menu [role=option]').count(), 0);
         assert.equal(new URL(page.url()).searchParams.has('sysparm_update'), false);
         assert.equal(new URL(page.url()).searchParams.has('sysparm_record'), false);
         assert.equal(await page.evaluate(() => window.pickers['cp-record-input'].value), null);
@@ -418,7 +445,7 @@ test('Compare+ header pickers search and navigate safely, discarding old record-
         assert.equal(await page.evaluate(() => window.pickers['cp-record-input'].result), null, 'Stale results from another table are discarded');
         await page.evaluate(() => window.choosePicker('cp-record-input', { id: '0'.repeat(32), text: 'No history' }));
         assert.match(await page.locator('#cp-status').textContent(), /No Customer Updates/);
-        assert.equal(await page.locator('#cp-status').getAttribute('class'), '');
+        assert.equal(await page.locator('#cp-status').evaluate(node => node.classList.contains('cp-error')), false);
         assert.equal(await page.locator('#cp-status-wrap').getAttribute('class'), 'dc-no-versions-overlay');
         assert.equal(await page.locator('#cp-status-content').getAttribute('class'), 'dc-no-versions-content');
         assert.equal(await page.locator('#cp-status-wrap').evaluate(node => getComputedStyle(node).justifyContent), 'center');
@@ -431,7 +458,7 @@ test('Compare+ header pickers search and navigate safely, discarding old record-
         assert.equal(new URL(page.url()).searchParams.get('sysparm_table'), 'sys_script_include');
         assert.equal(new URL(page.url()).searchParams.get('sysparm_record'), 'd'.repeat(32));
         assert.equal(new URL(page.url()).searchParams.get('sysparm_update'), 'e'.repeat(32));
-        assert.equal(await page.locator('#cp-inspect-version').inputValue(), 'e'.repeat(32));
+        assert.equal(await page.locator('#cp-update-button').getAttribute('data-value'), 'e'.repeat(32));
         const params = await page.evaluate(() => window.calls.at(-1));
         assert.equal(params.processor, 'CreditPlus');
         assert.equal(params.sysparm_name, 'getCredit');
@@ -488,26 +515,30 @@ test('field timeouts, retry and update-set changes discard late responses withou
         }, fixture);
         const section = page.locator('.cp-field-section[data-field="script"]');
         await section.locator('summary.da-summary').click(); await page.waitForFunction(() => window.pending.length === 1);
-        assert.equal(await part(section, 'cp-fallback-loading').isVisible(), true);
+        assert.equal(await part(section, 'cp-code-loading').isVisible(), true);
         await page.evaluate(() => window.expire());
-        assert.equal(await part(section, 'cp-fallback-loading').isVisible(), false);
+        await settle(page);
+        assert.equal(await part(section, 'cp-code-loading').isVisible(), false);
         assert.match(await part(section, 'cp-field-status').textContent(), /timed out/);
         await part(section, 'cp-field-retry').click();
         await page.evaluate(fixture => window.pending[0].callback(JSON.stringify(fixture)), fixture);
+        await settle(page);
         assert.equal(await part(section, 'cp-field-status').textContent(), '');
-        assert.equal(await part(section, 'cp-fallback-loading').isVisible(), true);
-        assert.equal(await part(section, 'cp-fallback-loading').textContent(), 'Loading…');
-        assert.equal(await part(section, 'cp-fallback-loading').evaluate(node => node.getBoundingClientRect().left >= node.previousElementSibling.getBoundingClientRect().right), true);
+        assert.equal(await part(section, 'cp-code-loading').isVisible(), true);
+        assert.equal(await part(section, 'cp-code-loading').textContent(), 'Loading…');
+        assert.equal(await part(section, 'cp-code-loading').evaluate(node => node.getBoundingClientRect().left >= node.previousElementSibling.getBoundingClientRect().right), true);
         await page.setViewportSize({ width: 600, height: 850 });
-        assert.equal(await part(section, 'cp-fallback-loading').isVisible(), true);
+        assert.equal(await part(section, 'cp-code-loading').isVisible(), true);
         await page.setViewportSize({ width: 1280, height: 850 });
         await page.evaluate(fixture => window.pending[1].callback(JSON.stringify(fixture)), fixture);
+        await settle(page);
         assert.equal(await part(section, 'cp-code-loading').isVisible(), false);
         assert.equal(await part(section, 'cp-code-view').isVisible(), true);
         const html = page.locator('.cp-field-section[data-field="template"]');
         await html.locator('summary.da-summary').click(); await page.waitForFunction(() => window.pending.length === 3);
         await html.locator('summary.da-summary').click();
         await page.evaluate(fixture => window.pending[2].callback(JSON.stringify({ ...fixture, field: 'template' })), fixture);
+        await settle(page);
         assert.equal(await page.evaluate(() => window.creditOptions.length), 1, 'Collapsed fields do not create an editor when their response arrives');
         await openField(page, 'template');
         assert.equal(await page.evaluate(() => window.pending.length), 3, 'Completed data is reused when reopened');
@@ -515,6 +546,7 @@ test('field timeouts, retry and update-set changes discard late responses withou
         await page.waitForFunction(() => window.pending.length === 4);
         await chooseSet(page, original);
         await page.evaluate(fixture => window.pending[3].callback(JSON.stringify({ ...fixture, field: 'condition' })), fixture);
+        await settle(page);
         assert.equal(await page.locator('.cp-field-section[open]').count(), 0);
         assert.equal(await page.evaluate(() => window.creditOptions.length), 2);
         assert.equal(await page.evaluate(() => window.disposedCreditEditors), 2);
@@ -575,7 +607,7 @@ test('Compare+ loads Customer Update snapshots read-only without version queries
     try {
         for (const denied of [false, true]) {
             const page = await browser.newPage();
-            await page.route('https://compare.test/**', route => route.fulfill({ contentType: 'text/html', body: route.request().url().endsWith('/host') ? '<title>Credit: My widget</title><iframe src="/comparison"></iframe>' : '<div id="we-diff-app"></div>' }));
+            await page.route('https://compare.test/**', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: route.request().url().endsWith('/host') ? '<title>Credit: My widget</title><iframe src="/comparison"></iframe>' : '<div id="we-diff-app"></div>' }));
             await page.goto('https://compare.test/host');
             const frame = page.frames()[1];
             await frame.evaluate(({ denied, update, original, record }) => {
@@ -686,7 +718,7 @@ test('Polaris URL, record title and History follow update selection and survive 
             const url = new URL(route.request().url());
             const isShell = url.pathname.startsWith(prefix);
             const src = isShell ? '/' + decodeURIComponent(url.pathname.slice(prefix.length)) : '';
-            return route.fulfill({ contentType: 'text/html', body: isShell
+            return route.fulfill({ contentType: 'text/html; charset=utf-8', body: isShell
                 ? '<span id="shell-title">Credit+</span><iframe style="width:100%;height:700px" src="' + src.replaceAll('&', '&amp;') + '"></iframe>'
                 : initialMetadata('') + markup });
         });
@@ -710,7 +742,7 @@ test('Polaris URL, record title and History follow update selection and survive 
                     };
                 };
             }, fixture);
-            await frame.addScriptTag({ content: client });
+            await installCredit(frame);
             return frame;
         }
         await page.evaluate(() => history.replaceState({shellState:'preserved'}, '', location.href));
@@ -731,7 +763,7 @@ test('Polaris URL, record title and History follow update selection and survive 
         assert.equal(await frame.locator('#cp-statistics-button').evaluate(node => node.classList.contains('active')), true);
         await page.reload();
         frame = await initialiseFrame();
-        assert.equal(await frame.locator('#cp-inspect-version').inputValue(), original);
+        assert.equal(await frame.locator('#cp-update-button').getAttribute('data-value'), original);
         assert.equal(await frame.locator('#cp-statistics').isVisible(), true);
         assert.equal(await frame.evaluate(() => window.statisticsCalls), 1);
         assert.equal(await frame.locator('#cp-statistics-button').getAttribute('aria-pressed'), 'true');
@@ -783,12 +815,15 @@ test('statistics load only on demand, render safe leaderboards, cache while open
             await button.click(); await button.click(); // Do not duplicate in-flight requests.
             assert.equal(await page.evaluate(() => window.statsRequests.length), 1);
             await page.evaluate(() => window.statsRequests[0].callback(JSON.stringify(window.statsFixture)));
+            await settle(page);
             assert.equal(await page.locator('.cp-stats-board').count(), 4);
             assert.equal(await page.locator('.cp-stats-board').first().locator('li').count(), 4);
             assert.equal(await page.locator('#cp-statistics img').count(), 0);
             assert.equal(await page.locator('#cp-statistics-heading').textContent(), 'Statistics 📊');
-            assert.deepEqual(await page.locator('.cp-stats-board h3').allTextContents(), ['Builders 👷 · Created by 👤', 'Destroyers 💥 · Created by 👤', 'Expansions 🏗️ · Update sets 📦', 'Demolitions 🧨 · Update sets 📦']);
+            assert.deepEqual(await page.locator('.cp-stats-board h3').allTextContents(), ['Builders 👷 - Created by 👤', 'Destroyers 💥 - Created by 👤', 'Expansions 🏗️ - Update sets 📦', 'Demolitions 🧨 - Update sets 📦']);
             assert.equal(await page.locator('.cp-stats-skeleton').count(), 0);
+            assert.equal(await page.locator('#cp-statistics .cp-stats-emoji').count(), 17);
+            assert.equal(await page.locator('#cp-statistics .cp-stats-emoji').evaluateAll(nodes => nodes.every(node => getComputedStyle(node).fontSize === getComputedStyle(document.querySelector('.cp-stats-medal')).fontSize)), true);
             assert.match(await page.locator('.cp-stats-facts').textContent(), /42 days/);
             assert.equal(await page.locator('.cp-stats-note').count(), 0);
             assert.deepEqual(await page.locator('.cp-stats-board').first().locator('li [aria-hidden=true]').allTextContents(), ['🏆', '🥈', '🥉']);
@@ -820,14 +855,18 @@ test('statistics load only on demand, render safe leaderboards, cache while open
             assert.equal(await page.locator('#cp-statistics').isVisible(), false);
             await button.click();
             assert.equal(await page.evaluate(() => window.statsRequests[1].params.sysparm_update), original);
+            await settle(page);
             await chooseSet(page, update);
             await page.evaluate(() => window.statsRequests[1].callback(JSON.stringify(window.statsFixture)));
-            assert.equal(await page.locator('#cp-statistics-content').textContent(), '');
+            await settle(page);
+            assert.equal((await page.locator('#cp-statistics-content').textContent()).trim(), '');
             await button.click();
             await page.evaluate(() => window.statsRequests[2].callback(JSON.stringify({ success: false, error: 'History unavailable.' })));
+            await settle(page);
             assert.equal(await page.locator('#cp-statistics-status').textContent(), 'History unavailable.');
             await page.getByRole('button', { name: 'Retry statistics' }).click();
             await page.evaluate(() => window.statsRequests[3].callback(JSON.stringify(window.statsFixture)));
+            await settle(page);
             assert.equal(await page.locator('.cp-stats-board').count(), 4);
             await page.close();
         }
@@ -846,13 +885,16 @@ test('statistics timeout allows retry and discards the expired response', async 
         });
         await page.getByRole('button', { name: 'Statistics', exact: true }).click();
         await page.evaluate(() => window.expireStats());
+        await settle(page);
         assert.match(await page.locator('#cp-statistics-status').textContent(), /timed out/);
         assert.equal(await page.locator('.cp-stats-skeleton').count(), 0);
         await page.evaluate(() => window.statsCallbacks[0](JSON.stringify({success:false,error:'Stale error'})));
+        await settle(page);
         assert.match(await page.locator('#cp-statistics-status').textContent(), /timed out/);
         assert.equal(await page.locator('.cp-stats-skeleton').count(), 0);
         await page.getByRole('button', { name: 'Retry statistics' }).click();
         await page.evaluate(() => window.statsCallbacks[1]('not JSON'));
+        await settle(page);
         assert.equal(await page.locator('#cp-statistics-status').textContent(), 'Statistics could not be loaded.');
     } finally { await browser.close(); }
 });
@@ -868,5 +910,111 @@ test('statistics age emoji change at the specified day boundaries', async () => 
             await page.getByRole('button', { name: 'Statistics', exact: true }).click();
             assert.equal(await page.locator('.cp-stats-facts dt').first().textContent(), 'Age ' + icon);
         }
+    } finally { await browser.close(); }
+});
+
+
+test('field loading keeps the Monaco headings, splitter and column widths through completion', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        for (const width of [1280, 390]) {
+            const page = await browser.newPage(); await initialise(page, width, true);
+            await page.evaluate(() => {
+                window.GlideAjax = function () { this.addParam = () => {}; this.getXMLAnswer = callback => window.fieldResponse = callback; };
+            });
+            const section = page.locator('.cp-field-section[data-field="script"]');
+            await section.locator('summary').click();
+            await page.waitForFunction(() => window.fieldResponse);
+            const dimensions = () => section.locator('.cp-code-headings, .cp-gutter-head span, .cp-code-heading, .cp-code-body, .cp-splitter').evaluateAll(nodes => nodes.map(node => { const rect = node.getBoundingClientRect(); return { width: rect.width, left: rect.left }; }));
+            assert.equal(await part(section, 'cp-table-fallback').isVisible(), false);
+            assert.equal(await part(section, 'cp-code-view').isVisible(), true);
+            assert.equal(await part(section, 'cp-code-loading').isVisible(), true);
+            await part(section, 'cp-splitter').focus(); await page.keyboard.press('ArrowRight');
+            const before = await dimensions();
+            await section.locator('summary').click(); await section.locator('summary').click();
+            assert.equal(await part(section, 'cp-table-fallback').isVisible(), false);
+            await page.evaluate(fixture => window.fieldResponse(JSON.stringify(fixture)), fixture);
+            assert.equal(await part(section, 'cp-code-loading').isVisible(), false);
+            assert.equal(await part(section, 'cp-code-view').isVisible(), true);
+            assert.deepEqual(await dimensions(), before);
+            assert.equal(await part(section, 'cp-table-fallback').isVisible(), false);
+            await page.screenshot({ path: '/tmp/credit-stable-field-' + width + '.png', fullPage: true });
+            await page.close();
+        }
+    } finally { await browser.close(); }
+});
+
+test('AngularJS owns field lifecycles and disposes scopes and editors on reload and teardown', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage(); await initialise(page, 1280, true);
+        const errors = []; page.on('pageerror', error => errors.push(error.message));
+        const watchers = await page.evaluate(() => angular.element(document.getElementById('credit-plus')).injector().get('$rootScope').$$watchersCount);
+        for (let i = 0; i < 3; i++) {
+            await openField(page);
+            await page.evaluate(() => window.oldFieldScope = angular.element(document.querySelector('.cp-field-section')).scope());
+            await page.locator('#cp-retry').click(); await settle(page);
+            assert.equal(await page.evaluate(() => window.oldFieldScope.$$destroyed), true);
+            assert.equal(await page.locator('.cp-field-section[open]').count(), 0);
+            assert.equal(await page.evaluate(() => angular.element(document.getElementById('credit-plus')).injector().get('$rootScope').$$watchersCount), watchers);
+        }
+        await openField(page);
+        await page.evaluate(() => {
+            const Ajax = window.GlideAjax;
+            window.GlideAjax = function () {
+                const ajax = new Ajax(); let name;
+                this.addParam = (key, value) => { if (key === 'sysparm_name') name = value; ajax.addParam(key, value); };
+                this.getXMLAnswer = callback => name === 'getStatistics' ? window.lateStatistics = callback : ajax.getXMLAnswer(callback);
+            };
+        });
+        await page.getByRole('button', { name: 'Statistics', exact: true }).click();
+        await page.evaluate(() => {
+            const scope = angular.element(document.getElementById('credit-plus')).scope();
+            scope.$destroy();
+            window.lateStatistics(JSON.stringify({ success: false, error: 'Late response' }));
+            window.dispatchEvent(new Event('resize'));
+            window.dispatchEvent(new Event('pageshow'));
+        });
+        assert.equal(await page.evaluate(() => window.disposedCreditEditors), 4);
+        assert.equal(await page.evaluate(() => window.createdModels.length), await page.evaluate(() => window.disposedModels));
+        assert.equal(await page.locator('#cp-context-menu').count(), 0);
+        assert.deepEqual(errors, []);
+    } finally { await browser.close(); }
+});
+
+test('expanding a field scrolls only after its editor is ready and ignores collapsed pending fields', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage(); await initialise(page, 1280, true);
+        await page.evaluate(() => {
+            window.scrolls = []; window.pendingFields = [];
+            const scroll = Element.prototype.scrollIntoView;
+            Element.prototype.scrollIntoView = function (options) {
+                if (this.matches('.cp-field-section summary')) window.scrolls.push({ field: this.closest('details').dataset.field, editors: window.creditOptions.length, behavior: options.behavior });
+                scroll.call(this, options);
+            };
+            window.GlideAjax = function () { this.addParam = () => {}; this.getXMLAnswer = callback => window.pendingFields.push(callback); };
+        });
+        const script = page.locator('.cp-field-section[data-field="script"]');
+        await script.locator('summary').click();
+        await page.waitForFunction(() => window.pendingFields.length === 1);
+        await page.evaluate(() => new Promise(requestAnimationFrame));
+        assert.deepEqual(await page.evaluate(() => window.scrolls), []);
+        await page.evaluate(fixture => window.pendingFields[0](JSON.stringify(fixture)), fixture);
+        await page.waitForFunction(() => window.scrolls.length === 1);
+        assert.deepEqual(await page.evaluate(() => window.scrolls), [{ field: 'script', editors: 1, behavior: 'smooth' }]);
+        const template = page.locator('.cp-field-section[data-field="template"]');
+        await template.locator('summary').click();
+        await page.waitForFunction(() => window.pendingFields.length === 2);
+        await template.locator('summary').click();
+        await page.evaluate(fixture => window.pendingFields[1](JSON.stringify(fixture)), fixture);
+        await settle(page);
+        await page.evaluate(() => new Promise(requestAnimationFrame));
+        assert.equal(await page.evaluate(() => window.scrolls.length), 1);
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        await template.locator('summary').click();
+        await page.waitForFunction(() => window.scrolls.length === 2);
+        assert.deepEqual(await page.evaluate(() => window.scrolls[1]), { field: 'template', editors: 2, behavior: 'auto' });
+        assert.equal(await page.evaluate(() => window.pendingFields.length), 2);
     } finally { await browser.close(); }
 });
