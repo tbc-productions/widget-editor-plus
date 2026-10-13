@@ -338,6 +338,10 @@
         .cp-context-menu .context_item { display: block; text-decoration: none; cursor: pointer; }
         .cp-context-menu .context_item.is-disabled { cursor: default; }
         .cp-context-menu .icon-open-document-new-tab { margin-left: 0.5rem; }
+        .cp-field-loading { display: inline-block; margin-left: 0.375rem; }
+        .cp-field-loading .icon-loading { display: inline-block; width: 1em; height: 1em; animation: cpSpin 0.75s linear infinite; }
+        @keyframes cpSpin { to { transform: rotate(360deg); } }
+        @media (prefers-reduced-motion: reduce) { .cp-field-loading .icon-loading { animation: none; } }
         .cp-active-filters { display: flex; flex-wrap: wrap; gap: 0.375rem; padding: 0.375rem 0.75rem; }
         .cp-filter-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         /* ServiceNow's Monaco bundle omits the diff highlight styles. Match Compare+. */
@@ -591,7 +595,7 @@
                     <div class="cp-field-code">
                         <div id="cp-active-filters" class="cp-active-filters" hidden="hidden" aria-label="Active filters"></div>
                         <div id="cp-code-view" hidden="hidden">
-                            <div class="cp-code-headings"><div class="cp-gutter-head"><span class="cp-time-heading">Updated</span><span>Created by</span><span>Update set</span></div><span aria-hidden="true"></span><div class="cp-code-heading"><span id="cp-code-label" class="cp-heading-label"></span><button id="cp-diff-close" class="btn btn-default btn-sm" type="button" hidden="hidden">Close comparison</button></div></div>
+                            <div class="cp-code-headings"><div class="cp-gutter-head"><span class="cp-time-heading">Updated</span><span>Created by</span><span>Update set</span></div><span aria-hidden="true"></span><div class="cp-code-heading"><span class="cp-heading-label"><span id="cp-code-label"></span><span id="cp-code-loading" class="cp-field-loading" role="status" aria-live="polite" hidden="hidden"><i class="icon-loading" aria-hidden="true"></i><span class="cp-sr-only">Loading comparison…</span></span></span><button id="cp-diff-close" class="btn btn-default btn-sm" type="button" hidden="hidden">Close comparison</button></div></div>
                             <div id="cp-code-status" class="cp-field-status" role="status" aria-live="polite" hidden="hidden"></div>
                             <div class="cp-code-body">
                                 <div id="cp-gutter" class="cp-gutter"><div id="cp-gutter-content" class="cp-gutter-content"><table class="cp-table" role="table" aria-label="Historical code line attribution">
@@ -603,7 +607,7 @@
                             </div>
                         </div>
                         <div id="cp-table-fallback" class="cp-scroll"><table class="cp-table" aria-label="Historical code line attribution">
-                            <thead><tr><th scope="col">Updated</th><th scope="col">Created by</th><th scope="col">Update set</th><th scope="col">Line</th><th scope="col" id="cp-fallback-label"></th></tr></thead>
+                            <thead><tr><th scope="col">Updated</th><th scope="col">Created by</th><th scope="col">Update set</th><th scope="col">Line</th><th scope="col"><span id="cp-fallback-label"></span><span id="cp-fallback-loading" class="cp-field-loading" role="status" aria-live="polite" hidden="hidden"><i class="icon-loading" aria-hidden="true"></i><span class="cp-sr-only">Loading…</span></span></th></tr></thead>
                             <tbody><tr id="cp-status-row" hidden="hidden"><td colspan="5"><div id="cp-field-status" class="cp-field-status" role="status" aria-live="polite"></div></td></tr></tbody>
                             <tbody id="cp-lines"></tbody>
                         </table></div>

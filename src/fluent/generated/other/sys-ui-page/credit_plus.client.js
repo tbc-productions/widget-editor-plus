@@ -701,6 +701,9 @@
                         href: compareUrl(snapshot.id, data),
                     });
                     if (set) {
+            ['cp-code-loading', 'cp-fallback-loading'].forEach(function (id) {
+                node(id).hidden = true;
+            });
                         items.push({ separator: true });
                         items.push({
                             label: 'Open update set',
@@ -708,6 +711,13 @@
                         });
                     }
                 }
+        function setFieldLoading(message) {
+            setFieldStatus('');
+            ['cp-code-loading', 'cp-fallback-loading'].forEach(function (id) {
+                node(id).querySelector('.cp-sr-only').textContent = message;
+                node(id).hidden = false;
+            });
+        }
                 openMenu(event, cell, items);
             }
             cell.addEventListener('contextmenu', show);
@@ -949,7 +959,7 @@
                 fail('Comparison requires Monaco.');
                 return;
             }
-            setFieldStatus('Loading comparison…');
+            setFieldLoading('Loading comparison…');
             diffTimer = window.setTimeout(function () {
                 if (request !== diffRequest || disposed) return;
                 diffRequest++;
@@ -1027,7 +1037,7 @@
             pending = true;
             var request = ++fieldRequest,
                 parentRequest = sequence;
-            setFieldStatus('Loading…');
+            setFieldLoading('Loading…');
             node('cp-field-retry').hidden = true;
             function fail(message) {
                 pending = false;
