@@ -17,6 +17,10 @@ declare global {
                         table: 'sys_ui_script'
                         id: '164618ee83e7321070b8b5dfeeaad371'
                     }
+                    '28b873b73b36441ab6175ebeacffaab9': {
+                        table: 'sys_ui_action'
+                        id: '28b873b73b36441ab6175ebeacffaab9'
+                    }
                     '2a53a6eee23c02acb367213f0fe8354b': {
                         table: 'sys_properties'
                         id: '2a53a6eee23c02acb367213f0fe8354b'
@@ -121,6 +125,22 @@ declare global {
                     cd77d062832b321070b8b5dfeeaad3ac: {
                         table: 'sys_ui_script'
                         id: 'cd77d062832b321070b8b5dfeeaad3ac'
+                    }
+                    'credit-plus-list-action': {
+                        table: 'sys_ui_action'
+                        id: '4f412dce140c4e7c80361b0ce99ae96c'
+                    }
+                    'credit-plus-script-include': {
+                        table: 'sys_script_include'
+                        id: 'c2e422359b38432eaf3b0e79cc23c105'
+                    }
+                    'credit-plus-script-include-acl': {
+                        table: 'sys_security_acl'
+                        id: '2d110f76ee1d4f8d831a78cce7012b5d'
+                    }
+                    'credit-plus-ui-page-acl': {
+                        table: 'sys_security_acl'
+                        id: '9817e205df694035844689bee81ab8d9'
                     }
                     cs0: {
                         table: 'sys_script_client'
@@ -930,6 +950,19 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_security_acl_role'
+                        id: '294786c2989a4fe59bb6a7803d2da47c'
+                        key: {
+                            sys_security_acl: '9817e205df694035844689bee81ab8d9'
+                            sys_user_role: {
+                                id: '342b75e0723a420590ef938d7291f5a9'
+                                key: {
+                                    name: 'admin'
+                                }
+                            }
+                        }
+                    },
+                    {
                         table: 'sys_ui_action_role'
                         id: '2c5b0e828363ba1070b8b5dfeeaad3e8'
                         key: {
@@ -1037,6 +1070,19 @@ declare global {
                     },
                     {
                         table: 'sys_ui_action_role'
+                        id: '6a758c7e3aa442f58b2f2aed32433f31'
+                        key: {
+                            sys_ui_action: '4f412dce140c4e7c80361b0ce99ae96c'
+                            sys_user_role: {
+                                id: '342b75e0723a420590ef938d7291f5a9'
+                                key: {
+                                    name: 'admin'
+                                }
+                            }
+                        }
+                    },
+                    {
+                        table: 'sys_ui_action_role'
                         id: '74144e9583d0831070b8b5dfeeaad3ab'
                         key: {
                             sys_ui_action: '33c2c34f83e7321070b8b5dfeeaad3f0'
@@ -1091,6 +1137,19 @@ declare global {
                         }
                     },
                     {
+                        table: 'sys_security_acl_role'
+                        id: '8f33b9a781264b62902dcc6e0936e489'
+                        key: {
+                            sys_security_acl: '2d110f76ee1d4f8d831a78cce7012b5d'
+                            sys_user_role: {
+                                id: '342b75e0723a420590ef938d7291f5a9'
+                                key: {
+                                    name: 'admin'
+                                }
+                            }
+                        }
+                    },
+                    {
                         table: 'sys_ui_action_role'
                         id: '965ef563456a46309081b2ab1f1bdf98'
                         key: {
@@ -1101,6 +1160,13 @@ declare global {
                                     name: 'sp_admin'
                                 }
                             }
+                        }
+                    },
+                    {
+                        table: 'sys_ui_page'
+                        id: '9c5bf170283e4d6394aa639c79936587'
+                        key: {
+                            name: 'credit_plus'
                         }
                     },
                     {

@@ -1,0 +1,617 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<j:jelly trim="false" xmlns:j="jelly:core" xmlns:g="glide">
+    <j:set var="jvar_hide_response_time" value="true" />
+    <j:if test="${gs.hasRole('admin')}">
+        <g:evaluate var="jvar_cp_description">
+            var description = '';
+            try {
+                description = new global.CreditPlus().getPageDescription(
+                    RP.getParameterValue('sysparm_update')
+                );
+            } catch (e) {}
+            description;
+        </g:evaluate>
+        <span id="cp-page-description" hidden="hidden">${HTML:jvar_cp_description}</span>
+        <span id="cp-site-title" hidden="hidden">${HTML:gs.getProperty("glide.product.name", "ServiceNow")}</span>
+        <script>
+            (function () {
+                if (window.top === window) {
+                    var page = window.location.pathname.substring(1) + window.location.search + window.location.hash;
+                    window.location.replace('/now/nav/ui/classic/params/target/' + encodeURIComponent(page));
+                }
+            })();
+            window.WE_CREDIT_CONFIG = {
+                siteTitle: document.getElementById('cp-site-title').textContent,
+                description: document.getElementById('cp-page-description').textContent
+            };
+            document.title = (window.WE_CREDIT_CONFIG.description ? 'Credit: ' + window.WE_CREDIT_CONFIG.description : 'Credit+') + ' - ' + window.WE_CREDIT_CONFIG.siteTitle;
+        </script>
+        <g:requires name="scripts/snc-code-editor/monaco.bundle.min.jsx" params="sysparm_substitute=false" />
+        <g:requires name="monaco_plus_bootstrap.jsdbx" params="sysparm_substitute=false" />
+        <g:requires name="we_history_sync.jsdbx" params="sysparm_substitute=false" />
+        <style>
+        #page_timing_div {
+            display: none !important;
+        }
+
+        /* Reset */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html {
+            font-size: 16px; /* anchor 1rem = 16px regardless of platform override */
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0 !important;
+            font-size: var(--now-global-font-size--md, 14px);
+            line-height: 1.45;
+            background: rgb(var(--now-color_background--primary, 255 255 255));
+            color: rgb(var(--now-color_text--primary, 29 29 29));
+            overflow: visible !important;
+            overscroll-behavior: none;
+        }
+
+        button, input, select, textarea {
+            font-family: inherit;
+            font-size: inherit;
+            color: inherit;
+        }
+
+        /* Header Bar */
+        .dc-header {
+            background: rgb(var(--now-color_chrome--brand-5, var(--now-color--primary-0, 221, 237, 233)));
+            border-bottom: 1px solid rgb(var(--now-color_border--secondary, var(--now-color_divider--secondary, 228, 230, 235)));
+            flex-shrink: 0;
+            position: sticky;
+            top: 0;
+            z-index: 1001;
+            margin: 0;
+        }
+        .dc-header-row {
+            padding: 0.75rem 1.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1.25rem;
+        }
+
+        /* Version-select row inside the sticky header */
+        .dc-version-row {
+            display: flex;
+            align-items: stretch;
+            min-height: 3.1875rem;
+            padding: 0 1.25rem;
+            background: rgb(var(--now-color_background--secondary, 246, 247, 249));
+            border-top: 1px solid rgb(var(--now-color_border--secondary, var(--now-color_divider--secondary, 228, 230, 235)));
+        }
+        /* Spacer = sft-col-label (12rem) + dc-simple-section left border (1px) */
+        .dc-version-spacer {
+            width: calc(12rem + 1px);
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+        }
+        .dc-version-col {
+            flex: 1;
+            min-width: 0;
+            padding: 0.25rem 0.375rem;
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        /* Combined width matches the right select's width (both flex:1). */
+        .dc-version-left-half {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            align-items: stretch;
+            border-right: 1px solid rgb(var(--now-color_border--secondary, var(--now-color_divider--secondary, 228, 230, 235)));
+        }
+
+        .dc-title {
+            font-size: var(--now-font-size--lg, 18px);
+            font-weight: 600;
+            color: rgb(var(--now-color--neutral-0, var(--now-color--neutral-12, 38, 50, 56)));
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            white-space: nowrap;
+        }
+
+        .dc-title strong {
+            font-weight: 700;
+        }
+
+        .dc-meta {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0;
+            font-size: var(--now-global-font-size--md, 14px);
+            color: rgb(var(--now-color_text--secondary, 82 82 82));
+        }
+
+        .dc-meta-sep {
+            margin: 0 0.5rem;
+            opacity: 0.35;
+        }
+
+        .dc-meta-label {
+            color: rgb(var(--now-color_text--tertiary, 114 114 114));
+            text-transform: uppercase;
+            font-size: var(--now-global-font-size--md, 14px);
+            letter-spacing: 0.4px;
+            margin-right: 0.25rem;
+        }
+
+        .dc-link {
+            color: rgb(var(--now-color--primary-2, 0 118 204));
+            text-decoration: none;
+        }
+
+        .dc-link:hover { text-decoration: underline; }
+
+        /* Header buttons */
+        .dc-header-btns {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .dc-header-btns .btn {
+            height: 2.25rem;
+            padding: 0 0.875rem;
+            font-size: var(--now-global-font-size--md, 14px);
+            font-weight: 600;
+            line-height: 1;
+            border-radius: var(--now-button--border-radius, 4px);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+            box-shadow: none;
+        }
+        .dc-header-btns .btn:focus-visible {
+            outline: 2px solid rgb(var(--now-color_focus-ring, var(--now-color--focus-ring, 1, 119, 142)));
+            outline-offset: 2px;
+        }
+        .dc-header-btns .btn:disabled,
+        .dc-header-btns .btn[disabled] {
+            opacity: 0.45;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+        /* Primary header button */
+        .dc-header-btns .btn-primary {
+            background-color: rgb(var(--now-button--primary--background-color, var(--now-color--primary-1, 30, 133, 109))) !important;
+            border: 1px solid rgb(var(--now-button--primary--border-color, var(--now-color--primary-3, 15, 67, 55))) !important;
+            color: rgb(var(--now-button--primary--color, var(--now-color--neutral-0, 255, 255, 255))) !important;
+        }
+        .dc-header-btns .btn-primary:hover:not(:disabled) {
+            background-color: rgb(var(--now-button--primary--background-color--hover, var(--now-color--primary-2, 23, 100, 82))) !important;
+            border-color: rgb(var(--now-button--primary--border-color--hover, var(--now-color--primary-3, 15, 67, 55))) !important;
+            color: rgb(var(--now-button--primary--color--hover, var(--now-color--neutral-0, 255, 255, 255))) !important;
+        }
+        .dc-header-btns .btn-primary:focus,
+        .dc-header-btns .btn-primary:focus:hover {
+            background-color: rgb(var(--now-button--primary--background-color--hover, var(--now-color--primary-2, 23, 100, 82))) !important;
+            border-color: rgb(var(--now-button--primary--border-color--hover, var(--now-color--primary-3, 15, 67, 55))) !important;
+            color: rgb(var(--now-button--primary--color--hover, var(--now-color--neutral-0, 255, 255, 255))) !important;
+            outline: 2px solid rgb(var(--now-color_focus-ring, var(--now-color--focus-ring, 1, 119, 142))) !important;
+            outline-offset: 2px !important;
+        }
+        .dc-header-btns .btn-primary:active:not(:disabled),
+        .dc-header-btns .btn-primary.active,
+        .dc-header-btns .btn-primary:active:hover,
+        .dc-header-btns .btn-primary:active:focus {
+            background-color: rgb(var(--now-button--primary--background-color--active, var(--now-color--primary-3, 15, 67, 55))) !important;
+            border-color: rgb(var(--now-button--primary--border-color--active, var(--now-color--primary-3, 15, 67, 55))) !important;
+            color: rgb(var(--now-button--primary--color--active, var(--now-color--neutral-0, 255, 255, 255))) !important;
+        }
+        .dc-header-btns .btn-primary:disabled,
+        .dc-header-btns .btn-primary[disabled] {
+            opacity: 0.45 !important;
+            cursor: not-allowed !important;
+        }
+        /* Secondary header button (header chrome styling) */
+        .dc-header-btns .btn-default {
+            background-color: rgb(var(--now-color_background--primary, 255, 255, 255)) !important;
+            border: 1px solid rgb(var(--now-color_border--secondary, var(--now-color_divider--secondary, 205, 212, 217))) !important;
+            color: rgb(var(--now-button--secondary--color, var(--now-color--neutral-18, 22, 27, 28))) !important;
+            border-radius: var(--now-button--border-radius, 4px) !important;
+            transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .dc-header-btns .btn-default * {
+            color: inherit !important;
+            fill: currentColor !important;
+        }
+        .dc-header-btns .btn-default:hover:not(:disabled) {
+            background-color: rgba(var(--now-color--secondary-1, 1, 119, 142), 0.1) !important;
+            border-color: rgb(var(--now-color--secondary-1, 1, 119, 142)) !important;
+            color: rgb(var(--now-color--secondary-1, 1, 119, 142)) !important;
+        }
+        .dc-header-btns .btn-default:focus,
+        .dc-header-btns .btn-default:focus:hover {
+            background-color: rgba(var(--now-color--secondary-1, 1, 119, 142), 0.1) !important;
+            border-color: rgb(var(--now-color--secondary-1, 1, 119, 142)) !important;
+            color: rgb(var(--now-color--secondary-1, 1, 119, 142)) !important;
+            outline: 2px solid rgb(var(--now-color_focus-ring, var(--now-color--focus-ring, 1, 119, 142))) !important;
+            outline-offset: 2px !important;
+        }
+        .dc-header-btns .btn-default:active:not(:disabled),
+        .dc-header-btns .btn-default.active,
+        .dc-header-btns .btn-default:active:hover,
+        .dc-header-btns .btn-default:active:focus {
+            background-color: rgba(var(--now-color--secondary-1, 1, 119, 142), 0.18) !important;
+            border-color: rgb(var(--now-color--secondary-2, 1, 89, 107)) !important;
+            color: rgb(var(--now-color--secondary-2, 1, 89, 107)) !important;
+        }
+        .dc-header-btns .btn-default:disabled,
+        .dc-header-btns .btn-default[disabled] {
+            opacity: 0.45 !important;
+            cursor: not-allowed !important;
+        }
+
+
+        /* The shell, controls and tokens above follow Compare+. */
+        body { font-family: var(--now-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif); }
+        .dc-app { display: flex; flex-direction: column; min-height: 100vh; }
+        .dc-title { flex-wrap: wrap; white-space: normal; min-width: 0; }
+        #cp-record-name { overflow-wrap: anywhere; }
+        .dc-header-btns { flex-wrap: wrap; }
+        .dc-version-row { align-items: center; flex-wrap: wrap; gap: 0.75rem; padding: 0.5rem 1.25rem; }
+        .cp-control { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+        .form-control { min-height: 2.25rem; border: 1px solid rgb(var(--now-color_border--secondary, 205 212 217)); border-radius: var(--now-button--border-radius, 4px); background: rgb(var(--now-color_background--primary, 255 255 255)); padding: 0.375rem 0.5rem; font: inherit; max-width: 100%; }
+        select.form-control { width: 18rem; }
+        #cp-results { display: flex; flex-direction: column; gap: 0.75rem; }
+        .cp-field-section summary { cursor: pointer; display: list-item; padding: 0.75rem; }
+        .cp-field-section summary .da-field-key { margin-left: 0.5rem; }
+        .cp-field-section summary .da-diff-counts { float: right; }
+        .cp-field-status:empty { display: none; }
+        .cp-table td.cp-empty { padding: 1.5rem 0.75rem; text-align: center; color: rgb(var(--now-color_text--secondary, 82 82 82)); white-space: normal; }
+        .cp-field-status { padding: 0.5rem 0.75rem; }
+        /* Compare+ version dropdown, with date, update set and author columns. */
+        .cp-update-control { flex: 1; }
+        #credit-plus .cp-control label { margin: 0; }
+        .dc-version-dd { position: relative; width: 44rem; max-width: 100%; min-width: 0; }
+        button.dc-version-dd-btn { width: 100%; text-align: left; display: flex; align-items: center; gap: 0.25rem; cursor: pointer; overflow: hidden; }
+        .dc-version-dd-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .dc-version-dd-btn-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+        .dc-version-dd-btn-chevron { flex-shrink: 0; opacity: 0.6; }
+        .caret { display: inline-block; border-top: 0.35rem solid; border-left: 0.3rem solid transparent; border-right: 0.3rem solid transparent; transition: transform 0.2s ease; }
+        .we-caret--open { transform: rotate(180deg); }
+        .dc-version-dd-menu { position: fixed; background: rgb(var(--now-color_background--tertiary, 237 237 237)); border: 1px solid rgba(var(--now-color--neutral-0, 0 0 0), 0.1); overflow-y: auto; z-index: 1002; box-shadow: 0 0.375rem 1.25rem rgba(0, 0, 0, 0.65); border-radius: 0.3125rem; }
+        .dc-version-dd-item { padding: 0.5rem 0.75rem; cursor: pointer; font-size: var(--now-global-font-size--md, 14px); }
+        .dc-version-dd-item + .dc-version-dd-item { border-top: 1px solid rgba(var(--now-color_border--secondary, 228 230 235), 0.5); }
+        .dc-version-dd-item:hover, .dc-version-dd-item:focus { background: rgb(var(--now-dropdown-list_search--background-color--hover, 220 228 230)); }
+        .dc-version-dd-selected { background: rgba(var(--now-color--primary-1, 0 118 204), 0.12); }
+        .dc-vrow { display: grid; grid-template-columns: 11rem minmax(0, 1fr) minmax(0, 1fr); gap: 0.75rem; width: 100%; }
+        .dc-vrow-date, .dc-vrow-uset, .dc-vrow-user { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dc-vrow-uset { color: rgb(var(--now-color_text--tertiary, 114 114 114)); font-style: italic; }
+        .dc-vrow-user { color: rgb(var(--now-color_text--secondary, 82 82 82)); }
+        .cp-control label { white-space: nowrap; color: rgb(var(--now-color_text--secondary, 82 82 82)); }
+        button, a { touch-action: manipulation; }
+        .dc-body { flex: 1; padding: 1rem 1.25rem 2rem; display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; }
+        .cp-time { color: rgb(var(--now-color_text--secondary, 82 82 82)); }
+        #cp-status:empty { display: none; }
+        #cp-status.cp-error { border-left: 3px solid rgb(var(--now-color--critical-2, 191 41 41)); padding: 0.75rem 1rem; background: rgba(191, 41, 41, 0.06); }
+        #cp-warnings { border: 1px solid rgba(var(--now-color_border--secondary, 205 212 217), 0.8); border-radius: 4px; padding: 0.5rem 0.75rem; color: rgb(var(--now-color_text--secondary, 82 82 82)); }
+        #cp-warnings summary { cursor: pointer; font-weight: 600; }
+        #cp-warning-text p { margin-top: 0.5rem; }
+        .da-section { border: 1px solid rgba(var(--now-color_text--primary, 29 29 29), 0.12); border-radius: 0.25rem; overflow: hidden; background: rgba(var(--now-color_text--primary, 29 29 29), 0.015); }
+        .da-summary { padding: 0.5rem 0.75rem; display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+        .da-label { font-weight: 600; }
+        .da-field-key { font: 13px Consolas, Menlo, Monaco, monospace; color: rgb(var(--now-color_text--tertiary, 114 114 114)); }
+        .da-diff-counts { font-weight: 600; margin-left: auto; }
+        .cp-scroll { overflow: auto; background: rgb(var(--now-color_background--primary, 255 255 255)); }
+        .cp-table { border-collapse: collapse; width: 100%; text-align: left; }
+        .cp-table th { padding: 0.5rem 0.75rem; font-weight: 600; background: rgb(var(--now-color_background--secondary, 246 247 249)); border-bottom: 1px solid rgb(var(--now-color_border--secondary, 228 230 235)); white-space: nowrap; }
+        .cp-table td { padding: 0 0.75rem; vertical-align: top; line-height: 1.5rem; }
+        .cp-origin { width: 6rem; white-space: nowrap; border-right: 1px solid rgba(var(--now-color_text--primary, 29 29 29), 0.1); background: rgba(var(--now-color_text--primary, 29 29 29), 0.015); }
+        .cp-time { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 8rem; font-size: 12px; }
+        .cp-number { color: rgb(var(--now-color_text--tertiary, 114 114 114)); text-align: right; width: 3rem; user-select: none; }
+        .cp-update-set { width: 11rem; max-width: 11rem; }
+        .cp-update-set a { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .cp-code { white-space: pre; font: 13px/1.5rem Menlo, Consolas, monospace; }
+        .cp-code.monaco-editor { position: static; background: transparent; outline: none; }
+        .cp-code-headings, .cp-code-body { display: grid; grid-template-columns: minmax(0, var(--cp-attribution-width, 34%)) 6px minmax(0, 1fr); }
+        .cp-code-headings { background: rgb(var(--now-color_background--secondary, 246 247 249)); border-bottom: 1px solid rgb(var(--now-color_border--secondary, 228 230 235)); font-weight: 600; }
+        .cp-code-headings .cp-code-heading { padding: 0.5rem 0.75rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.375rem; min-width: 0; }
+        .cp-code-heading .cp-heading-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .cp-code-heading .btn { flex-shrink: 0; }
+        .cp-gutter-head { align-items: center; display: grid; grid-template-columns: 28% 23% 49%; }
+        .cp-gutter-head span { padding: 0.5rem 0.75rem; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .cp-code-body { height: clamp(20rem, 60vh, 45rem); background: rgb(var(--now-color_background--primary, 255 255 255)); }
+        #credit-plus .cp-code-monaco { min-width: 0; overflow: hidden; }
+        #credit-plus .cp-gutter { min-width: 0; overflow: hidden; overflow: clip; border-right: 1px solid rgb(var(--now-color_border--secondary, 228 230 235)); }
+        #credit-plus .cp-gutter-content { position: relative; }
+        #credit-plus .cp-gutter table, #credit-plus .cp-attribution { display: block; position: relative; width: 100%; border: 0; margin: 0; border-spacing: 0; font: inherit; }
+        #credit-plus .cp-attribution tr { position: absolute; left: 0; width: 100%; display: grid; grid-template-columns: 28% 23% 49%; overflow: hidden; }
+        #credit-plus .cp-gutter td { display: block; min-width: 0; width: auto; max-width: none; padding: 0 0.75rem; border: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: inherit; }
+
+        #credit-plus .cp-gutter .cp-block-start td { box-shadow: inset 0 1px rgba(var(--now-color_text--primary, 29 29 29), 0.1); }
+        .cp-splitter { cursor: col-resize; touch-action: none; background: rgb(var(--now-color_border--secondary, 228 230 235)); }
+        .cp-splitter:hover, .cp-splitter:focus-visible { background: rgb(var(--now-color--primary-2, 0 118 204)); outline: none; }
+        .cp-context-menu { position: fixed; z-index: 1100; max-width: calc(100vw - 8px); max-height: calc(100vh - 8px); overflow: auto; }
+        .cp-context-menu .context_item { display: block; text-decoration: none; cursor: pointer; }
+        .cp-context-menu .context_item.is-disabled { cursor: default; }
+        .cp-context-menu .icon-open-document-new-tab { margin-left: 0.5rem; }
+        .cp-active-filters { display: flex; flex-wrap: wrap; gap: 0.375rem; padding: 0.375rem 0.75rem; }
+        .cp-filter-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        /* ServiceNow's Monaco bundle omits the diff highlight styles. Match Compare+. */
+        .monaco-diff-editor .line-insert { background-color: rgba(9, 134, 88, 0.15) !important; }
+        .monaco-diff-editor .char-insert { background-color: rgba(9, 134, 88, 0.40) !important; }
+        .monaco-diff-editor .line-delete { background-color: rgba(191, 41, 41, 0.15) !important; }
+        .monaco-diff-editor .char-delete { background-color: rgba(191, 41, 41, 0.35) !important; }
+        .cp-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+        .cp-block-start td { border-top: 1px solid rgba(var(--now-color_text--primary, 29 29 29), 0.1); }
+        #credit-plus .cp-cell { display: flex; align-items: center; gap: 0.25rem; height: 100%; min-width: 0; }
+        #credit-plus .cp-cell[aria-haspopup="menu"] { cursor: pointer; }
+        #credit-plus .cp-cell[aria-haspopup="menu"] .cp-cell-text { color: rgb(var(--now-color--primary-2, 0 118 204)); text-decoration: underline dotted; text-underline-offset: 3px; }
+        #credit-plus .cp-cell-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--now-color_focus-ring, 1 119 142)); outline-offset: 2px; }
+        [hidden] { display: none !important; }
+        @media (max-width: 760px) {
+            .dc-header-row { flex-wrap: wrap; padding: 0.75rem; gap: 0.75rem; }
+            .dc-version-row { padding: 0.5rem 0.75rem; }
+            .dc-body { padding: 0.75rem; }
+            .cp-update-control { width: 100%; }
+            .cp-update-control label { width: auto; }
+            .cp-update-control .dc-version-dd { flex: 1; }
+            .dc-vrow { grid-template-columns: 10rem minmax(0, 1fr) minmax(0, 1fr); gap: 0.375rem; }
+            .cp-control .form-control { flex: 1; min-width: 0; }
+            .cp-control label { width: 7rem; }
+            .cp-code-headings, .cp-code-body { grid-template-columns: minmax(0, var(--cp-attribution-width, 44%)) 6px minmax(0, 1fr); }
+            .cp-gutter-head { grid-template-columns: 40% 60%; font-size: 11px; }
+            .cp-gutter-head .cp-time-heading { display: none; }
+            #credit-plus .cp-gutter .cp-time { display: none; }
+            #credit-plus .cp-attribution tr { grid-template-columns: 40% 60%; }
+            .cp-gutter-head span, #credit-plus .cp-gutter td { padding-left: 0.375rem; padding-right: 0.375rem; }
+        }
+        @media (prefers-reduced-motion: reduce) { .dc-header-btns .btn { transition: none; } }
+
+        /* Widget picker in header title */
+        .dc-title-label {
+            color: rgb(var(--now-color--neutral-0, var(--now-color--neutral-12, 38, 50, 56)));
+            margin-right: 0;
+        }
+        .dc-title-colon {
+            font-size: var(--now-font-size--lg, 18px);
+            font-weight: 600;
+            color: rgb(var(--now-color--neutral-0, var(--now-color--neutral-12, 38, 50, 56)));
+            margin-right: 0;
+        }
+
+        /* Table picker in header title */
+        .dc-table-picker-wrap {
+            display: inline-flex;
+            align-items: center;
+        }
+        .dc-table-picker-wrap .select2-container {
+            display: inline-block;
+            vertical-align: middle;
+            min-width: 12rem;
+            max-width: 26rem;
+        }
+        .dc-table-picker-wrap .select2-choice {
+            border: none !important;
+            border-bottom: 1px dotted rgba(var(--now-color--neutral-0, var(--now-color--neutral-12, 38, 50, 56)), 0.45) !important;
+            border-radius: 0;
+            background: transparent !important;
+            box-shadow: none !important;
+            padding: 0 0 0.125rem 0 !important;
+            height: auto !important;
+            line-height: 1.2 !important;
+            font-size: var(--now-font-size--lg, 18px) !important;
+            font-weight: 600 !important;
+            color: rgb(var(--now-color--neutral-0, var(--now-color--neutral-12, 38, 50, 56))) !important;
+            position: relative !important;
+            margin-top: 0.125rem;
+        }
+        .dc-table-picker-wrap .select2-chosen {
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+            color: rgb(var(--now-color--neutral-0, var(--now-color--neutral-12, 38, 50, 56))) !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            display: block !important;
+        }
+        .dc-table-picker-wrap .select2-chosen::before {
+            content: "\200B";
+            display: inline-block;
+        }
+        .dc-table-picker-wrap .select2-arrow { display: none !important; }
+        .dc-table-picker-wrap .select2-choice { padding-right: 0 !important; }
+
+        .dc-picker-wrap {
+            display: inline-flex;
+            align-items: center;
+            margin-left: 0.5rem;
+        }
+        .dc-picker-wrap .select2-container {
+            display: inline-block;
+            vertical-align: middle;
+            min-width: 18.75rem;
+            max-width: 27.5rem;
+        }
+        .dc-picker-wrap .select2-choice {
+            border: none !important;
+            border-bottom: 1px dotted rgba(var(--now-color--neutral-0, var(--now-color--neutral-12, 38, 50, 56)), 0.45) !important;
+            border-radius: 0;
+            background: transparent !important;
+            box-shadow: none !important;
+            padding: 0 1.25rem 0.125rem 0 !important;
+            height: auto !important;
+            line-height: 1.2 !important;
+            font-size: var(--now-font-size--lg, 18px) !important;
+            font-weight: 700 !important;
+            color: rgb(var(--now-color--neutral-0, var(--now-color--neutral-12, 38, 50, 56))) !important;
+            position: relative !important;
+            margin-top: 0.125rem;
+        }
+        .dc-picker-wrap .select2-chosen {
+            padding-left: 0.5rem;
+            padding-right: 0 !important;
+            color: rgb(var(--now-color--neutral-0, var(--now-color--neutral-12, 38, 50, 56))) !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            display: block !important;
+        }
+
+        .dc-picker-wrap .select2-chosen::before {
+            content: "\200B";
+            display: inline-block;
+        }
+
+        /* Chevron-down arrow replacing Select2's default sprite */
+        .dc-picker-wrap .select2-arrow {
+            background: transparent !important;
+            border-left: none !important;
+            width: 1.25rem !important;
+            height: 1.25rem !important;
+            position: absolute !important;
+            right: 0 !important;
+            top: 50% !important;
+            transform: translateY(-50%) !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+        .dc-picker-wrap .select2-arrow b::before {
+            content: none !important;
+        }
+        .dc-picker-wrap .select2-arrow b {
+            display: block !important;
+            width: 0.6875rem !important;
+            height: 0.4375rem !important;
+            background-image: none !important;
+            background-color: rgba(var(--now-color--neutral-0, var(--now-color--neutral-12, 38, 50, 56)), 0.6) !important;
+            -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M0 0.5L5 5.5L10 0.5' stroke='black' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+            mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M0 0.5L5 5.5L10 0.5' stroke='black' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+            -webkit-mask-size: contain !important;
+            mask-size: contain !important;
+            -webkit-mask-repeat: no-repeat !important;
+            mask-repeat: no-repeat !important;
+            -webkit-mask-position: center !important;
+            mask-position: center !important;
+            transition: transform 0.15s ease !important;
+        }
+        .dc-picker-wrap .select2-container.select2-dropdown-open .select2-arrow b {
+            transform: rotate(180deg) !important;
+        }
+        /* Table name shown after label in the table picker dropdown */
+        .dc-table-result-name {
+            margin-left: 0.5rem;
+            font-size: var(--now-font-size--sm);
+            opacity: 0.6;
+        }
+
+        /* Table/record picker dropdowns — wider than the inputs so long names aren't cut off */
+        .dc-table-picker-drop  { min-width: 26rem !important; }
+        .dc-record-picker-drop { min-width: 26rem !important; }
+
+        /* Select2 themed dropdown (appended to body) */
+        .select2-drop {
+            background: rgb(var(--now-color_background--tertiary, 237 237 237)) !important;
+            border: 1px solid rgba(var(--now-color--neutral-0, 0 0 0), 0.15) !important;
+            box-shadow: 0 0.25rem 1rem rgba(0, 0, 0, 0.35) !important;
+            color: rgb(var(--now-color_text--primary, 29 29 29)) !important;
+        }
+        .select2-drop .select2-results { background: transparent !important; }
+        .select2-drop .select2-result {
+            border-bottom: 1px solid rgba(var(--now-color--neutral-0, 0 0 0), 0.07) !important;
+        }
+        .select2-drop .select2-result:last-child { border-bottom: none !important; }
+        .select2-drop .select2-result-label {
+            color: rgb(var(--now-color_text--primary, 29 29 29)) !important;
+            font-size: var(--now-global-font-size--md, 14px) !important;
+            padding: 0.375rem 0.625rem !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            display: block !important;
+        }
+        .select2-drop .select2-result.select2-highlighted .select2-result-label {
+            background: rgba(var(--now-color--primary-1, 0 118 204), 0.2) !important;
+            color: rgb(var(--now-color_text--primary, 29 29 29)) !important;
+        }
+        .select2-drop .select2-searching,
+        .select2-drop .select2-no-results {
+            background: transparent !important;
+            color: rgb(var(--now-color_text--secondary, 82 82 82)) !important;
+        }
+        .select2-drop .select2-search input {
+            background: rgb(var(--now-color_background--primary, 255 255 255)) !important;
+            background-image: none !important;
+            border: 1px solid rgba(var(--now-color--neutral-0, 0 0 0), 0.15) !important;
+            color: rgb(var(--now-color_text--primary, 29 29 29)) !important;
+            box-shadow: none !important;
+        }
+
+        .dc-title { flex: 1; }
+        .dc-table-picker-wrap, .dc-picker-wrap { min-width: 0; max-width: 100%; }
+        .dc-title .select2-container { min-width: 0; max-width: 100%; }
+        .dc-table-picker-wrap .select2-container { width: 12rem; }
+        .dc-picker-wrap .select2-container { width: 27.5rem; }
+        .dc-table-picker-drop, .dc-record-picker-drop { min-width: min(26rem, calc(100vw - 1.5rem)) !important; max-width: calc(100vw - 1.5rem); }
+        @media (max-width: 600px) {
+            .dc-title { flex-basis: 100%; width: 100%; }
+            .dc-picker-wrap { margin-left: 0; width: 100%; }
+        }
+        </style>
+        <main id="credit-plus" class="dc-app">
+            <header class="dc-header">
+                <div class="dc-header-row">
+                    <div class="dc-title" role="heading" aria-level="1"><span class="dc-title-label">Credit+&#160;</span><span id="cp-table-picker" class="dc-table-picker-wrap"><span id="cp-table-label"></span></span><span class="dc-title-colon">:</span><span id="cp-record-picker" class="dc-picker-wrap"><strong id="cp-record-name"></strong></span></div>
+                    <div class="dc-header-btns">
+                        <button id="cp-retry" type="button" class="btn btn-default" title="Reload" aria-label="Reload"><i class="icon-refresh" aria-hidden="true"></i></button>
+                        <a id="cp-editor-link" class="btn btn-default" target="_blank" rel="noopener" hidden="hidden">Open in Widget Editor+</a>
+                        <a id="cp-record-link" class="btn btn-primary" target="_blank" rel="noopener" hidden="hidden">Open record</a>
+                    </div>
+                </div>
+                <div class="dc-version-row">
+                    <div class="cp-control cp-update-control dc-header-btns"><label for="cp-update-button">Update set</label><div class="dc-version-dd">
+                        <select id="cp-inspect-version" disabled="disabled" hidden="hidden"></select>
+                        <button id="cp-update-button" type="button" class="btn btn-default dc-version-dd-btn" aria-haspopup="listbox" aria-expanded="false" aria-controls="cp-update-menu" disabled="disabled"><span class="dc-version-dd-btn-label">Update set</span><span class="dc-version-dd-btn-chevron"><span class="caret"></span></span></button>
+                        <div id="cp-update-menu" class="dc-version-dd-menu" role="listbox" aria-label="Update set" hidden="hidden"></div>
+                    </div></div>
+                </div>
+            </header>
+            <div class="dc-body">
+                <p id="cp-status" role="status" aria-live="polite">Loading update sets…</p>
+                <details id="cp-warnings" hidden="hidden"><summary>History gaps</summary><div id="cp-warning-text"></div></details>
+                <div id="cp-results" hidden="hidden"></div>
+                <template id="cp-field-template">
+                    <button id="cp-field-retry" type="button" class="btn btn-default" hidden="hidden">Retry field</button>
+                <section id="cp-current-panel" aria-label="Code at the selected update set">
+                    <div class="cp-field-code">
+                        <div id="cp-active-filters" class="cp-active-filters" hidden="hidden" aria-label="Active filters"></div>
+                        <div id="cp-code-view" hidden="hidden">
+                            <div class="cp-code-headings"><div class="cp-gutter-head"><span class="cp-time-heading">Updated</span><span>Created by</span><span>Update set</span></div><span aria-hidden="true"></span><div class="cp-code-heading"><span id="cp-code-label" class="cp-heading-label"></span><button id="cp-diff-close" class="btn btn-default btn-sm" type="button" hidden="hidden">Close comparison</button></div></div>
+                            <div id="cp-code-status" class="cp-field-status" role="status" aria-live="polite" hidden="hidden"></div>
+                            <div class="cp-code-body">
+                                <div id="cp-gutter" class="cp-gutter"><div id="cp-gutter-content" class="cp-gutter-content"><table class="cp-table" role="table" aria-label="Historical code line attribution">
+                                    <thead class="cp-sr-only"><tr><th scope="col">Updated</th><th scope="col">Created by</th><th scope="col">Update set</th></tr></thead>
+                                    <tbody id="cp-attribution" class="cp-attribution" role="rowgroup"></tbody>
+                                </table></div></div>
+                                <div id="cp-splitter" class="cp-splitter" role="separator" tabindex="0" aria-label="Resize attribution and code for all fields" aria-orientation="vertical" aria-valuemin="20" aria-valuemax="65" aria-valuenow="34"></div>
+                                <div id="cp-code-monaco" class="cp-code-monaco"></div>
+                            </div>
+                        </div>
+                        <div id="cp-table-fallback" class="cp-scroll"><table class="cp-table" aria-label="Historical code line attribution">
+                            <thead><tr><th scope="col">Updated</th><th scope="col">Created by</th><th scope="col">Update set</th><th scope="col">Line</th><th scope="col" id="cp-fallback-label"></th></tr></thead>
+                            <tbody><tr id="cp-status-row" hidden="hidden"><td colspan="5"><div id="cp-field-status" class="cp-field-status" role="status" aria-live="polite"></div></td></tr></tbody>
+                            <tbody id="cp-lines"></tbody>
+                        </table></div>
+                    </div>
+                </section>
+                </template>
+            </div>
+        </main>
+    </j:if>
+    <j:if test="${!gs.hasRole('admin')}"><p role="alert">Administrator access is required to use Credit+.</p></j:if>
+</j:jelly>

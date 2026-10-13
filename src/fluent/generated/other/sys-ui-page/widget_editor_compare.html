@@ -21,6 +21,7 @@
         var _weDiffConfigParams = new URLSearchParams(window.location.search);
         window.WE_DIFF_CONFIG = {
             record_id:        _weDiffConfigParams.get('record_id') || '',
+            credit_update:    _weDiffConfigParams.get('credit_update') || '',
             table:            _weDiffConfigParams.get('table') || 'sp_widget',
             version_1:        _weDiffConfigParams.get('version_1') || '',
             version_2:        _weDiffConfigParams.get('version_2') || '',
@@ -1441,10 +1442,10 @@
                     <div class="dc-version-left-half">
                     <div class="dc-version-col dc-version-dd" ng-click="$event.stopPropagation()">
                         <button class="btn btn-default dc-version-dd-btn" ng-click="ctrl.toggleVersionCol('left')"
-                                ng-disabled="ctrl.loadingLeft" aria-label="Left version"
+                                ng-disabled="ctrl.loadingLeft || ctrl.creditComparison" aria-label="Left version"
                                 ng-class="{'dc-version-dd-btn--error': ctrl.isSameVersionSelected()}">
                             <span class="dc-version-dd-btn-label" ng-bind="ctrl.leftLabel()"></span>
-                            <span class="dc-version-dd-btn-chevron"><span class="caret" ng-class="{'we-caret--open': ctrl.openVersionCol === 'left'}"></span></span>
+                            <span class="dc-version-dd-btn-chevron"><span class="caret" ng-if="!ctrl.creditComparison" ng-class="{'we-caret--open': ctrl.openVersionCol === 'left'}"></span></span>
                         </button>
                                 <div class="dc-version-dd-menu" ng-show="ctrl.openVersionCol === 'left'">
                             <div class="dc-version-dd-item"
@@ -1479,10 +1480,10 @@
                     </div><!-- /.dc-version-left-half -->
                     <div class="dc-version-col dc-version-dd" ng-click="$event.stopPropagation()">
                         <button class="btn btn-default dc-version-dd-btn" ng-click="ctrl.toggleVersionCol('right')"
-                                ng-disabled="ctrl.loadingRight" aria-label="Right version" style="margin: 0 0.75rem;"
+                                ng-disabled="ctrl.loadingRight || ctrl.creditComparison" aria-label="Right version" style="margin: 0 0.75rem;"
                                 ng-class="{'dc-version-dd-btn--error': ctrl.isSameVersionSelected()}">
                             <span class="dc-version-dd-btn-label" ng-bind="ctrl.rightLabel()"></span>
-                            <span class="dc-version-dd-btn-chevron"><span class="caret" ng-class="{'we-caret--open': ctrl.openVersionCol === 'right'}"></span></span>
+                            <span class="dc-version-dd-btn-chevron"><span class="caret" ng-if="!ctrl.creditComparison" ng-class="{'we-caret--open': ctrl.openVersionCol === 'right'}"></span></span>
                         </button>
                                 <div class="dc-version-dd-menu" ng-show="ctrl.openVersionCol === 'right'">
                             <div class="dc-version-dd-item"
@@ -1559,13 +1560,13 @@
                                 </td>
                                 <td class="sft-val" ng-class="{'sft-col-loading': ctrl.loadingLeft}">
                                     <a ng-if="ctrl.metaLeft.uss" class="dc-link"
-                                       ng-href="/nav_to.do?uri=sys_update_set.do%3Fsys_id%3D{{ctrl.metaLeft.uss}}"
+                                       ng-href="/nav_to.do?uri={{ctrl.metaLeft.ust || 'sys_update_set'}}.do%3Fsys_id%3D{{ctrl.metaLeft.uss}}"
                                        target="_blank">{{ctrl.metaLeft.usn}}<span class="we-ext-icon" aria-hidden="true"></span></a>
                                     <span ng-if="!ctrl.metaLeft.uss" ng-bind="ctrl.metaLeft.usn"></span>
                                 </td>
                                 <td class="sft-val" ng-class="{'sft-col-loading': ctrl.loadingRight}">
                                     <a ng-if="ctrl.metaRight.uss" class="dc-link"
-                                       ng-href="/nav_to.do?uri=sys_update_set.do%3Fsys_id%3D{{ctrl.metaRight.uss}}"
+                                       ng-href="/nav_to.do?uri={{ctrl.metaRight.ust || 'sys_update_set'}}.do%3Fsys_id%3D{{ctrl.metaRight.uss}}"
                                        target="_blank">{{ctrl.metaRight.usn}}<span class="we-ext-icon" aria-hidden="true"></span></a>
                                     <span ng-if="!ctrl.metaRight.uss" ng-bind="ctrl.metaRight.usn"></span>
                                 </td>
