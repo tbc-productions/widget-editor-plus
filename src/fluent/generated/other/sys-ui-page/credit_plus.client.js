@@ -28,6 +28,10 @@
 
                 var config = window.WE_CREDIT_CONFIG || {},
                     params = new URLSearchParams(window.location.search);
+                var requestTimeout =
+                    isFinite(Number(config.requestTimeout)) && Number(config.requestTimeout) > 0
+                        ? Math.min(Number(config.requestTimeout), 2147483000)
+                        : 180000;
                 var openStatisticsOnLoad = params.get('sysparm_statistics') === 'true';
                 var launchUrl = window.location.pathname.substring(1) + window.location.search,
                     notifiedTitle = '',
@@ -164,41 +168,144 @@
                     ctrl.statistics.error = '';
                     changed();
                     function failed(message) {
+                        if (accumulated) complete();
                         ctrl.statistics.loading = false;
                         ctrl.statistics.error = message;
                         changed();
                     }
-                    statisticsTimer = window.setTimeout(function () {
-                        if (request !== statisticsRequest) return;
-                        statisticsRequest++;
-                        failed('The request timed out. Retry statistics.');
-                    }, 30000);
-                    try {
-                        var ga = new GlideAjax('CreditPlus');
-                        ga.addParam('sysparm_name', 'getStatistics');
-                        ga.addParam('sysparm_update', data.selected);
-                        ga.getXMLAnswer(function (answer) {
-                            changed();
-                            if (request !== statisticsRequest) return;
-                            window.clearTimeout(statisticsTimer);
-                            try {
-                                var stats = JSON.parse(answer || '{}');
-                                if (!stats.success) {
-                                    failed(stats.error || 'Statistics could not be loaded.');
-                                    return;
+                    var accumulated,
+                        cursor = '0',
+                        historyKey = '';
+                    function merge(stats) {
+                        if (!accumulated)
+                            accumulated = {
+                                summary: stats,
+                                authors: Object.create(null),
+                                sets: Object.create(null),
+                                fields: Object.create(null),
+                                added: 0,
+                                removed: 0,
+                                gaps: 0,
+                                partial: false,
+                            };
+                        accumulated.added += stats.added;
+                        accumulated.removed += stats.removed;
+                        accumulated.gaps += stats.gaps || 0;
+                        accumulated.partial = accumulated.partial || stats.partial;
+                        function collect(entries, destination, key) {
+                            (entries || []).forEach(function (entry) {
+                                var id = key(entry),
+                                    previous = destination[id];
+                                if (!previous) {
+                                    previous = destination[id] = Object.assign({}, entry, { added: 0, removed: 0 });
                                 }
-                                renderStatistics(stats);
-                                ctrl.statistics.loaded = true;
-                                ctrl.statistics.loading = false;
-                                ctrl.statistics.error = '';
-                            } catch (e) {
-                                failed('Statistics could not be loaded.');
-                            }
+                                previous.added += entry.added;
+                                previous.removed += entry.removed;
+                                if (entry.userId) previous.userId = entry.userId;
+                            });
+                        }
+                        collect(stats.creators, accumulated.authors, function (entry) {
+                            return entry.name;
                         });
-                    } catch (e) {
-                        window.clearTimeout(statisticsTimer);
-                        failed('Statistics could not be loaded.');
+                        collect(stats.creatorSets, accumulated.sets, function (entry) {
+                            return (
+                                entry.key ||
+                                (entry.updateSet ? entry.updateSet.table + ':' + entry.updateSet.id : entry.name)
+                            );
+                        });
+                        collect(stats.fieldTotals, accumulated.fields, function (entry) {
+                            return entry.name;
+                        });
                     }
+                    function complete() {
+                        var stats = accumulated.summary;
+                        function rank(object, metric) {
+                            return Object.keys(object)
+                                .map(function (key) {
+                                    return object[key];
+                                })
+                                .sort(function (a, b) {
+                                    return b[metric] - a[metric] || a.name.localeCompare(b.name);
+                                });
+                        }
+                        function busiest(object) {
+                            return (
+                                rank(object, 'added')
+                                    .sort(function (a, b) {
+                                        return (
+                                            b.added + b.removed - a.added - a.removed || a.name.localeCompare(b.name)
+                                        );
+                                    })
+                                    .filter(function (entry) {
+                                        return entry.added + entry.removed > 0;
+                                    })[0] || null
+                            );
+                        }
+                        stats.creators = rank(accumulated.authors, 'added');
+                        stats.destroyers = rank(accumulated.authors, 'removed');
+                        stats.creatorSets = rank(accumulated.sets, 'added');
+                        stats.destroyerSets = rank(accumulated.sets, 'removed');
+                        stats.contributorCount = stats.creators.length;
+                        stats.added = accumulated.added;
+                        stats.removed = accumulated.removed;
+                        if (Object.keys(accumulated.fields).length) stats.busiestField = busiest(accumulated.fields);
+                        stats.biggestMakeover = busiest(accumulated.sets);
+                        renderStatistics(stats);
+                        ctrl.statistics.loaded = true;
+                        ctrl.statistics.loading = false;
+                        ctrl.statistics.error = accumulated.partial
+                            ? 'Partial statistics: some history could not be compared.'
+                            : '';
+                    }
+                    function nextBatch() {
+                        statisticsTimer = window.setTimeout(function () {
+                            if (request !== statisticsRequest) return;
+                            statisticsRequest++;
+                            failed('The request timed out. Retry statistics.');
+                        }, requestTimeout);
+                        try {
+                            var ga = new GlideAjax('WidgetEditorCredit');
+                            ga.addParam('sysparm_name', 'getStatistics');
+                            ga.addParam('sysparm_update', data.selected);
+                            ga.addParam('sysparm_cursor', cursor);
+                            ga.addParam('sysparm_history_key', historyKey);
+                            ga.getXMLAnswer(function (answer) {
+                                changed();
+                                if (request !== statisticsRequest || $scope.$$destroyed) return;
+                                window.clearTimeout(statisticsTimer);
+                                try {
+                                    var stats = JSON.parse(answer || '{}');
+                                    if (!stats.success) {
+                                        failed(stats.error || 'Statistics could not be loaded.');
+                                        return;
+                                    }
+                                    if (!stats.fieldTotals && !stats.nextCursor && !accumulated) {
+                                        renderStatistics(stats);
+                                        ctrl.statistics.loaded = true;
+                                        ctrl.statistics.loading = false;
+                                        return;
+                                    }
+                                    merge(stats);
+                                    if (stats.nextCursor) {
+                                        if (
+                                            !/^\d+$/.test(stats.nextCursor) ||
+                                            Number(stats.nextCursor) <= Number(cursor)
+                                        )
+                                            throw new Error('Invalid statistics cursor.');
+                                        cursor = stats.nextCursor;
+                                        historyKey = stats.historyKey;
+                                        nextBatch();
+                                    } else complete();
+                                } catch (e) {
+                                    failed('Statistics could not be loaded.');
+                                }
+                            });
+                        } catch (e) {
+                            window.clearTimeout(statisticsTimer);
+                            failed('Statistics could not be loaded.');
+                        }
+                    }
+                    nextBatch();
                 }
                 ctrl.toggleStatistics = function () {
                     setStatisticsOpen(!ctrl.statistics.open);
@@ -206,7 +313,10 @@
                     updateTitle();
                     if (ctrl.statistics.open) loadStatistics();
                 };
-                ctrl.retryStatistics = loadStatistics;
+                ctrl.retryStatistics = function () {
+                    ctrl.statistics.loaded = false;
+                    loadStatistics();
+                };
 
                 function navUrl(uri) {
                     return '/nav_to.do?uri=' + encodeURIComponent(uri);
@@ -288,7 +398,7 @@
                                 var request = ++pickerRequests[index],
                                     queryTable = tableName;
                                 pickerTimers[index] = window.setTimeout(function () {
-                                    var ga = new GlideAjax('CreditPlus');
+                                    var ga = new GlideAjax('WidgetEditorCredit');
                                     ga.addParam('sysparm_name', isTable ? 'getTables' : 'getRecords');
                                     ga.addParam('sysparm_search', query.term || '');
                                     ga.addParam('sysparm_page', query.page || 1);
@@ -1201,8 +1311,8 @@
                             if (request !== diffRequest || disposed) return;
                             diffRequest++;
                             fail('Comparison timed out.');
-                        }, 30000);
-                        var ga = new GlideAjax('CreditPlus');
+                        }, requestTimeout);
+                        var ga = new GlideAjax('WidgetEditorCredit');
                         ga.addParam('sysparm_name', 'getComparison');
                         ga.addParam('sysparm_update', data.selected);
                         ga.addParam('sysparm_from_update', snapshot.id);
@@ -1264,6 +1374,7 @@
                     }
                     function setData(result) {
                         data = result;
+                        if (Number(result.requestTimeout) > 0) requestTimeout = Number(result.requestTimeout);
                         data.updates.forEach(function (snapshot) {
                             updates[snapshot.id] = snapshot;
                         });
@@ -1289,8 +1400,8 @@
                                 timer = null;
                                 fail('Request timed out.');
                             }
-                        }, 30000);
-                        var ga = new GlideAjax('CreditPlus');
+                        }, requestTimeout);
+                        var ga = new GlideAjax('WidgetEditorCredit');
                         ga.addParam('sysparm_name', 'getCredit');
                         ga.addParam('sysparm_update', updateId);
                         ga.addParam('sysparm_field', entry.name);
@@ -1393,6 +1504,7 @@
 
                 function render(result) {
                     data = result;
+                    if (Number(result.requestTimeout) > 0) requestTimeout = Number(result.requestTimeout);
                     ctrl.data = result;
                     tableName = data.table;
                     recordId = data.record;
@@ -1481,8 +1593,8 @@
                         if (request !== sequence) return;
                         sequence++;
                         failed('The request timed out. Reload to try again.');
-                    }, 30000));
-                    var ga = new GlideAjax('CreditPlus');
+                    }, requestTimeout));
+                    var ga = new GlideAjax('WidgetEditorCredit');
                     ga.addParam('sysparm_name', 'getCredit');
                     ga.addParam('sysparm_context', 'true');
                     if (updateId) ga.addParam('sysparm_update', updateId);

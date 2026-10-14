@@ -15,5 +15,5 @@ Acl({
     type: 'client_callable_script_include',
     operation: 'execute',
     roles: ['admin'],
-    name: 'CreditPlus',
+    name: 'WidgetEditorCredit',
 })

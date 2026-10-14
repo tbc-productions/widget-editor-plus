@@ -1,5 +1,26 @@
-var CreditPlus = Class.create();
-CreditPlus.prototype = Object.extendsObject(AbstractAjaxProcessor, {
+var WidgetEditorCredit = Class.create();
+WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
+    _limits: function () {
+        if (this._creditLimits) return this._creditLimits;
+        var defaults = {
+            max_updates: 5000,
+            max_payload_chars: 20000000,
+            max_history_chars: 100000000,
+            max_lines: 50000,
+            diff_work: 20000000,
+            request_timeout_seconds: 180,
+            statistics_batch_size: 10,
+        };
+        var limits = {};
+        Object.keys(defaults).forEach(function (key) {
+            var raw = String(gs.getProperty('monaco.plus.credit.' + key, String(defaults[key])));
+            var value = Number(raw);
+            limits[key] = /^\d+$/.test(raw) && value > 0 && Number.isSafeInteger(value) ? value : defaults[key];
+        });
+        limits.request_timeout_seconds = Math.min(limits.request_timeout_seconds, 2147483);
+        this._creditLimits = limits;
+        return limits;
+    },
     canView: function (update) {
         if (!gs.hasRole('admin')) return false;
         try {
@@ -47,8 +68,16 @@ CreditPlus.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 fields = this._fields(target.table),
                 name = String(selected.getValue('name') || '');
             if (!fields.length || !name) throw new Error('This customer update has no code history.');
-            var history = this._customerUpdates(name, String(selected.getUniqueValue())),
-                authors = Object.create(null),
+            var history = this._customerUpdates(name, String(selected.getUniqueValue()));
+            if (!history.length) throw new Error('No Customer Updates for this record.');
+            var cursor = String(this.getParameter('sysparm_cursor') || '0');
+            if (!/^\d+$/.test(cursor) || Number(cursor) >= history.length)
+                throw new Error('Invalid statistics cursor.');
+            var start = Number(cursor),
+                historyKey = this._historyKey(history);
+            if (start && this.getParameter('sysparm_history_key') !== historyKey)
+                throw new Error('Customer Updates changed while loading statistics. Retry statistics.');
+            var authors = Object.create(null),
                 sets = [],
                 fieldTotals = fields.map(function (field) {
                     return { name: field.label, added: 0, removed: 0 };
@@ -56,65 +85,88 @@ CreditPlus.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 previous = fields.map(function () {
                     return [];
                 }),
-                budget = { remaining: 10000000 },
+                budget = { chars: 0 },
                 gaps = 0,
                 added = 0,
                 removed = 0,
-                lastTime = '',
-                knownSets = 0;
-            if (!history.length) throw new Error('No Customer Updates for this record.');
-            for (var h = 0; h < history.length; h++) {
-                var entry = history[h],
-                    parsed = entry.parsed;
-                if (!parsed)
-                    throw new Error('A historical payload is unavailable. Statistics could not be calculated.');
-                if (parsed.table !== target.table || parsed.id !== target.id)
+                partial = !!history.partial,
+                began = Date.now();
+            if (start) {
+                var prior = this._loadEntry(history[start - 1], budget);
+                if (!prior) partial = true;
+                if (prior && (prior.table !== target.table || prior.id !== target.id))
                     throw new Error('History payloads identify different records.');
-                if (lastTime === entry.orderTime)
-                    throw new Error(
-                        'History contains tied Customer Update timestamps. The order cannot be determined safely.'
-                    );
-                lastTime = entry.orderTime;
+                previous = fields.map(function (field) {
+                    return !prior ||
+                        (prior.action !== 'DELETE' && !Object.prototype.hasOwnProperty.call(prior.values, field.name))
+                        ? null
+                        : this._lines(
+                              prior.action === 'DELETE' ? '' : String(prior.values[field.name]).replace(/\r\n?/g, '\n')
+                          );
+                }, this);
+            }
+            var end = Math.min(history.length, start + this._limits().statistics_batch_size),
+                h = start;
+            for (; h < end; h++) {
+                if (h > start && Date.now() - began >= 5000) break;
+                var entry = history[h],
+                    parsed = this._loadEntry(entry, budget);
+                if (parsed && (parsed.table !== target.table || parsed.id !== target.id))
+                    throw new Error('History payloads identify different records.');
                 var author =
-                        authors[entry.author] || (authors[entry.author] = { name: entry.author, added: 0, removed: 0 }),
-                    set = {
-                        name: entry.updateSet ? entry.updateSet.name : 'Unknown update set',
-                        updateSet: entry.updateSet,
-                        added: 0,
-                        removed: 0,
-                    };
+                    authors[entry.author] || (authors[entry.author] = { name: entry.author, added: 0, removed: 0 });
+                var set = {
+                    key: entry.updateSet ? entry.updateSet.table + ':' + entry.updateSet.id : entry.id,
+                    name: entry.updateSet ? entry.updateSet.name : 'Unknown update set',
+                    updateSet: entry.updateSet,
+                    added: 0,
+                    removed: 0,
+                };
                 sets.push(set);
-                if (entry.updateSet) knownSets++;
                 for (var f = 0; f < fields.length; f++) {
                     var field = fields[f].name;
-                    if (parsed.action !== 'DELETE' && !Object.prototype.hasOwnProperty.call(parsed.values, field)) {
+                    if (
+                        !parsed ||
+                        (parsed.action !== 'DELETE' && !Object.prototype.hasOwnProperty.call(parsed.values, field))
+                    ) {
                         previous[f] = null;
                         gaps++;
+                        partial = true;
                         continue;
                     }
                     var lines = this._lines(
                         parsed.action === 'DELETE' ? '' : String(parsed.values[field]).replace(/\r\n?/g, '\n')
                     );
-                    if (lines.length > 5000) throw new Error('Script exceeds the 5,000 line comparison limit.');
-                    // A field missing from a snapshot breaks the chain; do not invent additions after that gap.
+                    // Missing snapshots break the chain; do not count uncertain changes.
                     if (previous[f] !== null) {
-                        var mapping = this._match(previous[f], lines, budget),
+                        var mapping = this._match(previous[f], lines, { remaining: this._limits().diff_work }),
                             matched = 0;
-                        for (var i = 0; i < lines.length; i++) if (mapping[i] !== undefined) matched++;
-                        var plus = lines.length - matched,
-                            minus = previous[f].length - matched;
-                        author.added += plus;
-                        author.removed += minus;
-                        set.added += plus;
-                        set.removed += minus;
-                        fieldTotals[f].added += plus;
-                        fieldTotals[f].removed += minus;
-                        added += plus;
-                        removed += minus;
+                        if (mapping.partial) {
+                            partial = true;
+                            gaps++;
+                        } else {
+                            for (var i = 0; i < lines.length; i++) if (mapping[i] !== undefined) matched++;
+                            var plus = lines.length - matched,
+                                minus = previous[f].length - matched;
+                            author.added += plus;
+                            author.removed += minus;
+                            set.added += plus;
+                            set.removed += minus;
+                            fieldTotals[f].added += plus;
+                            fieldTotals[f].removed += minus;
+                            added += plus;
+                            removed += minus;
+                        }
                     }
                     previous[f] = lines;
                 }
             }
+            var knownSets = Object.create(null),
+                unknownSets = 0;
+            history.forEach(function (entry) {
+                if (entry.updateSet) knownSets[entry.updateSet.table + ':' + entry.updateSet.id] = true;
+                else unknownSets++;
+            });
             function rank(entries, metric) {
                 return entries.sort(function (a, b) {
                     return b[metric] - a[metric] || a.name.localeCompare(b.name);
@@ -131,7 +183,8 @@ CreditPlus.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                         })[0] || null
                 );
             }
-            var first = history[0].parsed.values,
+            var firstSnapshot = this._loadEntry(history[0]);
+            var first = firstSnapshot ? firstSnapshot.values : {},
                 founder = String(first.sys_created_by || ''),
                 created = String(first.sys_created_on || ''),
                 record = new GlideRecordSecure(target.table),
@@ -175,8 +228,8 @@ CreditPlus.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 created: created,
                 creationSource: creationSource,
                 ageDays: ageDays,
-                updateSetCount: knownSets,
-                unknownSetCount: history.length - knownSets,
+                updateSetCount: Object.keys(knownSets).length,
+                unknownSetCount: unknownSets,
                 contributorCount: Object.keys(authors).length,
                 fieldCount: fields.length,
                 added: added,
@@ -198,6 +251,10 @@ CreditPlus.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 busiestField: busiest(fieldTotals),
                 biggestMakeover: busiest(sets),
                 gaps: gaps,
+                partial: partial,
+                fieldTotals: fieldTotals,
+                nextCursor: h < history.length ? String(h) : '',
+                historyKey: historyKey,
             });
         } catch (e) {
             return JSON.stringify({ success: false, error: e.message });
@@ -220,13 +277,6 @@ CreditPlus.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             if (index < 0) throw new Error('Selected customer update is unavailable in the ordered history.');
             var current = history[index],
                 previous = index > 0 ? history[index - 1] : null;
-            if (
-                (previous && previous.orderTime === current.orderTime) ||
-                (history[index + 1] && history[index + 1].orderTime === current.orderTime)
-            )
-                throw new Error(
-                    'History contains tied Customer Update timestamps. The order cannot be determined safely.'
-                );
             var fromId = String(this.getParameter('sysparm_from_update') || '').toLowerCase();
             if (fromId) {
                 if (fromId === id) throw new Error('Choose a different update set to compare.');
@@ -237,8 +287,10 @@ CreditPlus.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                     throw new Error('The comparison update is unavailable in this history.');
                 previous = history[fromIndex];
             }
-            if (current.payload !== String(selected.getValue('payload')))
-                throw new Error('The customer update changed while loading. Reload to try again.');
+            current.parsed = target;
+            current.time = String((target.action !== 'DELETE' && target.values.sys_updated_on) || current.orderTime);
+            current.author = String((target.action !== 'DELETE' && target.values.sys_updated_by) || current.author);
+            if (previous) previous.parsed = this._loadEntry(previous);
             [previous, current].forEach(function (entry) {
                 if (!entry) return;
                 if (!entry.parsed) throw new Error('The previous customer update payload is unavailable.');
@@ -391,6 +443,8 @@ CreditPlus.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             record: target.id,
             selected: updateId,
             fields: fields,
+            requestTimeout: this._limits().request_timeout_seconds * 1000,
+            partial: !!history.partial,
             updateSets: history.map(function (entry) {
                 return {
                     id: entry.id,
@@ -409,16 +463,17 @@ CreditPlus.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         var previous = [],
             origins = [],
             seenSelected = false,
-            lastKey = '',
-            budget = { remaining: 10000000 };
+            budget = { remaining: this._limits().diff_work, chars: 0 };
+        if (history.partial)
+            warnings.push('History is limited by monaco.plus.credit.max_updates. Attribution is partial.');
         for (var h = 0; h < history.length; h++) {
             var entry = history[h],
-                parsed = entry.parsed;
-            if (lastKey === entry.orderTime)
-                throw new Error(
-                    'History contains tied Customer Update timestamps. The order cannot be determined safely.'
-                );
-            lastKey = entry.orderTime;
+                parsed = entry.id === updateId ? target : this._loadEntry(entry, budget);
+            if (entry.id === updateId) {
+                var deletedTarget = target.action === 'DELETE';
+                entry.time = String((!deletedTarget && target.values.sys_updated_on) || entry.orderTime);
+                entry.author = String((!deletedTarget && target.values.sys_updated_by) || entry.author);
+            }
             if (parsed && (parsed.table !== target.table || parsed.id !== target.id))
                 throw new Error('History payloads identify different records.');
             var snapshot = {
@@ -446,17 +501,17 @@ CreditPlus.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             var lines = this._lines(code);
             var mapping = this._match(previous, lines, budget),
                 nextOrigins = [];
+            if (
+                mapping.partial &&
+                warnings.indexOf('Comparison limit reached. Some line attribution is unavailable.') === -1
+            )
+                warnings.push('Comparison limit reached. Some line attribution is unavailable.');
             for (var i = 0; i < lines.length; i++)
-                nextOrigins[i] = mapping[i] === undefined ? snapshot.id : origins[mapping[i]];
+                nextOrigins[i] =
+                    mapping[i] === undefined ? (mapping.partial ? null : snapshot.id) : origins[mapping[i]];
             previous = lines;
             origins = nextOrigins;
             if (snapshot.id === updateId) {
-                if (history[h + 1] && history[h + 1].orderTime === entry.orderTime)
-                    throw new Error(
-                        'History contains tied Customer Update timestamps. The order cannot be determined safely.'
-                    );
-                if (entry.payload !== String(selected.getValue('payload')))
-                    throw new Error('The customer update changed while loading. Reload to try again.');
                 seenSelected = true;
                 break;
             }
@@ -519,17 +574,26 @@ CreditPlus.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         return fields;
     },
 
-    _set: function (table, id, cache) {
-        if ((table !== 'sys_update_set' && table !== 'sys_remote_update_set') || !/^[0-9a-f]{32}$/i.test(id))
-            return null;
-        var key = table + ':' + id;
-        if (Object.prototype.hasOwnProperty.call(cache, key)) return cache[key];
-        var set = new GlideRecordSecure(table);
-        cache[key] =
-            set.get(id) && set.canRead() && set.getElement('name').canRead()
-                ? { id: id, table: table, name: String(set.getValue('name') || id) }
-                : null;
-        return cache[key];
+    _sets: function (updates) {
+        var cache = Object.create(null);
+        ['sys_update_set', 'sys_remote_update_set'].forEach(function (table) {
+            var ids = Object.create(null);
+            updates.forEach(function (entry) {
+                if (entry.updateSet && entry.updateSet.table === table) ids[entry.updateSet.id] = true;
+            });
+            var unique = Object.keys(ids);
+            for (var offset = 0; offset < unique.length; offset += 500) {
+                var sets = new GlideRecordSecure(table);
+                sets.addQuery('sys_id', 'IN', unique.slice(offset, offset + 500).join(','));
+                sets.query();
+                while (sets.next()) {
+                    if (!sets.canRead() || !sets.getElement('name').canRead()) continue;
+                    var id = String(sets.getUniqueValue());
+                    cache[table + ':' + id] = { id: id, table: table, name: String(sets.getValue('name') || id) };
+                }
+            }
+        });
+        return cache;
     },
 
     _customerUpdateReference: function (update) {
@@ -546,71 +610,89 @@ CreditPlus.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     _customerUpdates: function (name, selectedId) {
         var gr = new GlideRecordSecure('sys_update_xml');
         gr.addQuery('name', name);
-        gr.setLimit(501);
+        gr.orderByDesc('sys_updated_on');
+        gr.orderByDesc('sys_created_on');
+        gr.orderByDesc('sys_id');
+        var limit = this._limits().max_updates;
+        gr.setLimit(limit + 1);
         gr.query();
-        var updates = [],
-            groups = Object.create(null),
-            cache = Object.create(null),
-            bytes = 0,
-            count = 0;
-        while (gr.next()) {
-            if (++count > 500) throw new Error('History exceeds 500 customer updates. Credit was not calculated.');
-            if (!gr.canRead() || !gr.getElement('payload').canRead())
-                throw new Error('A historical payload is unreadable.');
-            var payload = String(gr.getValue('payload') || '');
-            if ((bytes += payload.length) > 10000000)
-                throw new Error('History payloads exceed the 10 MB comparison limit.');
-            if (payload.length > 2000000) throw new Error('A customer update payload exceeds the 2 MB limit.');
-            var parsed;
-            try {
-                parsed = this._payload(gr);
-            } catch (e) {
-                parsed = null;
-            }
-            var deleted = parsed && parsed.action === 'DELETE';
-            // Source author/time describe attribution; Customer Update time determines history order.
-            var time = String(
-                (!deleted && parsed && parsed.values.sys_updated_on) || gr.getValue('sys_updated_on') || ''
-            );
-            var orderTime = String(gr.getValue('sys_updated_on') || gr.getValue('sys_created_on') || '');
-            if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(orderTime))
-                throw new Error('A customer update has no reliable history ordering key.');
-            var reference = this._customerUpdateReference(gr),
-                id = String(gr.getUniqueValue());
-            var key = reference ? reference.table + ':' + reference.id : 'unknown:' + id;
-            var entry = {
-                id: id,
-                parsed: parsed,
-                payload: payload,
-                time: time,
-                orderTime: orderTime,
-                author: String(
-                    (!deleted && parsed && parsed.values.sys_updated_by) || gr.getValue('sys_updated_by') || 'Unknown'
-                ),
-                updateSet: reference ? this._set(reference.table, reference.id, cache) : null,
+        var updates = [];
+        var describe = function (record) {
+            var reference = this._customerUpdateReference(record);
+            return {
+                id: String(record.getUniqueValue()),
+                time: String(record.getValue('sys_updated_on') || record.getValue('sys_created_on') || ''),
+                orderTime: String(record.getValue('sys_updated_on') || record.getValue('sys_created_on') || ''),
+                created: String(record.getValue('sys_created_on') || ''),
+                revision: Number(record.getValue('sys_mod_count') || 0),
+                author: String(record.getValue('sys_updated_by') || record.getValue('sys_created_by') || 'Unknown'),
+                updateSet: reference,
             };
-            // There should be one customer update per object/set. Collapse identical duplicates only.
-            if (groups[key]) {
-                if (groups[key].payload !== payload)
-                    throw new Error('An update set contains conflicting customer update snapshots.');
-                if (id === selectedId || (groups[key].id !== selectedId && orderTime > groups[key].orderTime)) {
-                    updates[updates.indexOf(groups[key])] = entry;
-                    groups[key] = entry;
-                }
-            } else {
-                groups[key] = entry;
-                updates.push(entry);
+        }.bind(this);
+        while (gr.next()) {
+            if (updates.length === limit) {
+                updates.partial = true;
+                break;
             }
+            if (!gr.canRead()) continue;
+            updates.push(describe(gr));
         }
+        if (
+            selectedId &&
+            !updates.some(function (entry) {
+                return entry.id === selectedId;
+            })
+        ) {
+            updates.push(describe(this._customerUpdate(selectedId)));
+            updates.partial = true;
+        }
+        var sets = this._sets(updates);
+        updates.forEach(function (entry) {
+            if (entry.updateSet) entry.updateSet = sets[entry.updateSet.table + ':' + entry.updateSet.id] || null;
+        });
+        // Imports/reverts routinely share second-resolution timestamps; IDs are a stable final tie-breaker.
         updates.sort(function (a, b) {
-            return a.orderTime < b.orderTime ? -1 : a.orderTime > b.orderTime ? 1 : a.id < b.id ? -1 : 1;
+            return (
+                a.orderTime.localeCompare(b.orderTime) ||
+                a.created.localeCompare(b.created) ||
+                a.revision - b.revision ||
+                a.id.localeCompare(b.id)
+            );
         });
         return updates;
     },
 
+    _historyKey: function (history) {
+        var left = 2166136261,
+            right = 5381;
+        history.forEach(function (entry) {
+            var text = entry.id + entry.orderTime + entry.created + entry.revision;
+            for (var i = 0; i < text.length; i++) {
+                left = Math.imul(left ^ text.charCodeAt(i), 16777619);
+                right = Math.imul(right, 33) ^ text.charCodeAt(i);
+            }
+        });
+        return (left >>> 0).toString(16) + ':' + (right >>> 0).toString(16);
+    },
+
+    _loadEntry: function (entry, budget) {
+        try {
+            var record = this._customerUpdate(entry.id);
+            var payload = String(record.getValue('payload') || '');
+            if (budget && (budget.chars += payload.length) > this._limits().max_history_chars) return null;
+            var parsed = this._payload(record);
+            var deleted = parsed.action === 'DELETE';
+            entry.time = String((!deleted && parsed.values.sys_updated_on) || entry.orderTime);
+            entry.author = String((!deleted && parsed.values.sys_updated_by) || entry.author);
+            return parsed;
+        } catch (e) {
+            return null;
+        }
+    },
+
     _payload: function (gr) {
         var payload = String(gr.getValue('payload') || '');
-        if (!payload || payload.length > 2000000 || /<!DOCTYPE|<!ENTITY/i.test(payload))
+        if (!payload || payload.length > this._limits().max_payload_chars || /<!DOCTYPE|<!ENTITY/i.test(payload))
             throw new Error('Customer update payload is missing, oversized or unsupported.');
         var doc = new XMLDocument2();
         if (doc.parseXML(payload) === false) throw new Error('Customer update payload is malformed.');
@@ -673,47 +755,101 @@ CreditPlus.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             m = b.length,
             map = [],
             used = [],
-            rows = [],
             i,
             j;
-        if (n > 5000 || m > 5000) throw new Error('Script exceeds the 5,000 line comparison limit.');
-        if (n === m && a.join('\n') === b.join('\n')) {
-            for (i = 0; i < m; i++) map[i] = i;
+        var begin = 0,
+            oldEnd = n,
+            newEnd = m;
+        while (begin < oldEnd && begin < newEnd && a[begin] === b[begin]) {
+            map[begin] = begin;
+            used[begin] = true;
+            begin++;
+        }
+        while (oldEnd > begin && newEnd > begin && a[oldEnd - 1] === b[newEnd - 1]) {
+            oldEnd--;
+            newEnd--;
+            map[newEnd] = oldEnd;
+            used[oldEnd] = true;
+        }
+        if (begin === n && begin === m) return map;
+        if (n > this._limits().max_lines || m > this._limits().max_lines) {
+            map.partial = true;
             return map;
         }
         if (!n || !m) return map;
-        var cells = (n + 1) * (m + 1);
-        if (cells > 1000000 || (budget.remaining -= cells) < 0)
-            throw new Error('Diff exceeds the comparison budget. Credit was not calculated.');
-        // Exact LCS anchors unchanged lines, with a bounded matrix for server memory.
-        rows[n] = [];
-        for (j = 0; j <= m; j++) rows[n][j] = 0;
-        for (i = n - 1; i >= 0; i--) {
-            rows[i] = [];
-            rows[i][m] = 0;
-            for (j = m - 1; j >= 0; j--)
-                rows[i][j] = a[i] === b[j] ? rows[i + 1][j + 1] + 1 : Math.max(rows[i + 1][j], rows[i][j + 1]);
+        var positions = Object.create(null);
+        for (i = begin; i < oldEnd; i++) (positions[a[i]] || (positions[a[i]] = [])).push(i);
+        // Sparse LCS (Hunt–Szymanski) avoids allocating an old-lines × new-lines matrix.
+        var tails = [],
+            chains = [],
+            exhausted = false;
+        for (j = begin; j < newEnd; j++) {
+            var candidates = positions[b[j]] || [];
+            for (var c = candidates.length - 1; c >= 0; c--) {
+                if (--budget.remaining < 0) {
+                    exhausted = true;
+                    break;
+                }
+                var oldIndex = candidates[c],
+                    low = 0,
+                    high = tails.length;
+                while (low < high) {
+                    var middle = (low + high) >>> 1;
+                    if (tails[middle] < oldIndex) low = middle + 1;
+                    else high = middle;
+                }
+                if (tails[low] === oldIndex) continue;
+                // Account for retained traceback links as well as candidate comparisons.
+                if ((budget.remaining -= 32) < 0) {
+                    exhausted = true;
+                    break;
+                }
+                tails[low] = oldIndex;
+                chains[low] = { old: oldIndex, next: j, previous: low ? chains[low - 1] : null };
+            }
+            if (exhausted) break;
         }
-        i = 0;
-        j = 0;
-        while (i < n && j < m) {
-            if (a[i] === b[j]) {
-                map[j] = i;
-                used[i] = true;
-                i++;
-                j++;
-            } else if (rows[i + 1][j] >= rows[i][j + 1]) i++;
-            else j++;
+        var chain = chains[chains.length - 1];
+        while (chain) {
+            map[chain.next] = chain.old;
+            used[chain.old] = true;
+            chain = chain.previous;
         }
-        rows = null;
-        // Match longest unmatched contiguous blocks first; never reuse a deleted line as a copy.
-        while (true) {
+        // Keep repeated closing delimiters with their moved code rather than a suffix anchor.
+        var inverse = [];
+        map.forEach(function (oldIndex, newIndex) {
+            inverse[oldIndex] = newIndex;
+        });
+        for (j = 0; j + 1 < m; j++) {
+            i = map[j];
+            if (i === undefined || !/\w/.test(b[j]) || /\w/.test(b[j + 1]) || a[i + 1] !== b[j + 1]) continue;
+            var displaced = inverse[i + 1],
+                oldNext = map[j + 1];
+            if (oldNext === i + 1) continue;
+            if (displaced !== undefined) {
+                delete map[displaced];
+            }
+            if (oldNext !== undefined) {
+                used[oldNext] = false;
+                delete inverse[oldNext];
+            }
+            map[j + 1] = i + 1;
+            used[i + 1] = true;
+            inverse[i + 1] = j + 1;
+        }
+        // Moved blocks use indexed candidates; a source line can never credit a second copy.
+        while (!exhausted) {
             var best = null;
-            for (i = 0; i < n; i++) {
-                if (used[i]) continue;
-                for (j = 0; j < m; j++) {
-                    if (--budget.remaining < 0) throw new Error('Moved-line detection exceeds the comparison budget.');
-                    if (map[j] !== undefined || a[i] !== b[j]) continue;
+            for (j = 0; j < m; j++) {
+                if (map[j] !== undefined) continue;
+                var candidates = positions[b[j]] || [];
+                for (var c = 0; c < candidates.length; c++) {
+                    if (--budget.remaining < 0) {
+                        exhausted = true;
+                        break;
+                    }
+                    i = candidates[c];
+                    if (used[i]) continue;
                     var length = 0,
                         score = 0;
                     while (
@@ -723,16 +859,20 @@ CreditPlus.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                         map[j + length] === undefined &&
                         a[i + length] === b[j + length]
                     ) {
-                        if (--budget.remaining < 0)
-                            throw new Error('Moved-line detection exceeds the comparison budget.');
+                        if (--budget.remaining < 0) {
+                            exhausted = true;
+                            break;
+                        }
                         score += a[i + length].length;
                         length++;
                     }
+                    if (exhausted) break;
                     if (length >= 2 && score >= 20 && (!best || score > best.score))
                         best = { i: i, j: j, length: length, score: score };
                 }
+                if (exhausted) break;
             }
-            if (!best) break;
+            if (!best || exhausted) break;
             for (var k = 0; k < best.length; k++) {
                 map[best.j + k] = best.i + k;
                 used[best.i + k] = true;
@@ -748,8 +888,9 @@ CreditPlus.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             if (oldOccurrences[line] && oldOccurrences[line].length === 1 && newOccurrences[line].length === 1)
                 map[newOccurrences[line][0]] = oldOccurrences[line][0];
         });
+        if (exhausted) map.partial = true;
         return map;
     },
 
-    type: 'CreditPlus',
+    type: 'WidgetEditorCredit',
 });

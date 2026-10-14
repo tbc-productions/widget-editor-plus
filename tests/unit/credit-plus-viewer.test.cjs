@@ -161,7 +161,7 @@ test('viewer ignores stale responses after a timeout and allows retry', async ()
         await page.evaluate(() => {
             window.pending = [];
             const timeout = window.setTimeout;
-            window.setTimeout = (callback, delay) => { if (delay === 30000) { window.expire = callback; return 1; } return timeout(callback, delay); };
+            window.setTimeout = (callback, delay) => { if (delay === 180000) { window.expire = callback; return 1; } return timeout(callback, delay); };
             window.clearTimeout = () => {};
             window.GlideAjax = function () { this.addParam = () => {}; this.getXMLAnswer = callback => window.pending.push(callback); };
         });
@@ -460,7 +460,7 @@ test('Compare+ header pickers search and navigate safely, discarding old record-
         assert.equal(new URL(page.url()).searchParams.get('sysparm_update'), 'e'.repeat(32));
         assert.equal(await page.locator('#cp-update-button').getAttribute('data-value'), 'e'.repeat(32));
         const params = await page.evaluate(() => window.calls.at(-1));
-        assert.equal(params.processor, 'CreditPlus');
+        assert.equal(params.processor, 'WidgetEditorCredit');
         assert.equal(params.sysparm_name, 'getCredit');
         assert.equal(params.sysparm_update, undefined);
         const safe = await page.evaluate(() => {
@@ -504,7 +504,7 @@ test('field timeouts, retry and update-set changes discard late responses withou
         const page = await browser.newPage(); await initialise(page, 1280, true);
         await page.evaluate(fixture => {
             const setTimeout = window.setTimeout; window.pending = [];
-            window.setTimeout = (callback, delay) => delay === 30000 ? (window.expire = callback, 123) : setTimeout(callback, delay);
+            window.setTimeout = (callback, delay) => delay === 180000 ? (window.expire = callback, 123) : setTimeout(callback, delay);
             window.GlideAjax = function () {
                 const params = {}; this.addParam = (key, value) => params[key] = value;
                 this.getXMLAnswer = callback => {
@@ -623,7 +623,7 @@ test('Compare+ loads Customer Update snapshots read-only without version queries
                         let result;
                         if (params.sysparm_name === 'getUserPrefs') result = { success: true, value: '{}' };
                         else if (params.sysparm_name === 'getDiffFieldDefs') result = { success: true, table_label: 'Widget', fields: [{ key: 'script', label: 'Server script', renderAs: 'code', language: 'javascript' }] };
-                        else if (name === 'CreditPlus' && params.sysparm_name === 'getComparison') result = denied ? { success: false, error: 'Administrator access is required.' } : { success: true, table: 'sp_widget', record, recordName: 'My widget', left: { sys_id: original, sys_created_on: '2026-10-02 00:00:00', sys_created_by: 'Earlier author', fields: { script: 'before();' }, update_set_name: 'Earlier set', update_set_table: 'sys_update_set' }, right: { sys_id: update, sys_created_on: '2026-10-01 00:00:00', sys_created_by: 'Developer', fields: { script: 'after();' }, update_set_name: 'Imported set', update_set_sys_id: 'f'.repeat(32), update_set_table: 'sys_remote_update_set' } };
+                        else if (name === 'WidgetEditorCredit' && params.sysparm_name === 'getComparison') result = denied ? { success: false, error: 'Administrator access is required.' } : { success: true, table: 'sp_widget', record, recordName: 'My widget', left: { sys_id: original, sys_created_on: '2026-10-02 00:00:00', sys_created_by: 'Earlier author', fields: { script: 'before();' }, update_set_name: 'Earlier set', update_set_table: 'sys_update_set' }, right: { sys_id: update, sys_created_on: '2026-10-01 00:00:00', sys_created_by: 'Developer', fields: { script: 'after();' }, update_set_name: 'Imported set', update_set_sys_id: 'f'.repeat(32), update_set_table: 'sys_remote_update_set' } };
                         else throw Error('Unexpected comparison request: ' + params.sysparm_name);
                         timer(() => callback({ responseXML: { documentElement: { getAttribute: () => JSON.stringify(result) } } }), 0);
                     };
@@ -662,7 +662,7 @@ test('closing or reloading discards late inline comparisons and timeouts keep at
         await page.evaluate(() => {
             const Ajax = window.GlideAjax, timeout = window.setTimeout;
             window.pendingComparisons = [];
-            window.setTimeout = function (callback, delay) { if (delay === 30000) window.expireComparison = callback; return timeout(callback, delay); };
+            window.setTimeout = function (callback, delay) { if (delay === 180000) window.expireComparison = callback; return timeout(callback, delay); };
             window.GlideAjax = function (name) {
                 const request = new Ajax(name); const params = {}; const add = request.addParam;
                 request.addParam = (key, value) => { params[key] = value; add(key, value); };
@@ -879,7 +879,7 @@ test('statistics timeout allows retry and discards the expired response', async 
         const page = await browser.newPage(); await initialise(page);
         await page.evaluate(() => {
             const originalTimeout = window.setTimeout;
-            window.setTimeout = (callback, delay) => { if (delay === 30000) { window.expireStats = callback; return 0; } return originalTimeout(callback, delay); };
+            window.setTimeout = (callback, delay) => { if (delay === 180000) { window.expireStats = callback; return 0; } return originalTimeout(callback, delay); };
             window.statsCallbacks = [];
             window.GlideAjax = function () { this.addParam = () => {}; this.getXMLAnswer = callback => window.statsCallbacks.push(callback); };
         });
@@ -1109,5 +1109,52 @@ test('Statistics scrolls smoothly after opening, never on closing, and respects 
         await button.click();
         await page.waitForFunction(() => statisticsScrolls.length === 2);
         assert.deepEqual(await page.evaluate(() => statisticsScrolls[1]), { behavior: 'auto', visible: true });
+    } finally { await browser.close(); }
+});
+
+test('statistics batches merge users and set IDs, reset the timeout and discard stale continuations', async () => {
+    const browser = await chromium.launch({headless:true});
+    try {
+        const page = await browser.newPage(); await initialise(page);
+        await page.evaluate(() => {
+            const Ajax = window.GlideAjax;
+            window.statsBatches = [];
+            window.GlideAjax = function (name) {
+                const original = new Ajax(name), params = {};
+                this.addParam = (key,value) => { params[key]=value; original.addParam(key,value); };
+                this.getXMLAnswer = callback => params.sysparm_name === 'getStatistics'
+                    ? window.statsBatches.push({params,callback}) : original.getXMLAnswer(callback);
+            };
+            const set = {id:'1'.repeat(32),table:'sys_update_set',name:'Same name'};
+            window.batch = {success:true,ageDays:10,founder:'Ada',founderUserId:'2'.repeat(32),updateSetCount:1,
+                contributorCount:1,added:3,removed:1,gaps:0,partial:false,
+                creators:[{name:'Ada',userId:'2'.repeat(32),added:3,removed:1}],
+                creatorSets:[{key:'set-1',name:'Same name',updateSet:set,added:3,removed:1}],
+                fieldTotals:[{name:'Script',added:3,removed:1}],nextCursor:'1',historyKey:'stable'};
+        });
+        await page.getByRole('button',{name:'Statistics',exact:true}).click();
+        await page.evaluate(() => window.statsBatches[0].callback(JSON.stringify(window.batch)));
+        await settle(page);
+        assert.equal(await page.evaluate(() => window.statsBatches.length),2);
+        assert.equal(await page.evaluate(() => window.statsBatches[1].params.sysparm_cursor),'1');
+        assert.equal(await page.evaluate(() => window.statsBatches[1].params.sysparm_history_key),'stable');
+        await page.evaluate(() => window.statsBatches[1].callback(JSON.stringify({...window.batch,added:2,removed:0,
+            creators:[{...window.batch.creators[0],added:2,removed:0}],
+            creatorSets:[{...window.batch.creatorSets[0],added:2,removed:0}],fieldTotals:[{name:'Script',added:2,removed:0}],nextCursor:''})));
+        await settle(page);
+        assert.equal(await page.locator('.cp-stats-board').first().locator('li').count(),1);
+        assert.match(await page.locator('.cp-stats-board').first().textContent(),/5 lines/);
+        assert.match(await page.locator('.cp-stats-board').nth(1).textContent(),/1 lines/);
+        assert.equal(await page.locator('.cp-stats-skeleton').count(),0);
+        await chooseSet(page,original);
+        await page.getByRole('button',{name:'Statistics',exact:true}).click();
+        await page.evaluate(() => window.statsBatches[2].callback(JSON.stringify(window.batch)));
+        await settle(page);
+        const calls = await page.evaluate(() => window.statsBatches.length);
+        await chooseSet(page,update);
+        await page.evaluate(() => window.statsBatches.at(-1).callback(JSON.stringify(window.batch)));
+        await settle(page);
+        assert.equal(await page.evaluate(() => window.statsBatches.length),calls);
+        assert.equal(await page.locator('#cp-statistics').isVisible(),false);
     } finally { await browser.close(); }
 });

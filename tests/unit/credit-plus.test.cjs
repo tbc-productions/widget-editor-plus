@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const { XMLParser, XMLValidator } = require('fast-xml-parser');
-const source = fs.readFileSync('src/fluent/generated/server-development/script-include/credit_plus.server.js', 'utf8');
+const source = fs.readFileSync('src/fluent/generated/server-development/script-include/sys_script_include_widget_editor_credit.server.js', 'utf8');
 const recordId = 'a'.repeat(32), ids = ['b', 'c', 'd', 'e'].map(ch => ch.repeat(32));
 const iterator = values => { let i = 0; return { hasNext: () => i < values.length, next: () => values[i++] }; };
 function xmlNode(value) {
@@ -26,7 +26,7 @@ function harness(entries = [], admin = true, scriptFields = ['script', 'client_s
     const queries = [];
     const context = { Class: { create: () => function () {} }, AbstractAjaxProcessor: {},
         Object: Object.assign(Object.create(Object), { extendsObject: (_base, methods) => methods }),
-        gs: { hasRole: role => role === 'admin' && admin },
+        gs: { hasRole: role => role === 'admin' && admin, getProperty: (name, fallback) => catalog.properties?.[name] ?? fallback },
         GlideDateTime: function (value) {
             const time = Date.parse((value || '2026-10-14 12:00:00').replace(' ', 'T') + 'Z');
             this.isValid = () => Number.isFinite(time);
@@ -44,8 +44,12 @@ function harness(entries = [], admin = true, scriptFields = ['script', 'client_s
         GlideRecordSecure: function (table) {
             queries.push(table);
             if (table === 'sys_update_set' || table === 'sys_remote_update_set') {
-                let current;
+                let current, matches = [], cursor = 0, ids = [];
                 this.get = id => { current = updateSets.find(set => set.table === table && set.id === id); return !!current; };
+                this.addQuery = (key, operator, value) => { assert.equal(key, 'sys_id'); assert.equal(operator, 'IN'); ids = value.split(','); };
+                this.query = () => { matches = updateSets.filter(set => set.table === table && ids.includes(set.id)); };
+                this.next = () => { current = matches[cursor++]; return !!current; };
+                this.getUniqueValue = () => current.id;
                 this.canRead = () => current.readable !== false;
                 this.getElement = () => ({ canRead: () => current.nameReadable !== false });
                 this.getValue = key => current[key];
@@ -86,25 +90,25 @@ function harness(entries = [], admin = true, scriptFields = ['script', 'client_s
                 return;
             }
             const records = entries;
-            let current, filtered, i = 0, descending = false; const filters = [];
+            let current, filtered, i = 0; const filters = [], orders = [];
             this.get = id => { current = records.find(entry => entry.sys_id === id); return !!current && current.readable !== false; };
             this.canRead = () => current.readable !== false;
             this.getElement = name => ({ canRead: () => current[name + 'Readable'] !== false && (name === 'source' ? current.sourceReadable !== false : name === 'payload' ? current.payloadReadable !== false : true), getRefRecord: () => assert.fail('Use source_table and source explicitly') });
             this.getUniqueValue = () => current.sys_id;
             this.getValue = key => current[key] ?? '';
             this.addQuery = (...args) => { const group = [args]; filters.push(group); return { addOrCondition: (...alternative) => group.push(alternative) }; };
-            this.orderBy = () => {};
-            this.orderByDesc = () => descending = true;
+            this.orderBy = key => orders.push([key, 1]);
+            this.orderByDesc = key => orders.push([key, -1]);
             this.setLimit = limit => this.limit = limit;
             this.query = () => {
                 filtered = records.filter(entry => filters.every(group => group.some(([key, op, value]) => value === undefined ? entry[key] === op : entry[key] <= value)))
-                    .sort((a, b) => a.sys_id.localeCompare(b.sys_id) * (descending ? -1 : 1)).slice(0, this.limit);
+                    .sort((a, b) => { for (const [key, direction] of orders) { const order = String(a[key] || '').localeCompare(String(b[key] || '')) * direction; if (order) return order; } return 0; }).slice(0, this.limit);
             };
             this.next = () => { current = filtered[i++]; return !!current; };
         }
     };
     vm.runInNewContext(source, context);
-    const api = context.CreditPlus.prototype;
+    const api = context.WidgetEditorCredit.prototype;
     api.getParameter = name => name === 'sysparm_update' ? entries.at(-1)?.sys_id : '';
     return { api, queries };
 }
@@ -196,16 +200,17 @@ test('Customer Update timestamps order history independently of XML source edit 
     assert.equal(result.updateSets.at(-1).time, '2026-10-13 00:00:00');
 });
 
-test('identical duplicates in one update set collapse while conflicting snapshots fail', () => {
+test('duplicate set names and reverted snapshots retain distinct Customer Update identities', () => {
     const first = update(0, 'baseline();');
     const duplicate = { ...first, sys_id: ids[3] };
     const { api } = harness([first, duplicate, update(1, 'baseline();\nnew();')]);
     const result = api.buildUpdate(ids[3], 'script');
     assert.equal(result.selected, ids[3]);
-    assert.equal(result.updates.length, 1);
-    assert.equal(result.lines[0].update, ids[3]);
-    assert.equal(api.buildUpdate(ids[1], 'script').updates.length, 2);
-    assert.throws(() => harness([first, update(1, 'conflicting();', { update_set: first.update_set })]).api.buildUpdate(ids[1]), /conflicting/);
+    assert.equal(result.updates.length, 2);
+    assert.equal(result.lines[0].update, ids[0]);
+    const reverted = harness([first, update(1, 'changed();', { update_set: first.update_set }), update(2, 'baseline();', { update_set: first.update_set })]).api.buildUpdate(ids[2], 'script');
+    assert.equal(reverted.updates.length, 3);
+    assert.equal(reverted.lines[0].update, ids[2]);
 });
 
 test('absent or unreadable customer updates fail without reading update versions', () => {
@@ -260,13 +265,13 @@ test('deleted snapshots show no code and reset later attribution', () => {
     assert.equal(result.updates[1].time, deleted.sys_updated_on);
 });
 
-test('tied or missing Customer Update timestamps, unreadable payloads and target mismatches fail safely', () => {
-    for (const selected of [ids[0], ids[1]])
-        assert.throws(() => harness([update(0, 'a'), update(1, 'b', { sys_updated_on: '2026-10-01 00:00:00' })]).api.buildUpdate(selected, 'script'), /tied/);
-    const missing = { sourceTime: '', sys_updated_on: '' };
-    assert.throws(() => harness([update(0, 'a', missing)]).api.buildUpdate(ids[0], 'script'), /ordering key/);
-    assert.throws(() => harness([update(0, 'a', missing), update(1, 'b')]).api.buildUpdate(ids[1], 'script'), /ordering key/);
-    assert.throws(() => harness([update(0, 'a', { payloadReadable: false }), update(1, 'b')]).api.buildUpdate(ids[1], 'script'), /unreadable/);
+test('timestamp ties order deterministically and unavailable history does not hide current code', () => {
+    const entries = [update(0, 'a();', { sys_created_on: '2026-10-01 01:00:00' }), update(1, 'b();', { sys_updated_on: '2026-10-01 00:00:00', sys_created_on: '2026-10-01 02:00:00' })];
+    assert.deepEqual(plain(harness(entries.reverse()).api.buildUpdate(ids[1], 'script').updates.map(entry => entry.id)), ids.slice(0,2));
+    assert.equal(harness([update(0, 'a();', { sys_updated_on: '', sys_created_on: '' })]).api.buildUpdate(ids[0], 'script').lines[0].text, 'a();');
+    const partial = harness([update(0, 'a();', { payloadReadable: false }), update(1, 'b();')]).api.buildUpdate(ids[1], 'script');
+    assert.equal(partial.lines[0].text, 'b();');
+    assert.ok(partial.warnings.length);
     assert.throws(() => harness([update(0, 'a', { payload: payload('a').replace(recordId, ids[3]) }), update(1, 'b')]).api.buildUpdate(ids[1], 'script'), /different records/);
 });
 
@@ -289,13 +294,17 @@ test('unique moved lines retain attribution while copies and reintroduced lines 
     assert.equal(result.lines[0].update, ids[2]);
 });
 
-test('line endings, empty scripts and comparison budgets are explicit', () => {
+test('large sparse diffs work without a quadratic matrix and limits produce partial matching', () => {
     const { api } = harness([update(0, 'a();\r\nb();\r')]);
     assert.deepEqual(plain(api.buildUpdate(ids[0], 'script').lines.map(line => line.text)), ['a();', 'b();', '']);
-    assert.deepEqual(plain(api._match([], ['x'], { remaining: 100 })), []);
-    assert.throws(() => api._match(['a', 'b'], ['a', 'c'], { remaining: 1 }), /budget/);
-    assert.throws(() => api._match(Array(1000).fill('x'), Array(1000).fill('y'), { remaining: 10000000 }), /budget/);
-    assert.throws(() => api._match([], Array(5001).fill('x'), { remaining: 10000000 }), /5,000/);
+    const before = Array.from({ length: 12000 }, (_, i) => 'line' + i + '();');
+    const after = before.slice(); after[6000] = 'changed();';
+    const map = api._match(before, after, { remaining: 100 });
+    assert.equal(map[5999], 5999); assert.equal(map[6000], undefined); assert.equal(map[6001], 6001);
+    assert.equal(map.partial, undefined);
+    const repeated = api._match(Array(1000).fill('a();').concat('b();'), ['b();'].concat(Array(1000).fill('a();')), { remaining: 1 });
+    assert.equal(repeated.partial, true);
+    assert.equal(api._match([], Array(50001).fill('x'), { remaining: 100 }).partial, true);
 });
 
 test('random duplicate-line diffs never reuse origins or match unequal text', () => {
@@ -349,12 +358,16 @@ test('missing source author/time uses customer update metadata fallback', () => 
     assert.deepEqual(plain(result.warnings), []);
 });
 
-test('history and payload size limits return no partial attribution', () => {
-    const entries = Array.from({ length: 501 }, (_, index) => ({ ...update(0, ''), sys_id: index.toString(16).padStart(32, '0'), update_set: (index + 1000).toString(16).padStart(32, '0'), sourceTime: '2026-10-01 00:00:00' }));
-    assert.throws(() => harness(entries).api.buildUpdate(entries.at(-1).sys_id, 'script'), /500 customer updates/);
-    const oversized = update(0, '', { payload: 'x'.repeat(2000001) });
-    assert.equal(JSON.parse(harness([oversized]).api.getCredit()).success, false);
-    assert.throws(() => harness([oversized, update(1, 'later();')]).api.buildUpdate(ids[1], 'script'), /2 MB/);
+test('generous configurable limits retain current code with partial attribution', () => {
+    const entries = Array.from({ length: 501 }, (_, index) => ({ ...update(0, ''), sys_id: index.toString(16).padStart(32, '0'), update_set: (index + 1000).toString(16).padStart(32, '0') }));
+    assert.equal(harness(entries).api.buildUpdate(entries.at(-1).sys_id, 'script').updates.length, 501);
+    const properties = { 'monaco.plus.credit.max_updates': '2', 'monaco.plus.credit.max_history_chars': '10' };
+    const result = harness([update(0,'old();'),update(1,'middle();'),update(2,'current();')], true, undefined, [], { properties }).api.buildUpdate(ids[2], 'script');
+    assert.equal(result.lines[0].text, 'current();'); assert.equal(result.partial, true); assert.ok(result.warnings.length);
+    const large = update(0, 'x'.repeat(2100000));
+    assert.equal(harness([large]).api.buildUpdate(ids[0], 'script').lines[0].text.length, 2100000);
+    const invalid = harness([], true, undefined, [], {properties: { 'monaco.plus.credit.max_updates': 'invalid', 'monaco.plus.credit.diff_work': '-1' }}).api._limits();
+    assert.equal(invalid.max_updates, 5000); assert.equal(invalid.diff_work, 20000000);
 });
 
 test('attribution responses contain no removed-code history or duplicate snapshot code', () => {
@@ -381,7 +394,7 @@ test('record navigation resolves the newest Customer Update without update-versi
     assert.equal(result.success, true);
     assert.equal(result.selected, ids[0]);
     assert.equal(result.lines[0].text, 'baseline();');
-    assert.equal(queries.filter(table => table === 'sys_update_xml').length, 2, 'One history query plus the selected update read');
+    assert.equal(queries.filter(table => table === 'sys_update_xml').length, 4, 'Metadata query, selected update and two earlier payloads');
     assert.throws(() => api.buildUpdate('', 'script', 'sp_widget', 'invalid'), /valid table and record/);
     assert.throws(() => api.buildUpdate('', 'script', 'sp_widget^ORactive=true', recordId), /valid table and record/);
     assert.throws(() => harness().api.buildUpdate('', 'script', 'sp_widget', recordId), /No Customer Updates/);
@@ -438,7 +451,7 @@ test('collapsed viewer metadata includes authors for every set without calculati
     const result = JSON.parse(api.getCredit());
     assert.equal(result.success, true);
     assert.equal(result.selected, ids[1]);
-    assert.deepEqual(result.updateSets.map(set => set.author), ['original', 'second', 'third']);
+    assert.deepEqual(result.updateSets.map(set => set.author), ['importer', 'importer', 'importer']);
     assert.equal(result.lines, undefined);
     assert.equal(result.updates, undefined);
     assert.equal(JSON.stringify(result).includes('secret();'), false);
@@ -465,7 +478,6 @@ test('Compare+ receives adjacent Customer Update snapshots, including local/retr
 
 test('Compare+ rejects missing, unreadable, malformed, ambiguous and mismatched snapshots', () => {
     for (const entries of [
-        [update(0, 'old();'), update(1, 'new();', { sys_updated_on: update(0, '').sys_updated_on })],
         [update(0, '', { payload: '<broken>' }), update(1, 'new();')],
         [update(0, '', { payload: payload('old();').replace(recordId, 'f'.repeat(32)) }), update(1, 'new();')],
         [update(0, 'old();', { payloadReadable: false }), update(1, 'new();')]
@@ -512,7 +524,7 @@ test('statistics rank all fields and all update sets, count removers, and ignore
     ];
     const sets = entries.map((entry, i) => ({ table: 'sys_update_set', id: entry.update_set, name: 'Set ' + i }));
     const { api } = harness(entries, true, fields, sets);
-    api.getParameter = () => ids[0]; // Older selection still includes the entire history.
+    api.getParameter = key => key === 'sysparm_update' ? ids[0] : ''; // Older selection still includes the entire history.
     const stats = JSON.parse(api.getStatistics());
     assert.equal(stats.success, true, stats.error);
     assert.equal(stats.added, 6); assert.equal(stats.removed, 6);
@@ -539,19 +551,18 @@ test('statistics use readable record creation metadata, and do not infer a found
     assert.equal(get(null).unknownSetCount, 1);
 });
 
-test('statistics fail safely on invalid histories and limits, and skip field gaps', () => {
-    const stat = (entries, fields) => JSON.parse(harness(entries, true, fields).api.getStatistics());
-    assert.equal(stat([update(0, 'bad', { payload: '<broken>' }), update(1, 'ok();')]).success, false);
-    assert.equal(stat([update(0, 'a();'), update(1, 'b();', { sys_updated_on: '2026-10-01 00:00:00' })]).success, false);
+test('statistics skip unavailable snapshots, support ties and report limits as partial', () => {
+    const stat = (entries, fields, properties = {}) => JSON.parse(harness(entries, true, fields, [], { properties }).api.getStatistics());
+    assert.equal(stat([update(0, 'bad', { payload: '<broken>' }), update(1, 'ok();')]).partial, true);
+    assert.equal(stat([update(0, 'a();'), update(1, 'b();', { sys_updated_on: '2026-10-01 00:00:00' })]).success, true);
     assert.equal(stat([update(0, 'a();', { payload: payload('a();').replace(recordId, 'f'.repeat(32)) }), update(1, 'b();')]).success, false);
-    assert.match(stat([update(0, 'x\n'.repeat(5001))]).error, /5,000/);
-    assert.match(stat([update(0, Array.from({length:1100}, (_, i) => 'a' + i).join('\n')), update(1, Array.from({length:1100}, (_, i) => 'b' + i).join('\n'))]).error, /budget/);
+    assert.equal(stat([update(0, 'x\n'.repeat(5001))]).success, true);
+    assert.equal(stat([update(0, 'x\n'.repeat(5001))], ['script'], { 'monaco.plus.credit.max_lines': '100' }).partial, true);
     const result = stat([update(0, 'a();'), update(1, '', { payload: payload('').replace('<script><![CDATA[]]></script>', '') }), update(2, 'a();\nb();')], ['script']);
     assert.equal(result.success, true, result.error); assert.equal(result.gaps, 1);
     assert.equal(result.added, 1); assert.equal(result.removed, 0);
     assert.equal(stat([update(0, '')]).creators[0].added, 0);
 });
-
 
 test('statistics include every user and update set, including zero totals', () => {
     const entries = ids.map((id, index) => update(index, '', { payload: payload('line();\n'.repeat(index + 1), 'author' + index) }));
@@ -585,4 +596,81 @@ test('missing customer updates return a distinct empty-history code', () => {
     const { api } = harness();
     api.getParameter = key => ({ sysparm_table: 'sp_widget', sysparm_record: recordId, sysparm_context: 'true' })[key] || '';
     assert.equal(JSON.parse(api.getCredit()).errorCode, 'no_customer_updates');
+});
+
+test('statistics batches continue without double-counting and reject changed histories', () => {
+    const entries = [update(0, 'a();'), update(1, 'a();\nb();'), update(2, 'b();')];
+    const { api } = harness(entries, true, ['script'], [], { properties: { 'monaco.plus.credit.statistics_batch_size': '1' } });
+    let cursor = '0', historyKey = '', added = 0, removed = 0, batches = 0;
+    do {
+        api.getParameter = key => ({ sysparm_update: ids[2], sysparm_cursor: cursor, sysparm_history_key: historyKey })[key] || '';
+        const stats = JSON.parse(api.getStatistics());
+        assert.equal(stats.success, true, stats.error);
+        added += stats.added; removed += stats.removed; batches++;
+        cursor = stats.nextCursor; historyKey = stats.historyKey;
+    } while (cursor);
+    assert.equal(batches, 3); assert.equal(added, 2); assert.equal(removed, 1);
+    entries[1].sys_mod_count = '1';
+    api.getParameter = key => ({ sysparm_update: ids[2], sysparm_cursor: '1', sysparm_history_key: historyKey })[key] || '';
+    assert.match(JSON.parse(api.getStatistics()).error, /changed while loading/);
+    api.getParameter = key => ({ sysparm_update: ids[2], sysparm_cursor: '-1' })[key] || '';
+    assert.equal(JSON.parse(api.getStatistics()).success, false);
+});
+
+test('large histories exceeding the previous 10 MB cap still show code', () => {
+    const entries = Array.from({length:6}, (_, i) => update(0, 'run();', {
+        sys_id: (100 + i).toString(16).padStart(32, '0'),
+        update_set: (200 + i).toString(16).padStart(32, '0'),
+        sys_updated_on: '2026-10-0' + (i + 1) + ' 00:00:00',
+        payload: payload('run();', 'author', '<notes>' + 'x'.repeat(1800000) + '</notes>')
+    }));
+    const { api } = harness(entries, true, ['script']);
+    const result = api.buildUpdate(entries.at(-1).sys_id, 'script');
+    assert.equal(result.lines[0].text, 'run();'); assert.equal(result.lines[0].update, entries[0].sys_id);
+    assert.equal(result.warnings.length, 0);
+});
+
+test('metadata does not parse historical XML and set counts use IDs instead of display names', () => {
+    const entries = [update(0, 'one();'), update(1, 'two();'), update(2, 'three();', {update_set: '2'.repeat(32)})];
+    const sets = [1,2].map(i => ({table:'sys_update_set', id:String(i).repeat(32), name:'Same name'}));
+    const { api } = harness(entries, true, ['script'], sets);
+    const stats = JSON.parse(api.getStatistics());
+    assert.equal(stats.updateSetCount, 2); assert.equal(stats.creatorSets.length, 3);
+    api._loadEntry = () => assert.fail('Collapsed metadata must not parse historical XML');
+    const context = api.buildUpdate(ids[2], '', '', '', true);
+    assert.equal(context.updateSets.length, 3); assert.equal(context.requestTimeout, 180000);
+});
+
+test('Credit Script Include name, ACL and caller metadata stay consistent', () => {
+    const metadata = fs.readFileSync('src/fluent/generated/server-development/script-include/sys_script_include_widget_editor_credit.now.ts','utf8');
+    const acl = fs.readFileSync('src/fluent/generated/security/access-control/sys_security_acl_credit_plus.now.ts','utf8');
+    assert.match(metadata, /name: 'WidgetEditorCredit'/); assert.match(metadata, /global.WidgetEditorCredit/);
+    assert.match(acl, /name: 'WidgetEditorCredit'/);
+    const properties = fs.readFileSync('src/fluent/generated/properties/system-property/sys_properties_widget_editor_credit.now.ts','utf8');
+    assert.equal((properties.match(/installMethod: 'first install'/g)||[]).length, 7);
+    assert.equal((properties.match(/roles: \{ read: \['admin'\], write: \['admin'\] \}/g)||[]).length,7);
+});
+
+test('update-set names are fetched in bounded bulk queries instead of one query per snapshot', () => {
+    const entries = Array.from({length:501}, (_, i) => update(0, 'same();', {
+        sys_id:(i+1000).toString(16).padStart(32,'0'), update_set:(i+2000).toString(16).padStart(32,'0')
+    }));
+    const sets = entries.map(entry => ({table:'sys_update_set',id:entry.update_set,name:'Default'}));
+    const { api, queries } = harness(entries,true,['script'],sets);
+    const context = api.buildUpdate(entries.at(-1).sys_id,'','','',true);
+    assert.equal(context.updateSets.length,501);
+    assert.equal(queries.filter(table => table === 'sys_update_set').length,2);
+    assert.equal(queries.filter(table => table === 'sys_update_xml').length,2);
+});
+
+test('moving multiple functions keeps repeated closing delimiters with their original blocks', () => {
+    const { api } = harness();
+    const blocks = Array.from({length:8}, (_, i) => ['function f' + i + '() {', '  doWork' + i + '();', '}']);
+    const original = blocks.flat();
+    for (let shift = 1; shift < blocks.length; shift++) {
+        const moved = blocks.slice(shift).concat(blocks.slice(0,shift)).flat();
+        const mapping = api._match(original,moved,{remaining:10000000});
+        assert.equal(mapping.filter(index => index !== undefined).length,moved.length);
+        mapping.forEach((oldIndex,newIndex) => assert.equal(original[oldIndex],moved[newIndex]));
+    }
 });

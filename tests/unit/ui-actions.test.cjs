@@ -15,7 +15,7 @@ const copyRecordUrlSource = fs.readFileSync(
     'utf8'
 );
 const ajaxSource = fs.readFileSync(
-    'src/fluent/generated/server-development/script-include/sys_script_include_cac17b058363f21070b8b5dfeeaad361.server.js',
+    'src/fluent/generated/server-development/script-include/sys_script_include_widget_editor_ajax.server.js',
     'utf8'
 );
 

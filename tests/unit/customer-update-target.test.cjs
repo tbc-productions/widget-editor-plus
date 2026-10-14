@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const { XMLParser, XMLValidator } = require('fast-xml-parser');
-const source = fs.readFileSync('src/fluent/generated/server-development/script-include/sys_script_include_cac17b058363f21070b8b5dfeeaad361.server.js', 'utf8');
+const source = fs.readFileSync('src/fluent/generated/server-development/script-include/sys_script_include_widget_editor_ajax.server.js', 'utf8');
 const id = 'a'.repeat(32), companion = 'b'.repeat(32);
 function iterator(values) { let index = 0; return { hasNext: () => index < values.length, next: () => values[index++] }; }
 function node(value) {

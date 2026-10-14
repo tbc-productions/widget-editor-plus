@@ -5,13 +5,14 @@
         <g:evaluate var="jvar_cp_description">
             var description = '';
             try {
-                description = new global.CreditPlus().getPageDescription(
+                description = new global.WidgetEditorCredit().getPageDescription(
                     RP.getParameterValue('sysparm_update')
                 );
             } catch (e) {}
             description;
         </g:evaluate>
         <span id="cp-page-description" hidden="hidden">${HTML:jvar_cp_description}</span>
+        <span id="cp-request-timeout" hidden="hidden">${HTML:gs.getProperty("monaco.plus.credit.request_timeout_seconds", "180")}</span>
         <span id="cp-site-title" hidden="hidden">${HTML:gs.getProperty("glide.product.name", "ServiceNow")}</span>
         <script>
             (function () {
@@ -21,6 +22,7 @@
                 }
             })();
             window.WE_CREDIT_CONFIG = {
+                requestTimeout: Number((document.getElementById('cp-request-timeout') || {}).textContent || '180') * 1000,
                 siteTitle: document.getElementById('cp-site-title').textContent,
                 description: document.getElementById('cp-page-description').textContent
             };
