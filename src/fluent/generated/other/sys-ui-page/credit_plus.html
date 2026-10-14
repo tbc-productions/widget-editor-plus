@@ -293,6 +293,10 @@
         .cp-stats-boards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .cp-stats-board { min-width: 0; max-height: 75vh; overflow-y: auto; box-sizing: border-box; padding: 0 0.75rem 0.75rem; border: 1px solid rgb(var(--now-color_border--secondary, 205 212 217)); border-radius: 4px; }
         .cp-stats-board h3 { position: sticky; top: 0; z-index: 1; background: rgb(var(--now-color_background--primary, 255 255 255)); padding: 0.75rem; margin: 0 -0.75rem 0.75rem; font-size: 1rem; font-weight: 600; }
+        .cp-stats-board-added { --cp-board-accent: 9, 134, 88; }
+        .cp-stats-board-removed { --cp-board-accent: 191, 41, 41; }
+        .cp-stats-board-added, .cp-stats-board-removed { border-color: rgba(var(--cp-board-accent), 0.35); background: linear-gradient(rgba(var(--cp-board-accent), 0.06), rgba(var(--cp-board-accent), 0.06)), rgb(var(--now-color_background--primary, 255 255 255)); }
+        .cp-stats-board-added h3, .cp-stats-board-removed h3 { background: inherit; }
         .cp-stats-board ol { margin: 0; padding-left: 1.5rem; }
         .cp-stats-board li { padding: 0.375rem 0; }
         .cp-stats-entry { display: flex; gap: 1rem; align-items: baseline; }
@@ -722,7 +726,7 @@
                         </div>
                         <div ng-if="ctrl.statistics.loaded">
                             <dl class="cp-stats-facts"><div ng-repeat="fact in ctrl.statistics.facts"><dt><span ng-bind="fact.label + ' '"></span><span class="cp-stats-emoji" aria-hidden="true" ng-bind="fact.emoji"></span></dt><dd><a class="cp-stats-name dc-link" ng-if="fact.href" ng-href="{{fact.href}}" ng-bind="fact.value"></a><span ng-if="!fact.href" ng-bind="fact.value"></span></dd></div></dl>
-                            <div class="cp-stats-boards"><section class="cp-stats-board" ng-repeat="board in ctrl.statistics.boards" tabindex="0" ng-attr-aria-labelledby="cp-board-heading-{{$index}}">
+                            <div class="cp-stats-boards"><section class="cp-stats-board" ng-class="'cp-stats-board-' + board.metric" ng-repeat="board in ctrl.statistics.boards" tabindex="0" ng-attr-aria-labelledby="cp-board-heading-{{$index}}">
                                 <h3 ng-attr-id="cp-board-heading-{{$index}}"><span ng-bind="board.title + ' '"></span><span class="cp-stats-emoji" aria-hidden="true" ng-bind="board.emoji"></span><span ng-bind="' - ' + board.group + ' '"></span><span class="cp-stats-emoji" aria-hidden="true" ng-bind="board.groupEmoji"></span></h3>
                                 <ol ng-if="board.entries.length"><li ng-repeat="entry in board.entries"><span class="cp-stats-entry"><span class="cp-stats-identity"><a class="cp-stats-name dc-link" ng-if="entry.href" ng-href="{{entry.href}}" ng-bind="entry.name"></a><span class="cp-stats-name" ng-if="!entry.href" ng-bind="entry.name"></span><span class="cp-stats-medal" aria-hidden="true" ng-if="$index &lt; 3" ng-bind="ctrl.medals[$index]"></span></span><span class="cp-stats-score" ng-bind="entry.score"></span></span></li></ol>
                                 <p ng-if="!board.entries.length" ng-bind="board.empty"></p>

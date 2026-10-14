@@ -832,6 +832,7 @@ test('statistics load only on demand, render safe leaderboards, cache while open
             await page.evaluate(() => window.statsRequests[0].callback(JSON.stringify(window.statsFixture)));
             await settle(page);
             assert.equal(await page.locator('.cp-stats-board').count(), 4);
+            assert.deepEqual(await page.locator('.cp-stats-board').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).borderTopColor)), ['rgba(9, 134, 88, 0.35)', 'rgba(191, 41, 41, 0.35)', 'rgba(9, 134, 88, 0.35)', 'rgba(191, 41, 41, 0.35)']);
             assert.equal(await page.locator('.cp-stats-board').first().locator('li').count(), 4);
             assert.equal(await page.locator('#cp-statistics img').count(), 0);
             assert.equal(await page.locator('#cp-statistics-heading').textContent(), 'Statistics 📊');

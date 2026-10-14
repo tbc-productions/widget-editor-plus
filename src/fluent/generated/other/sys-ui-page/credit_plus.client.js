@@ -469,6 +469,7 @@
                     function board(title, emoji, group, groupEmoji, entries, metric) {
                         boards.push({
                             title: title,
+                            metric: metric,
                             emoji: emoji,
                             group: group,
                             groupEmoji: groupEmoji,
