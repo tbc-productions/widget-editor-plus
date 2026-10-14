@@ -1,5 +1,5 @@
-var WidgetEditorCredit = Class.create();
-WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
+var WidgetEditorCreditAjax = Class.create();
+WidgetEditorCreditAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     _limits: function () {
         if (this._creditLimits) return this._creditLimits;
         var defaults = {
@@ -9,7 +9,6 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             max_lines: 50000,
             diff_work: 20000000,
             request_timeout_seconds: 180,
-            statistics_batch_size: 10,
         };
         var limits = {};
         Object.keys(defaults).forEach(function (key) {
@@ -46,18 +45,60 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     getCredit: function () {
         if (!gs.hasRole('admin')) return JSON.stringify({ success: false, error: 'Administrator access is required.' });
         try {
-            return JSON.stringify(
-                this.buildUpdate(
-                    this.getParameter('sysparm_update'),
-                    this.getParameter('sysparm_field'),
-                    this.getParameter('sysparm_table'),
-                    this.getParameter('sysparm_record'),
-                    String(this.getParameter('sysparm_context')) === 'true',
-                    String(this.getParameter('sysparm_snapshots')) === 'true'
-                        ? { cursor: this.getParameter('sysparm_cursor'), key: this.getParameter('sysparm_history_key') }
-                        : null
+            var updateId = this.getParameter('sysparm_update'),
+                table = this.getParameter('sysparm_table'),
+                recordId = this.getParameter('sysparm_record');
+            updateId = String(updateId || '').toLowerCase();
+            var history;
+            if (!updateId) {
+                table = String(table || '');
+                recordId = String(recordId || '').toLowerCase();
+                if (
+                    !/^[a-z_][a-z0-9_]*$/i.test(table) ||
+                    !/^[0-9a-f]{32}$/.test(recordId) ||
+                    !this._fields(table).length
                 )
-            );
+                    throw new Error('Choose a valid table and record with code fields.');
+                history = this._customerUpdates(table + '_' + recordId, '');
+                if (!history.length) {
+                    var emptyHistory = new Error('No Customer Updates for this record.');
+                    emptyHistory.code = 'no_customer_updates';
+                    throw emptyHistory;
+                }
+                updateId = history[history.length - 1].id;
+            }
+            var selected = this._customerUpdate(updateId),
+                target = this._payload(selected);
+            if (history && (target.table !== table || target.id !== recordId))
+                throw new Error('The customer update identifies a different record.');
+            var fields = this._fields(target.table);
+            if (!fields.length) throw new Error('This customer update has no code fields.');
+            var selectedDeleted = target.action === 'DELETE';
+            var name = String(selected.getValue('name') || '');
+            if (!name) throw new Error('Customer update has no history name.');
+            history = history || this._customerUpdates(name, updateId);
+            var description = this._description(target);
+            return JSON.stringify({
+                success: true,
+                table: target.table,
+                tableLabel: description.tableLabel,
+                recordName: description.recordName,
+                deleted: selectedDeleted,
+                record: target.id,
+                selected: updateId,
+                fields: fields,
+                tableApi: { name: name, key: this._historyKey(history), history: history, limits: this._limits() },
+                requestTimeout: this._limits().request_timeout_seconds * 1000,
+                partial: !!history.partial,
+                updateSets: history.map(function (entry) {
+                    return {
+                        id: entry.id,
+                        name: entry.updateSet ? entry.updateSet.name : 'Unknown update set',
+                        time: entry.orderTime,
+                        author: entry.author,
+                    };
+                }),
+            });
         } catch (e) {
             return JSON.stringify({ success: false, error: e.message, errorCode: e.code || '' });
         }
@@ -66,138 +107,30 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     getStatistics: function () {
         if (!gs.hasRole('admin')) return JSON.stringify({ success: false, error: 'Administrator access is required.' });
         try {
-            var metadataOnly = String(this.getParameter('sysparm_context')) === 'true',
-                exportSnapshots = String(this.getParameter('sysparm_snapshots')) === 'true',
-                snapshots = [],
-                selected = this._customerUpdate(this.getParameter('sysparm_update')),
+            var selected = this._customerUpdate(this.getParameter('sysparm_update')),
                 target = this._payload(selected),
                 fields = this._fields(target.table),
                 name = String(selected.getValue('name') || '');
             if (!fields.length || !name) throw new Error('This customer update has no code history.');
             var history = this._customerUpdates(name, String(selected.getUniqueValue()));
             if (!history.length) throw new Error('No Customer Updates for this record.');
-            var cursor = String(this.getParameter('sysparm_cursor') || '0');
-            if (!/^\d+$/.test(cursor) || Number(cursor) >= history.length)
-                throw new Error('Invalid statistics cursor.');
-            var start = Number(cursor),
-                historyKey = this._historyKey(history);
-            if (start && String(this.getParameter('sysparm_history_key') || '') !== historyKey)
-                throw new Error('Customer Updates changed while loading statistics. Retry statistics.');
-            var authors = Object.create(null),
-                sets = [],
-                fieldTotals = fields.map(function (field) {
-                    return { name: field.label, added: 0, removed: 0 };
-                }),
-                previous = fields.map(function () {
-                    return [];
-                }),
-                budget = { chars: 0 },
-                gaps = 0,
-                added = 0,
-                removed = 0,
-                partial = !!history.partial,
-                began = Date.now();
-            if (start && !exportSnapshots) {
-                var prior = this._loadEntry(history[start - 1], budget);
-                if (!prior) partial = true;
-                if (prior && (prior.table !== target.table || prior.id !== target.id))
-                    throw new Error('History payloads identify different records.');
-                previous = fields.map(function (field) {
-                    return !prior ||
-                        (prior.action !== 'DELETE' && !Object.prototype.hasOwnProperty.call(prior.values, field.name))
-                        ? null
-                        : this._lines(
-                              prior.action === 'DELETE' ? '' : String(prior.values[field.name]).replace(/\r\n?/g, '\n')
-                          );
-                }, this);
-            }
-            var end = metadataOnly ? start : Math.min(history.length, start + this._limits().statistics_batch_size),
-                h = start;
-            for (; h < end; h++) {
-                if (h > start && Date.now() - began >= 5000) break;
-                var entry = history[h],
-                    parsed = this._loadEntry(entry, budget);
-                if (parsed && (parsed.table !== target.table || parsed.id !== target.id))
-                    throw new Error('History payloads identify different records.');
-                var author =
-                    authors[entry.author] || (authors[entry.author] = { name: entry.author, added: 0, removed: 0 });
-                var set = {
-                    key: entry.updateSet ? entry.updateSet.table + ':' + entry.updateSet.id : entry.id,
-                    name: entry.updateSet ? entry.updateSet.name : 'Unknown update set',
-                    updateSet: entry.updateSet,
-                    added: 0,
-                    removed: 0,
-                };
-                sets.push(set);
-                if (exportSnapshots) {
-                    snapshots.push(this._codeSnapshot(entry, parsed, fields));
-                    continue;
-                }
-                for (var f = 0; f < fields.length; f++) {
-                    var field = fields[f].name;
-                    if (
-                        !parsed ||
-                        (parsed.action !== 'DELETE' && !Object.prototype.hasOwnProperty.call(parsed.values, field))
-                    ) {
-                        previous[f] = null;
-                        gaps++;
-                        partial = true;
-                        continue;
-                    }
-                    var lines = this._lines(
-                        parsed.action === 'DELETE' ? '' : String(parsed.values[field]).replace(/\r\n?/g, '\n')
-                    );
-                    // Missing snapshots break the chain; do not count uncertain changes.
-                    if (previous[f] !== null) {
-                        var mapping = this._match(previous[f], lines, { remaining: this._limits().diff_work }),
-                            matched = 0;
-                        if (mapping.partial) {
-                            partial = true;
-                            gaps++;
-                        } else {
-                            for (var i = 0; i < lines.length; i++) if (mapping[i] !== undefined) matched++;
-                            var plus = lines.length - matched,
-                                minus = previous[f].length - matched;
-                            author.added += plus;
-                            author.removed += minus;
-                            set.added += plus;
-                            set.removed += minus;
-                            fieldTotals[f].added += plus;
-                            fieldTotals[f].removed += minus;
-                            added += plus;
-                            removed += minus;
-                        }
-                    }
-                    previous[f] = lines;
-                }
-            }
+            var requestedAuthors = JSON.parse(String(this.getParameter('sysparm_authors') || '[]')),
+                authors = Object.create(null);
+            if (!Array.isArray(requestedAuthors) || requestedAuthors.length > this._limits().max_updates + 1)
+                throw new Error('Invalid contributor list.');
+            requestedAuthors.forEach(function (name) {
+                if (typeof name !== 'string' || name.length > 256) throw new Error('Invalid contributor.');
+                authors[name] = { name: name, added: 0, removed: 0 };
+            });
             var knownSets = Object.create(null),
                 unknownSets = 0;
             history.forEach(function (entry) {
                 if (entry.updateSet) knownSets[entry.updateSet.table + ':' + entry.updateSet.id] = true;
                 else unknownSets++;
             });
-            function rank(entries, metric) {
-                return entries.sort(function (a, b) {
-                    return b[metric] - a[metric] || a.name.localeCompare(b.name);
-                });
-            }
-            function busiest(entries) {
-                return (
-                    entries
-                        .filter(function (entry) {
-                            return entry.added + entry.removed > 0;
-                        })
-                        .sort(function (a, b) {
-                            return b.added + b.removed - a.added - a.removed || a.name.localeCompare(b.name);
-                        })[0] || null
-                );
-            }
-            var firstSnapshot = this._loadEntry(history[0]);
-            var first = firstSnapshot ? firstSnapshot.values : {},
-                founder = String(first.sys_created_by || ''),
-                created = String(first.sys_created_on || ''),
-                record = new GlideRecordSecure(target.table),
+            var founder = '',
+                created = '',
+                record = new GlideRecord(target.table),
                 creationSource = 'snapshot';
             if (record.get(target.id) && record.canRead()) {
                 founder = record.getElement('sys_created_by').canRead()
@@ -207,21 +140,19 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                     ? String(record.getValue('sys_created_on') || '')
                     : '';
                 creationSource = 'record';
-            }
-            if (metadataOnly) {
-                var requestedAuthors = JSON.parse(String(this.getParameter('sysparm_authors') || '[]'));
-                if (!Array.isArray(requestedAuthors) || requestedAuthors.length > this._limits().max_updates + 1)
-                    throw new Error('Invalid contributor list.');
-                requestedAuthors.forEach(function (name) {
-                    if (typeof name !== 'string' || name.length > 256) throw new Error('Invalid contributor.');
-                    authors[name] = { name: name, added: 0, removed: 0 };
-                });
+            } else {
+                var firstSnapshot = this._loadEntry(history[0]);
+                if (firstSnapshot && (firstSnapshot.table !== target.table || firstSnapshot.id !== target.id))
+                    throw new Error('History payloads identify different records.');
+                var first = firstSnapshot ? firstSnapshot.values : {};
+                founder = String(first.sys_created_by || '');
+                created = String(first.sys_created_on || '');
             }
             var userNames = Object.keys(authors),
                 userIds = Object.create(null);
             if (founder && userNames.indexOf(founder) === -1) userNames.push(founder);
             if (userNames.length) {
-                var users = new GlideRecordSecure('sys_user'),
+                var users = new GlideRecord('sys_user'),
                     userQuery = users.addQuery('user_name', userNames[0]);
                 for (var u = 1; u < userNames.length; u++) userQuery.addOrCondition('user_name', userNames[u]);
                 users.query();
@@ -229,10 +160,11 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                     if (!users.canRead() || !users.getElement('user_name').canRead()) continue;
                     userIds[String(users.getValue('user_name'))] = String(users.getUniqueValue());
                 }
-                Object.keys(authors).forEach(function (name) {
-                    authors[name].userId = userIds[name] || '';
-                });
             }
+            var creators = Object.keys(authors).map(function (name) {
+                authors[name].userId = userIds[name] || '';
+                return authors[name];
+            });
             var ageDays = null;
             if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(created)) {
                 var birth = new GlideDateTime(created),
@@ -249,88 +181,21 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 ageDays: ageDays,
                 updateSetCount: Object.keys(knownSets).length,
                 unknownSetCount: unknownSets,
-                contributorCount: Object.keys(authors).length,
+                contributorCount: creators.length,
                 fieldCount: fields.length,
-                added: added,
-                removed: removed,
-                creators: rank(
-                    Object.keys(authors).map(function (key) {
-                        return authors[key];
-                    }),
-                    'added'
-                ),
-                destroyers: rank(
-                    Object.keys(authors).map(function (key) {
-                        return authors[key];
-                    }),
-                    'removed'
-                ),
-                creatorSets: rank(sets.slice(), 'added'),
-                destroyerSets: rank(sets.slice(), 'removed'),
-                busiestField: busiest(fieldTotals),
-                biggestMakeover: busiest(sets),
-                gaps: gaps,
-                partial: partial,
-                fieldTotals: fieldTotals,
-                snapshots: exportSnapshots ? snapshots : undefined,
-                fields: exportSnapshots ? fields : undefined,
-                limits: exportSnapshots ? this._limits() : undefined,
-                nextCursor: !metadataOnly && h < history.length ? String(h) : '',
-                historyKey: historyKey,
+                added: 0,
+                removed: 0,
+                creators: creators,
+                gaps: 0,
+                partial: !!history.partial,
+                fieldTotals: fields.map(function (field) {
+                    return { name: field.label, added: 0, removed: 0 };
+                }),
+                historyKey: this._historyKey(history),
             });
         } catch (e) {
             return JSON.stringify({ success: false, error: e.message });
         }
-    },
-
-    _codeSnapshot: function (entry, parsed, fields) {
-        var values = Object.create(null);
-        fields.forEach(function (field) {
-            values[field.name] =
-                !parsed ||
-                (parsed.action !== 'DELETE' && !Object.prototype.hasOwnProperty.call(parsed.values, field.name))
-                    ? null
-                    : parsed.action === 'DELETE'
-                      ? ''
-                      : String(parsed.values[field.name]).replace(/\r\n?/g, '\n');
-        });
-        return { id: entry.id, author: entry.author, time: entry.time, updateSet: entry.updateSet, values: values };
-    },
-
-    _fieldSnapshotBatch: function (history, target, context, field, batch) {
-        var key = this._historyKey(history),
-            cursor = String(batch.cursor || '0');
-        var selectedIndex = history.findIndex(function (entry) {
-            return entry.id === context.selected;
-        });
-        if (!/^\d+$/.test(cursor) || Number(cursor) > selectedIndex) throw new Error('Invalid field cursor.');
-        if (Number(cursor) && String(batch.key || '') !== key)
-            throw new Error('Customer Updates changed while loading this field. Retry the field.');
-        var start = Number(cursor),
-            end = Math.min(selectedIndex + 1, start + this._limits().statistics_batch_size),
-            budget = { chars: 0 },
-            snapshots = [],
-            began = Date.now(),
-            h = start;
-        for (; h < end; h++) {
-            if (h > start && Date.now() - began >= 5000) break;
-            var entry = history[h],
-                parsed = entry.id === context.selected ? target : this._loadEntry(entry, budget);
-            if (parsed && (parsed.table !== target.table || parsed.id !== target.id))
-                throw new Error('History payloads identify different records.');
-            if (entry.id === context.selected) {
-                entry.author = String((target.action !== 'DELETE' && target.values.sys_updated_by) || entry.author);
-                entry.time = String((target.action !== 'DELETE' && target.values.sys_updated_on) || entry.orderTime);
-            }
-            snapshots.push(this._codeSnapshot(entry, parsed, [{ name: field }]));
-        }
-        return Object.assign(context, {
-            field: field,
-            snapshots: snapshots,
-            limits: this._limits(),
-            historyKey: key,
-            nextCursor: h <= selectedIndex ? String(h) : '',
-        });
     },
 
     getComparison: function () {
@@ -403,7 +268,7 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             var page = this._pickerPage(),
                 offset = (page - 1) * 50;
             var search = String(this.getParameter('sysparm_search') || '').substring(0, 200);
-            var gr = new GlideRecordSecure('sys_db_object');
+            var gr = new GlideRecord('sys_db_object');
             var join = gr.addJoinQuery('sys_dictionary', 'name', 'name');
             join.addCondition('internal_type', 'collection');
             join.addCondition('attributes', 'CONTAINS', 'update_synch=true');
@@ -433,7 +298,7 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             var page = this._pickerPage(),
                 offset = (page - 1) * 50;
             var search = String(this.getParameter('sysparm_search') || '').substring(0, 200);
-            var gr = new GlideRecordSecure(table),
+            var gr = new GlideRecord(table),
                 display = String(gr.getDisplayName() || 'sys_id');
             if (search) gr.addQuery(display, 'CONTAINS', search);
             gr.orderBy(display);
@@ -469,153 +334,16 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         return description.recordName + ' (' + description.tableLabel + ')';
     },
 
-    // Reusable server entry point; helpers beginning with _ cannot be called through GlideAjax.
-    buildUpdate: function (updateId, field, table, recordId, metadataOnly, batch) {
-        if (!gs.hasRole('admin')) throw new Error('Administrator access is required.');
-        updateId = String(updateId || '').toLowerCase();
-        var history;
-        if (!updateId) {
-            table = String(table || '');
-            recordId = String(recordId || '').toLowerCase();
-            if (!/^[a-z_][a-z0-9_]*$/i.test(table) || !/^[0-9a-f]{32}$/.test(recordId) || !this._fields(table).length)
-                throw new Error('Choose a valid table and record with code fields.');
-            history = this._customerUpdates(table + '_' + recordId, '');
-            if (!history.length) {
-                var emptyHistory = new Error('No Customer Updates for this record.');
-                emptyHistory.code = 'no_customer_updates';
-                throw emptyHistory;
-            }
-            updateId = history[history.length - 1].id;
-        }
-        var selected = this._customerUpdate(updateId),
-            target = this._payload(selected);
-        if (history && (target.table !== table || target.id !== recordId))
-            throw new Error('The customer update identifies a different record.');
-        var fields = this._fields(target.table);
-        if (!fields.length) throw new Error('This customer update has no code fields.');
-        field = String(field || fields[0].name);
-        if (
-            !metadataOnly &&
-            !fields.some(function (entry) {
-                return entry.name === field;
-            })
-        )
-            throw new Error('Choose a script field from this table.');
-        var selectedDeleted = target.action === 'DELETE';
-        var name = String(selected.getValue('name') || '');
-        if (!name) throw new Error('Customer update has no history name.');
-        history = history || this._customerUpdates(name, updateId);
-        var description = this._description(target);
-        var context = {
-            success: true,
-            table: target.table,
-            tableLabel: description.tableLabel,
-            recordName: description.recordName,
-            deleted: selectedDeleted,
-            record: target.id,
-            selected: updateId,
-            fields: fields,
-            requestTimeout: this._limits().request_timeout_seconds * 1000,
-            partial: !!history.partial,
-            updateSets: history.map(function (entry) {
-                return {
-                    id: entry.id,
-                    name: entry.updateSet ? entry.updateSet.name : 'Unknown update set',
-                    time: entry.orderTime,
-                    author: entry.author,
-                };
-            }),
-        };
-        // The collapsed viewer needs metadata only; calculate code attribution when a field is expanded.
-        if (metadataOnly) {
-            context.tableApi = { name: name, key: this._historyKey(history), history: history, limits: this._limits() };
-            return context;
-        }
-        if (!selectedDeleted && !Object.prototype.hasOwnProperty.call(target.values, field))
-            throw new Error('This script field is absent from the selected payload.');
-        if (batch) return this._fieldSnapshotBatch(history, target, context, field, batch);
-        var snapshots = [],
-            warnings = [];
-        var previous = [],
-            origins = [],
-            seenSelected = false,
-            budget = { remaining: this._limits().diff_work, chars: 0 };
-        if (history.partial)
-            warnings.push('History is limited by monaco.plus.credit.max_updates. Attribution is partial.');
-        for (var h = 0; h < history.length; h++) {
-            var entry = history[h],
-                parsed = entry.id === updateId ? target : this._loadEntry(entry, budget);
-            if (entry.id === updateId) {
-                var deletedTarget = target.action === 'DELETE';
-                entry.time = String((!deletedTarget && target.values.sys_updated_on) || entry.orderTime);
-                entry.author = String((!deletedTarget && target.values.sys_updated_by) || entry.author);
-            }
-            if (parsed && (parsed.table !== target.table || parsed.id !== target.id))
-                throw new Error('History payloads identify different records.');
-            var snapshot = {
-                id: entry.id,
-                author: entry.author,
-                time: entry.time,
-                updateSet: entry.updateSet,
-                available: false,
-            };
-            snapshots.push(snapshot);
-            var deleted = parsed && parsed.action === 'DELETE';
-            if (!parsed || (!deleted && !Object.prototype.hasOwnProperty.call(parsed.values, field))) {
-                warnings.push(
-                    'An unavailable or field-missing snapshot interrupts attribution at customer update ' +
-                        snapshot.id +
-                        '.'
-                );
-                previous = [];
-                origins = [];
-                continue;
-            }
-            snapshot.deleted = !!deleted;
-            var code = deleted ? '' : String(parsed.values[field]).replace(/\r\n?/g, '\n');
-            snapshot.available = true;
-            var lines = this._lines(code);
-            var mapping = this._match(previous, lines, budget),
-                nextOrigins = [];
-            if (
-                mapping.partial &&
-                warnings.indexOf('Comparison limit reached. Some line attribution is unavailable.') === -1
-            )
-                warnings.push('Comparison limit reached. Some line attribution is unavailable.');
-            for (var i = 0; i < lines.length; i++)
-                nextOrigins[i] =
-                    mapping[i] === undefined ? (mapping.partial ? null : snapshot.id) : origins[mapping[i]];
-            previous = lines;
-            origins = nextOrigins;
-            if (snapshot.id === updateId) {
-                seenSelected = true;
-                break;
-            }
-        }
-        if (!seenSelected) throw new Error('Selected customer update is unavailable in the ordered history.');
-        var finalLines = selectedDeleted ? [] : this._lines(String(target.values[field]).replace(/\r\n?/g, '\n'));
-        // Stop at the selected update set; no later snapshot contributes attribution.
-        var output = finalLines.map(function (line, index) {
-            return { number: index + 1, text: line, update: origins[index] };
-        });
-        return Object.assign(context, {
-            field: field,
-            lines: output,
-            updates: snapshots,
-            warnings: warnings,
-        });
-    },
-
     _customerUpdate: function (id) {
         if (!/^[0-9a-f]{32}$/i.test(String(id || ''))) throw new Error('Select exactly one valid customer update.');
-        var gr = new GlideRecordSecure('sys_update_xml');
+        var gr = new GlideRecord('sys_update_xml');
         if (!gr.get(String(id)) || !gr.canRead() || !gr.getElement('payload').canRead())
             throw new Error('Customer update is unavailable or unreadable.');
         return gr;
     },
 
     _description: function (target) {
-        var gr = new GlideRecordSecure(target.table);
+        var gr = new GlideRecord(target.table);
         var displayField = String(gr.getDisplayName() || 'name');
         return {
             tableLabel: String(gr.getLabel() || target.table),
@@ -624,24 +352,36 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     },
 
     _fields: function (table) {
-        var gr = new GlideRecordSecure(table);
+        var gr = new GlideRecord(table);
         if (!gr.isValid()) throw new Error('The updated table is unavailable.');
         gr.initialize();
         // Effective elements include inherited dictionary fields and overrides.
+        var languages = {
+            email_script: 'javascript',
+            html_script: 'html',
+            script: 'javascript',
+            script_client: 'javascript',
+            script_plain: 'javascript',
+            script_server: 'javascript',
+            conditions: 'plaintext',
+            condition_string: 'javascript',
+            variable_conditions: 'plaintext',
+            workflow_conditions: 'plaintext',
+            html: 'html',
+            html_template: 'html',
+            json: 'json',
+            json_translations: 'json',
+        };
         var elements = gr.getElements(),
             fields = [];
         for (var i = 0; i < elements.size(); i++) {
             var element = elements.get(i),
                 type = String(element.getED().getInternalType());
-            if (
-                ['script', 'script_plain', 'html_template', 'condition', 'condition_string', 'conditions'].indexOf(
-                    type
-                ) !== -1
-            )
+            if (Object.prototype.hasOwnProperty.call(languages, type))
                 fields.push({
                     name: String(element.getName()),
                     label: String(element.getLabel()),
-                    language: type === 'html_template' ? 'html' : type === 'conditions' ? 'plaintext' : 'javascript',
+                    language: languages[type],
                 });
         }
         fields.sort(function (a, b) {
@@ -659,7 +399,7 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             });
             var unique = Object.keys(ids);
             for (var offset = 0; offset < unique.length; offset += 500) {
-                var sets = new GlideRecordSecure(table);
+                var sets = new GlideRecord(table);
                 sets.addQuery('sys_id', 'IN', unique.slice(offset, offset + 500).join(','));
                 sets.query();
                 while (sets.next()) {
@@ -684,7 +424,7 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     },
 
     _customerUpdates: function (name, selectedId) {
-        var gr = new GlideRecordSecure('sys_update_xml');
+        var gr = new GlideRecord('sys_update_xml');
         gr.addQuery('name', name);
         gr.orderByDesc('sys_updated_on');
         gr.orderByDesc('sys_created_on');
@@ -764,11 +504,9 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         return (left >>> 0).toString(16) + ':' + (right >>> 0).toString(16);
     },
 
-    _loadEntry: function (entry, budget) {
+    _loadEntry: function (entry) {
         try {
             var record = this._customerUpdate(entry.id);
-            var payload = String(record.getValue('payload') || '');
-            if (budget && (budget.chars += payload.length) > this._limits().max_history_chars) return null;
             var parsed = this._payload(record);
             var deleted = parsed.action === 'DELETE';
             entry.time = String((!deleted && parsed.values.sys_updated_on) || entry.orderTime);
@@ -829,13 +567,5 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         };
     },
 
-    _lines: function (code) {
-        return code === '' ? [] : code.split('\n');
-    },
-
-    _match: function (oldLines, newLines, budget) {
-        return new WidgetEditorCreditEngine(this._limits()).match(oldLines, newLines, budget);
-    },
-
-    type: 'WidgetEditorCredit',
+    type: 'WidgetEditorCreditAjax',
 });

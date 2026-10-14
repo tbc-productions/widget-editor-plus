@@ -10,7 +10,7 @@ Record({
         link_type: 'DIRECT',
         mobile_title: 'AI Assistant',
         mobile_view_name: 'Mobile',
-        order: 1475,
+        order: 1476,
         override_menu_roles: true,
         query: 'ui_page.do?sys_id=584ed242cd934914bffa4b0bb3fb2974',
         require_confirmation: true,

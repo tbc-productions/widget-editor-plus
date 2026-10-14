@@ -5,7 +5,7 @@
         <g:evaluate var="jvar_cp_description">
             var description = '';
             try {
-                description = new global.WidgetEditorCredit().getPageDescription(
+                description = new global.WidgetEditorCreditAjax().getPageDescription(
                     RP.getParameterValue('sysparm_update')
                 );
             } catch (e) {}
@@ -271,6 +271,8 @@
         select.form-control { width: 18rem; }
         #cp-results { display: flex; flex-direction: column; gap: 0.75rem; }
         .cp-field-section summary { cursor: pointer; display: list-item; padding: 0.75rem; }
+        .cp-field-section[aria-disabled="true"] summary { cursor: not-allowed; }
+        .cp-field-section[aria-disabled="true"] .da-label, .cp-field-section[aria-disabled="true"] .da-field-key { opacity: 0.5; }
         .cp-field-section summary .da-field-key { margin-left: 0.5rem; }
         .cp-field-section summary .da-diff-counts { float: right; }
         .cp-table td.cp-empty { padding: 1.5rem 0.75rem; text-align: center; color: rgb(var(--now-color_text--secondary, 82 82 82)); white-space: normal; }
@@ -713,7 +715,6 @@
                 <section id="cp-statistics" aria-labelledby="cp-statistics-heading" ng-show="ctrl.statistics.open" ng-attr-aria-busy="{{ctrl.statistics.loading}}">
                     <h2 id="cp-statistics-heading"><span ng-bind="'Statistics '"></span><span class="cp-stats-emoji" aria-hidden="true">&#128202;</span></h2>
                     <p id="cp-statistics-status" role="status" aria-live="polite" ng-class="{'cp-sr-only': ctrl.statistics.loading, 'alert alert-danger': ctrl.statistics.error}" ng-bind="ctrl.statistics.loading ? 'Loading statistics…' : ctrl.statistics.error"></p>
-                    <button id="cp-statistics-retry" type="button" class="btn btn-default" ng-show="ctrl.statistics.error" ng-click="ctrl.retryStatistics()">Retry statistics</button>
                     <div id="cp-statistics-content">
                         <div class="cp-stats-skeleton" aria-hidden="true" ng-if="ctrl.statistics.loading">
                             <div class="cp-stats-facts"><div ng-repeat="item in ctrl.skeletonFacts"><span class="we-skeleton-bar" style="width:55%"></span><span class="we-skeleton-bar" style="width:85%"></span></div></div>
@@ -729,11 +730,10 @@
                         </div>
                     </div>
                 </section>
-                <div id="cp-results" ng-show="ctrl.data"><details class="da-section cp-field-section" ng-repeat="field in ctrl.fields track by field.key" ng-attr-data-field="{{field.name}}" credit-field=""></details></div>
+                <div id="cp-results" ng-show="ctrl.data"><details class="da-section cp-field-section" ng-repeat="field in ctrl.fields track by field.key" ng-attr-data-field="{{field.name}}" ng-attr-aria-disabled="{{field.disabled ? 'true' : 'false'}}" credit-field=""></details></div>
                 <template id="cp-field-template" ng-non-bindable="">
-                    <summary class="da-summary"><span class="da-label" ng-bind="field.label"></span> <span class="da-field-key" ng-bind="field.name"></span><span class="da-diff-counts" ng-bind="field.lineCount"></span></summary>
-                    <button id="cp-field-retry" type="button" class="btn btn-default" hidden="hidden">Retry field</button>
-                <section id="cp-current-panel" aria-label="Code at the selected update set">
+                    <summary class="da-summary" ng-attr-aria-disabled="{{field.disabled ? 'true' : 'false'}}" ng-attr-tabindex="{{field.disabled ? -1 : 0}}"><span class="da-label" ng-bind="field.label"></span> <span class="da-field-key" ng-bind="field.name"></span><span class="da-diff-counts"><span class="label label-warning" ng-if="field.unavailable">Unavailable</span><span ng-bind="field.lineCount"></span></span></summary>
+                <section id="cp-current-panel" ng-show="!field.disabled" aria-label="Code at the selected update set">
                     <div class="cp-field-code">
                         <div id="cp-active-filters" class="cp-active-filters" hidden="hidden" aria-label="Active filters"></div>
                         <div id="cp-code-view">

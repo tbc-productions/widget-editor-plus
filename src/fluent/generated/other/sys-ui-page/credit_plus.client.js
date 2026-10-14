@@ -214,6 +214,8 @@
                     if (!selected) return;
                     ctrl.fields.forEach(function (field) {
                         var code = selected.values[field.name];
+                        field.unavailable = typeof code !== 'string';
+                        field.disabled = field.unavailable || code === '';
                         field.lineCount =
                             typeof code === 'string' ? (code === '' ? 0 : code.split('\n').length) + ' lines' : '';
                     });
@@ -361,6 +363,36 @@
                     return node;
                 }
 
+                var borderStyles = element('style'),
+                    borderClasses = Object.create(null);
+                page.appendChild(borderStyles);
+                function updateSetBorder(set) {
+                    if (
+                        !set ||
+                        !/^[0-9a-f]{32}$/i.test(set.id) ||
+                        ['sys_update_set', 'sys_remote_update_set'].indexOf(set.table) === -1
+                    )
+                        return '';
+                    var key = set.table + '-' + set.id;
+                    if (borderClasses[key]) return borderClasses[key];
+                    // Stable IDs keep colours consistent across fields, selections and reloads.
+                    var hash = 2166136261;
+                    for (var i = 0; i < key.length; i++) hash = Math.imul(hash ^ key.charCodeAt(i), 16777619);
+                    var hue = ((hash >>> 0) / 4294967296) * 360,
+                        className = 'cp-attribution-border-' + key;
+                    borderStyles.appendChild(
+                        document.createTextNode(
+                            '#credit-plus .' +
+                                className +
+                                '{box-sizing:border-box;border-bottom:1px solid hsla(' +
+                                hue +
+                                ',60%,60%,0.45);}'
+                        )
+                    );
+                    borderClasses[key] = className;
+                    return className;
+                }
+
                 var statisticsRequest = 0,
                     statisticsTimer,
                     statisticsWorker,
@@ -494,13 +526,9 @@
                                 fields: Object.create(null),
                                 added: 0,
                                 removed: 0,
-                                gaps: 0,
-                                partial: false,
                             };
                         accumulated.added += stats.added;
                         accumulated.removed += stats.removed;
-                        accumulated.gaps += stats.gaps || 0;
-                        accumulated.partial = accumulated.partial || stats.partial;
                         function collect(entries, destination, key) {
                             (entries || []).forEach(function (entry) {
                                 var id = key(entry),
@@ -564,17 +592,15 @@
                         renderStatistics(stats);
                         ctrl.statistics.loaded = true;
                         ctrl.statistics.loading = false;
-                        ctrl.statistics.error = accumulated.partial
-                            ? 'Partial statistics: some history could not be compared.'
-                            : '';
+                        ctrl.statistics.error = '';
                     }
                     function nextBatch() {
                         statisticsTimer = window.setTimeout(function () {
                             if (request !== statisticsRequest) return;
-                            failed('The request timed out. Retry statistics.');
+                            failed('The request timed out. Reload to try again.');
                         }, requestTimeout);
                         try {
-                            var ga = new GlideAjax('WidgetEditorCredit');
+                            var ga = new GlideAjax('WidgetEditorCreditAjax');
                             ga.addParam('sysparm_name', 'getStatistics');
                             ga.addParam('sysparm_snapshots', 'true');
                             ga.addParam('sysparm_update', data.selected);
@@ -619,7 +645,7 @@
                                             );
                                         statisticsTimer = window.setTimeout(function () {
                                             if (request !== statisticsRequest) return;
-                                            failed('Calculation timed out. Retry statistics.');
+                                            failed('Calculation timed out. Reload to try again.');
                                         }, requestTimeout);
                                         matchBatch(statisticsWorker, 'statistics', stats, accept, failed);
                                     } else accept(stats);
@@ -635,7 +661,7 @@
                     if (data.tableApi) {
                         var context = data;
                         statisticsTimer = window.setTimeout(function () {
-                            failed('Statistics timed out. Retry statistics.');
+                            failed('Statistics timed out. Reload to try again.');
                         }, requestTimeout);
                         sharedHistory(context)
                             .then(function (cache) {
@@ -646,13 +672,13 @@
                                         cache.snapshots.forEach(function (snapshot) {
                                             if (authors.indexOf(snapshot.author) === -1) authors.push(snapshot.author);
                                         });
-                                        var ga = new GlideAjax('WidgetEditorCredit');
+                                        var ga = new GlideAjax('WidgetEditorCreditAjax');
                                         ga.addParam('sysparm_name', 'getStatistics');
                                         ga.addParam('sysparm_context', 'true');
                                         ga.addParam('sysparm_update', context.selected);
                                         ga.addParam('sysparm_authors', JSON.stringify(authors));
                                         var infoTimer = window.setTimeout(function () {
-                                            reject(new Error('Statistics details timed out. Retry statistics.'));
+                                            reject(new Error('Statistics details timed out. Reload to try again.'));
                                         }, requestTimeout);
                                         ga.getXMLAnswer(function (answer) {
                                             window.clearTimeout(infoTimer);
@@ -676,7 +702,7 @@
                                     if (request !== statisticsRequest || $scope.$$destroyed) return;
                                     window.clearTimeout(statisticsTimer);
                                     statisticsTimer = window.setTimeout(function () {
-                                        failed('Calculation timed out. Retry statistics.');
+                                        failed('Calculation timed out. Reload to try again.');
                                     }, requestTimeout);
                                     statisticsWorker = new Worker(
                                         '/widget_editor_credit_worker.jsdbx?sysparm_substitute=false&v=2'
@@ -712,10 +738,6 @@
                     updateUrl();
                     updateTitle();
                     if (ctrl.statistics.open) loadStatistics();
-                };
-                ctrl.retryStatistics = function () {
-                    ctrl.statistics.loaded = false;
-                    loadStatistics();
                 };
 
                 function navUrl(uri) {
@@ -800,7 +822,7 @@
                                 var request = ++pickerRequests[index],
                                     queryTable = tableName;
                                 pickerTimers[index] = window.setTimeout(function () {
-                                    var ga = new GlideAjax('WidgetEditorCredit');
+                                    var ga = new GlideAjax('WidgetEditorCreditAjax');
                                     ga.addParam('sysparm_name', isTable ? 'getTables' : 'getRecords');
                                     ga.addParam('sysparm_search', query.term || '');
                                     ga.addParam('sysparm_page', query.page || 1);
@@ -862,7 +884,7 @@
                 }
 
                 // Use the same document, parent-frame title and Next Experience History helper as Compare+.
-                function syncTitle(description) {
+                function syncTitle() {
                     // Polaris captures the iframe title at load; keep its record title stable across fields/views.
                     var recordDescription = data
                         ? (data.recordName || data.record) + ' (' + (data.tableLabel || data.table) + ')'
@@ -892,30 +914,16 @@
                     if (window.WE_HISTORY_SYNC) {
                         var currentUrl = window.location.pathname.substring(1) + window.location.search;
                         window.WE_HISTORY_SYNC.set({
-                            title: recordDescription ? 'Credit: ' + recordDescription : 'Credit+',
-                            description: description,
+                            title: 'Credit+',
+                            description: (data ? data.recordName : ctrl.recordName) || '',
                             match: 'url=' + currentUrl + (currentUrl !== launchUrl ? '^ORurl=' + launchUrl : ''),
                             url: currentUrl,
                         });
                     }
                 }
 
-                function fieldLabel() {
-                    var entry = data.fields.filter(function (candidate) {
-                        return candidate.name === requestedField;
-                    })[0];
-                    return entry ? entry.label : 'Fields';
-                }
-
                 function updateTitle() {
-                    if (data)
-                        syncTitle(
-                            (data.recordName || data.record) +
-                                ' (' +
-                                (data.tableLabel || data.table) +
-                                ') / ' +
-                                fieldLabel()
-                        );
+                    if (data) syncTitle();
                 }
 
                 var contextMenu = element('div', undefined, 'context_menu cp-context-menu'),
@@ -1193,6 +1201,9 @@
                         if (index) label.htmlFor = nodes[label.htmlFor].id;
                     });
                     entry.lineCount = entry.lineCount || '';
+                    summary.addEventListener('click', function (event) {
+                        if (entry.disabled) event.preventDefault();
+                    });
                     function node(id) {
                         return nodes[id];
                     }
@@ -1217,6 +1228,15 @@
                         fieldWorker,
                         timer,
                         disposed = false;
+                    fieldScope.$watch('field.disabled', function (disabled) {
+                        if (!disabled) return;
+                        section.open = false;
+                        fieldRequest++;
+                        pending = false;
+                        window.clearTimeout(timer);
+                        if (fieldWorker) fieldWorker.terminate();
+                        fieldWorker = null;
+                    });
                     var gutter = node('cp-gutter'),
                         gutterContent = node('cp-gutter-content');
                     var codeMatches = [];
@@ -1579,8 +1599,25 @@
                                 diffEditor.onDidUpdateDiff(scheduleAnnotationLayout);
                             } else creditEditor = monaco.editor.create(node('cp-code-monaco'), options);
                             var fragment = document.createDocumentFragment(),
-                                previousOrigin;
-                            data.lines.forEach(function (line) {
+                                previousOrigin,
+                                decorations = [];
+                            data.lines.forEach(function (line, index) {
+                                var snapshot = updates[line.update],
+                                    border = updateSetBorder(snapshot && snapshot.updateSet),
+                                    next = data.lines[index + 1],
+                                    nextSnapshot = next && updates[next.update],
+                                    groupEnd =
+                                        border && border !== updateSetBorder(nextSnapshot && nextSnapshot.updateSet);
+                                if (!diffData && groupEnd)
+                                    decorations.push({
+                                        range: {
+                                            startLineNumber: line.number,
+                                            startColumn: 1,
+                                            endLineNumber: line.number,
+                                            endColumn: 1,
+                                        },
+                                        options: { isWholeLine: true, className: border, marginClassName: border },
+                                    });
                                 var row = attribution(line);
                                 row.removeChild(row.querySelector('.cp-number'));
                                 row.removeChild(row.querySelector('.cp-code'));
@@ -1590,11 +1627,13 @@
                                     cell.setAttribute('role', 'cell');
                                 });
                                 annotationRows.push(row);
-                                if (previousOrigin !== line.update) row.className = 'cp-block-start';
+                                if (!diffData && groupEnd) row.className = border;
+                                else if (diffData && previousOrigin !== line.update) row.className = 'cp-block-start';
                                 previousOrigin = line.update;
                                 fragment.appendChild(row);
                             });
                             node('cp-attribution').appendChild(fragment);
+                            if (!diffData) creditEditor.deltaDecorations([], decorations);
                             creditEditor.onDidScrollChange(updateGutter);
                             creditEditor.onDidContentSizeChange(scheduleAnnotationLayout);
                             creditEditor.onDidLayoutChange(scheduleAnnotationLayout);
@@ -1775,7 +1814,7 @@
                                     receiveComparison({ success: false, error: error.message });
                                 });
                         } else {
-                            var ga = new GlideAjax('WidgetEditorCredit');
+                            var ga = new GlideAjax('WidgetEditorCreditAjax');
                             ga.addParam('sysparm_name', 'getComparison');
                             ga.addParam('sysparm_update', data.selected);
                             ga.addParam('sysparm_from_update', snapshot.id);
@@ -1813,21 +1852,31 @@
                             updates[snapshot.id] = snapshot;
                         });
                         entry.lineCount = data.lines.length + ' lines';
+                        entry.disabled = data.lines.length === 0;
                         changed();
+                        if (entry.disabled) {
+                            section.open = false;
+                            return;
+                        }
                         setFieldStatus(data.warnings.join(' '));
                         applyFilters();
                     }
                     function loadField() {
-                        if (data || pending || disposed) return;
+                        if (data || pending || disposed || entry.disabled) return;
                         pending = true;
                         var request = ++fieldRequest,
                             parentRequest = sequence,
                             cursor = '0',
                             historyKey = '';
                         setFieldLoading('Loading…');
-                        node('cp-field-retry').hidden = true;
                         function active() {
-                            return !disposed && request === fieldRequest && parentRequest === sequence && pending;
+                            return (
+                                !disposed &&
+                                !entry.disabled &&
+                                request === fieldRequest &&
+                                parentRequest === sequence &&
+                                pending
+                            );
                         }
                         function fail(message) {
                             if (!active()) return;
@@ -1836,14 +1885,13 @@
                             if (fieldWorker) fieldWorker.terminate();
                             fieldWorker = null;
                             setFieldStatus(message, true);
-                            node('cp-field-retry').hidden = false;
                             changed();
                         }
                         function nextBatch() {
                             timer = window.setTimeout(function () {
                                 fail('Request timed out.');
                             }, requestTimeout);
-                            var ga = new GlideAjax('WidgetEditorCredit');
+                            var ga = new GlideAjax('WidgetEditorCreditAjax');
                             ga.addParam('sysparm_name', 'getCredit');
                             ga.addParam('sysparm_update', updateId);
                             ga.addParam('sysparm_field', entry.name);
@@ -1901,7 +1949,9 @@
                                     if (!active()) return;
                                     var selected = cache.byId[context.selected];
                                     if (!selected || selected.values[entry.name] === null) {
-                                        fail('This field is unavailable in the selected Customer Update.');
+                                        entry.unavailable = true;
+                                        entry.disabled = true;
+                                        changed();
                                         return;
                                     }
                                     var cutoff = cache.snapshots.indexOf(selected);
@@ -1947,6 +1997,10 @@
                     section.addEventListener('toggle', function () {
                         changed();
                         if (disposed || !section.isConnected) return;
+                        if (section.open && entry.disabled) {
+                            section.open = false;
+                            return;
+                        }
                         if (section.open) {
                             pendingScrollSection = section;
                             requestedField = entry.name;
@@ -2005,7 +2059,6 @@
                     gutter.addEventListener('touchend', function () {
                         touchY = null;
                     });
-                    node('cp-field-retry').addEventListener('click', loadField);
                     updateView();
                     return {
                         section: section,
@@ -2041,6 +2094,8 @@
                 }
 
                 function render(result) {
+                    borderStyles.textContent = '';
+                    borderClasses = Object.create(null);
                     data = result;
                     if (Number(result.requestTimeout) > 0) requestTimeout = Number(result.requestTimeout);
                     ctrl.data = result;
@@ -2119,7 +2174,7 @@
                     ctrl.error = ctrl.empty = false;
                     ctrl.status = 'Loading update sets…';
                     changed();
-                    syncTitle(config.description || '');
+                    syncTitle();
                     if (!updateId && (!tableName || !recordId)) {
                         ctrl.loading = false;
                         ctrl.empty = true;
@@ -2137,14 +2192,14 @@
                         ctrl.status = message;
                         ctrl.loading = false;
                         closeUpdateDropdown(false);
-                        syncTitle(emptyHistory ? config.description || '' : 'Unavailable customer update');
+                        syncTitle();
                     }
                     var timer = (contextTimer = window.setTimeout(function () {
                         if (request !== sequence) return;
                         sequence++;
                         failed('The request timed out. Reload to try again.');
                     }, requestTimeout));
-                    var ga = new GlideAjax('WidgetEditorCredit');
+                    var ga = new GlideAjax('WidgetEditorCreditAjax');
                     ga.addParam('sysparm_name', 'getCredit');
                     ga.addParam('sysparm_context', 'true');
                     if (updateId) ga.addParam('sysparm_update', updateId);
@@ -2246,7 +2301,7 @@
                 });
                 $scope.$evalAsync(function () {
                     updateScrollOffset();
-                    syncTitle(config.description || '');
+                    syncTitle();
                     load();
                 });
             },

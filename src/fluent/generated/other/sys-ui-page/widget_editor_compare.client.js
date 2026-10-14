@@ -242,7 +242,7 @@
     //////// Pure helpers ////////////////////////////////////////////////////////
 
     function _ajax(method, params, cb) {
-        var ga = new GlideAjax(method === 'getCreditComparison' ? 'WidgetEditorCredit' : 'WidgetEditorAjax');
+        var ga = new GlideAjax(method === 'getCreditComparison' ? 'WidgetEditorCreditAjax' : 'WidgetEditorAjax');
         ga.addParam('sysparm_name', method === 'getCreditComparison' ? 'getComparison' : method);
         for (var k in params) {
             if (params.hasOwnProperty(k)) {

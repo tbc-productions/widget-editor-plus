@@ -400,10 +400,6 @@ declare global {
                         table: 'sys_properties_category_m2m'
                         id: 'f859e75689574b2c8eda84762cb68ce0'
                     }
-                    'widget-editor-credit-engine': {
-                        table: 'sys_script_include'
-                        id: 'dad3034ba974421381b14ddcaeeac448'
-                    }
                     'widget-editor-credit-max-history-chars': {
                         table: 'sys_properties'
                         id: 'dbade29a639a44fca930dae6702466e5'
@@ -435,6 +431,10 @@ declare global {
                     'widget-editor-credit-max-updates-category': {
                         table: 'sys_properties_category_m2m'
                         id: '2f5a29bc12554e0b844947fd57a03124'
+                    }
+                    'widget-editor-credit-module': {
+                        table: 'sys_app_module'
+                        id: 'c7a47a8531be44b4badb086fe4ffeec1'
                     }
                     'widget-editor-credit-request-timeout-seconds': {
                         table: 'sys_properties'

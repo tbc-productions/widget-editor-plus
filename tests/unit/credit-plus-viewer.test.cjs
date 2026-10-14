@@ -36,6 +36,7 @@ const fixture = {
 };
 
 function installMonaco() {
+    window.creditEditors = [];
     window.createdModels = []; window.disposedModels = 0; window.disposedEditors = 0; window.disposedCreditEditors = 0; window.options = []; window.creditOptions = [];
     window.monaco = { editor: {
         setTheme() {},
@@ -47,6 +48,7 @@ function installMonaco() {
             const editor = { getScrollHeight: () => Math.max(container.clientHeight, options.model.text.split('\n').length * font.lineHeight + padding * 2 + zone), getScrollTop: () => top,
                 getScrollWidth: () => container.clientWidth, getLayoutInfo: () => ({ height: container.clientHeight, contentWidth: container.clientWidth, horizontalScrollbarHeight: 12 }),
                 getOption: () => font,
+                deltaDecorations: (_old, decorations) => { editor.decorations = decorations; return decorations.map((_, i) => 'decoration-' + i); },
                 setHiddenAreas: ranges => { hidden = ranges; window.hiddenRanges = ranges; },
                 getTopForLineNumber: (number, includeZone) => padding + (number - 1 - hidden.reduce((total, range) => total + Math.max(0, Math.min(number - 1, range.endLineNumber) - range.startLineNumber + 1), 0)) * font.lineHeight + (number > 15 && !(number === 16 && includeZone) ? zone : 0),
                 updateOptions: options => { font = { ...font, ...options }; padding = options.padding?.top ?? padding; if (configuration) configuration(); },
@@ -57,7 +59,7 @@ function installMonaco() {
                     else if (position + font.lineHeight > top + container.clientHeight) editor.setScrollTop(position + font.lineHeight - container.clientHeight);
                 },
                 setScrollTop: value => { top = value; if (scroll) scroll(); }, onDidScrollChange: callback => scroll = callback, onDidContentSizeChange() {}, onDidLayoutChange() {}, onDidChangeConfiguration: callback => configuration = callback, onDidChangeViewZones: callback => zonesChanged = callback, layout() {}, dispose: () => window.disposedCreditEditors++ };
-            window.creditEditor = editor; return editor;
+            window.creditEditor = editor; window.creditEditors.push(editor); return editor;
         },
         colorizeModelLine: (model, number) => { const escaped = document.createElement('span'); escaped.textContent = model.text.split('\n')[number - 1]; return '<span class="mtk2">' + escaped.innerHTML + '</span>'; },
         colorize: () => Promise.resolve(''),
@@ -144,10 +146,12 @@ test('fields start collapsed, author is plain text, and Compare+ links open safe
             assert.equal(await page.locator('#cp-status').evaluate(node => node.classList.contains('alert') && node.classList.contains('alert-danger')), true);
             await page.locator('#cp-retry').click(); assert.equal(await page.locator('.cp-field-section[open]').count(), 0);
             await page.evaluate(() => window.fixture.lines = []);
-            const empty = await openField(page);
-            assert.equal(await part(empty, 'cp-field-status').textContent(), '');
-            assert.equal(await part(empty, 'cp-lines').locator('.cp-empty').textContent(), 'No code in this update set.');
-            assert.equal(await part(empty, 'cp-lines').locator('.cp-empty').getAttribute('colspan'), '5');
+            const empty = page.locator('.cp-field-section[data-field=script]');
+            await empty.locator('summary').click();
+            await page.waitForFunction(() => document.querySelector('.cp-field-section[data-field=script]').getAttribute('aria-disabled') === 'true');
+            assert.equal(await empty.evaluate(node => node.open), false);
+            assert.equal(await empty.locator('.da-diff-counts').textContent(), '0 lines');
+            assert.equal(await empty.locator('table').first().isVisible(), false);
             await page.close();
         }
     } finally { await browser.close(); }
@@ -304,7 +308,7 @@ test('annotations inherit Monaco font metrics and follow geometry changes withou
     } finally { await browser.close(); }
 });
 
-test('Polaris captures the record title before asynchronous credit loading and history tracks fields/views', async () => {
+test('Polaris captures the record title while History keeps the Credit+ title and record name', async () => {
     const browser = await chromium.launch({ headless: true });
     try {
         const page = await browser.newPage();
@@ -325,12 +329,15 @@ test('Polaris captures the record title before asynchronous credit loading and h
         assert.equal(await frame.evaluate(() => window.calls[0].sysparm_version), undefined);
         await frame.evaluate(() => window.finishLoading());
         await page.waitForFunction(() => document.title === 'Credit: My widget (Widget) - My instance');
-        assert.equal(await frame.evaluate(() => window.historyEntries.at(-1).title), 'Credit: My widget (Widget)');
+        assert.equal(await frame.evaluate(() => window.historyEntries.at(-1).title), 'Credit+');
+        assert.equal(await frame.evaluate(() => window.historyEntries.at(-1).description), 'My widget');
         await frame.locator('.cp-field-section[data-field="client_script"] summary').click();
         await frame.waitForFunction(() => window.calls.length === 2);
         await frame.evaluate(() => window.finishLoading());
         assert.equal(await page.locator('#shell-title').textContent(), await page.title());
-        assert.match(await frame.evaluate(() => window.historyEntries.at(-1).description), /My widget \(Widget\).*Client script/);
+        assert.equal(await frame.evaluate(() => window.historyEntries.at(-1).description), 'My widget');
+        assert.equal(await frame.evaluate(() => window.historyEntries.at(-1).title), 'Credit+');
+        assert.equal(new URL('https://credit.test/' + await frame.evaluate(() => window.historyEntries.at(-1).url)).searchParams.get('sysparm_field'), 'client_script');
         assert.match(html, /we_history_sync\.jsdbx/);
         assert.match(html, /window\.location\.replace\('\/now\/nav\/ui\/classic\/params\/target\//);
     } finally { await browser.close(); }
@@ -463,7 +470,7 @@ test('Compare+ header pickers search and navigate safely, discarding old record-
         assert.equal(new URL(page.url()).searchParams.get('sysparm_update'), 'e'.repeat(32));
         assert.equal(await page.locator('#cp-update-button').getAttribute('data-value'), 'e'.repeat(32));
         const params = await page.evaluate(() => window.calls.at(-1));
-        assert.equal(params.processor, 'WidgetEditorCredit');
+        assert.equal(params.processor, 'WidgetEditorCreditAjax');
         assert.equal(params.sysparm_name, 'getCredit');
         assert.equal(params.sysparm_update, undefined);
         const safe = await page.evaluate(() => {
@@ -523,7 +530,9 @@ test('field timeouts, retry and update-set changes discard late responses withou
         await settle(page);
         assert.equal(await part(section, 'cp-code-loading').isVisible(), false);
         assert.match(await part(section, 'cp-field-status').textContent(), /timed out/);
-        await part(section, 'cp-field-retry').click();
+        assert.equal(await part(section, 'cp-field-retry').count(), 0);
+        await section.locator('summary.da-summary').click();
+        await section.locator('summary.da-summary').click();
         await page.evaluate(fixture => window.pending[0].callback(JSON.stringify(fixture)), fixture);
         await settle(page);
         assert.equal(await part(section, 'cp-field-status').textContent(), '');
@@ -626,7 +635,7 @@ test('Compare+ loads Customer Update snapshots read-only without version queries
                         let result;
                         if (params.sysparm_name === 'getUserPrefs') result = { success: true, value: '{}' };
                         else if (params.sysparm_name === 'getDiffFieldDefs') result = { success: true, table_label: 'Widget', fields: [{ key: 'script', label: 'Server script', renderAs: 'code', language: 'javascript' }] };
-                        else if (name === 'WidgetEditorCredit' && params.sysparm_name === 'getComparison') result = denied ? { success: false, error: 'Administrator access is required.' } : { success: true, table: 'sp_widget', record, recordName: 'My widget', left: { sys_id: original, sys_created_on: '2026-10-02 00:00:00', sys_created_by: 'Earlier author', fields: { script: 'before();' }, update_set_name: 'Earlier set', update_set_table: 'sys_update_set' }, right: { sys_id: update, sys_created_on: '2026-10-01 00:00:00', sys_created_by: 'Developer', fields: { script: 'after();' }, update_set_name: 'Imported set', update_set_sys_id: 'f'.repeat(32), update_set_table: 'sys_remote_update_set' } };
+                        else if (name === 'WidgetEditorCreditAjax' && params.sysparm_name === 'getComparison') result = denied ? { success: false, error: 'Administrator access is required.' } : { success: true, table: 'sp_widget', record, recordName: 'My widget', left: { sys_id: original, sys_created_on: '2026-10-02 00:00:00', sys_created_by: 'Earlier author', fields: { script: 'before();' }, update_set_name: 'Earlier set', update_set_table: 'sys_update_set' }, right: { sys_id: update, sys_created_on: '2026-10-01 00:00:00', sys_created_by: 'Developer', fields: { script: 'after();' }, update_set_name: 'Imported set', update_set_sys_id: 'f'.repeat(32), update_set_table: 'sys_remote_update_set' } };
                         else throw Error('Unexpected comparison request: ' + params.sysparm_name);
                         timer(() => callback({ responseXML: { documentElement: { getAttribute: () => JSON.stringify(result) } } }), 0);
                     };
@@ -755,7 +764,8 @@ test('Polaris URL, record title and History follow update selection and survive 
         assert.equal(new URL('https://credit.test/' + decodeURIComponent(new URL(page.url()).pathname.slice(prefix.length))).searchParams.get('sysparm_update'), original);
         assert.equal(await page.evaluate(() => history.state.shellState), 'preserved');
         const entry = await frame.evaluate(() => window.historyEntries.at(-1));
-        assert.match(entry.title, /My widget \(Widget\)/);
+        assert.equal(entry.title, 'Credit+');
+        assert.equal(entry.description, 'My widget');
         assert.equal(new URL('https://credit.test/' + entry.url).searchParams.get('sysparm_update'), original);
         assert.ok(entry.match.includes('url=' + child.slice(1)));
         assert.equal(await frame.evaluate(() => window.statisticsCalls), 0);
@@ -769,6 +779,8 @@ test('Polaris URL, record title and History follow update selection and survive 
         assert.equal(await frame.locator('#cp-update-button').getAttribute('data-value'), original);
         assert.equal(await frame.locator('#cp-statistics').isVisible(), true);
         assert.equal(await frame.evaluate(() => window.statisticsCalls), 1);
+        assert.equal(await frame.evaluate(() => window.historyEntries.at(-1).title), 'Credit+');
+        assert.equal(await frame.evaluate(() => window.historyEntries.at(-1).description), 'My widget');
         assert.equal(await frame.locator('#cp-statistics-button').getAttribute('aria-pressed'), 'true');
         assert.equal(await frame.locator('#cp-statistics-button').evaluate(node => node.classList.contains('active')), true);
         await frame.getByRole('button', { name: 'Statistics', exact: true }).click();
@@ -873,7 +885,8 @@ test('statistics load only on demand, render safe leaderboards, cache while open
             await page.evaluate(() => window.statsRequests[2].callback(JSON.stringify({ success: false, error: 'History unavailable.' })));
             await settle(page);
             assert.equal(await page.locator('#cp-statistics-status').textContent(), 'History unavailable.');
-            await page.getByRole('button', { name: 'Retry statistics' }).click();
+            assert.equal(await page.getByRole('button', { name: 'Retry statistics' }).count(), 0);
+            await button.click(); await button.click();
             await page.evaluate(() => window.statsRequests[3].callback(JSON.stringify(window.statsFixture)));
             await settle(page);
             assert.equal(await page.locator('.cp-stats-board').count(), 4);
@@ -882,7 +895,7 @@ test('statistics load only on demand, render safe leaderboards, cache while open
     } finally { await browser.close(); }
 });
 
-test('statistics timeout allows retry and discards the expired response', async () => {
+test('statistics timeout stays visible and reopening discards the expired response', async () => {
     const browser = await chromium.launch({ headless: true });
     try {
         const page = await browser.newPage(); await initialise(page);
@@ -901,7 +914,9 @@ test('statistics timeout allows retry and discards the expired response', async 
         await settle(page);
         assert.match(await page.locator('#cp-statistics-status').textContent(), /timed out/);
         assert.equal(await page.locator('.cp-stats-skeleton').count(), 0);
-        await page.getByRole('button', { name: 'Retry statistics' }).click();
+        assert.equal(await page.getByRole('button', { name: 'Retry statistics' }).count(), 0);
+        const statistics = page.getByRole('button', { name: 'Statistics', exact: true });
+        await statistics.click(); await statistics.click();
         await page.evaluate(() => window.statsCallbacks[1]('not JSON'));
         await settle(page);
         assert.equal(await page.locator('#cp-statistics-status').textContent(), 'Statistics could not be loaded.');
@@ -1172,7 +1187,7 @@ test('real browser workers stream field and statistics batches without server-co
     const browser = await chromium.launch({headless:true});
     try {
         const page = await browser.newPage(); await initialise(page,1280,true);
-        const workerSource = fs.readFileSync('src/fluent/generated/server-development/script-include/sys_script_include_widget_editor_credit_engine.server.js','utf8');
+        const workerSource = fs.readFileSync('src/fluent/generated/client-development/ui-script/widget_editor_credit_worker.js','utf8');
         await page.route('**/widget_editor_credit_worker.jsdbx?*', route=>route.fulfill({contentType:'application/javascript',body:workerSource}));
         await page.evaluate(() => {
             const NativeWorker=window.Worker; window.workerStarts=0; window.workerStops=0;
@@ -1207,7 +1222,8 @@ test('unavailable worker shows a retryable field error instead of blocking the m
         await page.evaluate(()=>window.nextAnswer={success:true,snapshots:[],limits:{max_lines:50000,diff_work:20000000}});
         const field=page.locator('.cp-field-section[data-field=script]');
         await field.locator('summary.da-summary').click();
-        await part(field,'cp-field-retry').waitFor({state:'visible'});
+        await page.waitForFunction(() => document.querySelector('.cp-field-section[data-field=script] [id$="-code-status"]').classList.contains('alert-danger'));
+        assert.equal(await part(field,'cp-field-retry').count(), 0);
         assert.match(await part(field,'cp-code-status').textContent(),/browser worker could not load/);
         assert.equal(await page.getByRole('button',{name:'Statistics',exact:true}).isEnabled(),true);
     }finally{await browser.close();}
@@ -1232,7 +1248,7 @@ async function tableApiFixture(page, options = {}) {
         const ids=url.searchParams.get('sysparm_query').split('^')[0].slice(8).split(',');
         await route.fulfill({contentType:'application/json',body:JSON.stringify({result:entries.filter(row=>ids.includes(row.sys_id))})});
     });
-    await page.route('**/widget_editor_credit_worker.jsdbx?*',route=>route.fulfill({contentType:'application/javascript',body:fs.readFileSync('src/fluent/generated/server-development/script-include/sys_script_include_widget_editor_credit_engine.server.js','utf8')}));
+    await page.route('**/widget_editor_credit_worker.jsdbx?*',route=>route.fulfill({contentType:'application/javascript',body:fs.readFileSync('src/fluent/generated/client-development/ui-script/widget_editor_credit_worker.js','utf8')}));
     await page.evaluate(manifest=>{
         window.fixture.tableApi=manifest;
         window.GlideAjax=function(){const params={};this.addParam=(k,v)=>params[k]=v;this.getXMLAnswer=callback=>{
@@ -1292,9 +1308,10 @@ test('Table API history batches beyond 100 records and reports denied access wit
         const retryPage=await browser.newPage(); const denied=await tableApiFixture(retryPage,{respond:async(route,entries,n)=>route.fulfill({status:n<=2?403:200,contentType:'application/json',body:JSON.stringify(n<=2?{error:{message:'Access denied'}}:{result:entries})})});
         await retryPage.waitForFunction(()=>document.querySelector('#cp-status').textContent.includes('access was denied'));
         const field=retryPage.locator('.cp-field-section[data-field="script"]');await field.locator('summary').click();
-        await part(field,'cp-field-retry').waitFor({state:'visible'});
+        await retryPage.waitForFunction(() => document.querySelector('.cp-field-section[data-field=script] [id$="-code-status"]').classList.contains('alert-danger'));
+        assert.equal(await part(field,'cp-field-retry').count(), 0);
         assert.match(await part(field,'cp-code-status').textContent(),/Table API access was denied/);
-        await part(field,'cp-field-retry').click(); await openField(retryPage);
+        await retryPage.getByRole('button', { name: 'Reload', exact: true }).click(); await openField(retryPage);
         assert.equal(denied.calls(),3);
     }finally{await browser.close();}
 });
@@ -1316,7 +1333,8 @@ test('Table API rejects reassigned or wrong-record snapshots and tolerates unrea
             }});
             const field=page.locator('.cp-field-section[data-field="script"]');await field.locator('summary').click();
             if(['reassigned','wrong target'].includes(mode)) {
-                await part(field,'cp-field-retry').waitFor({state:'visible'});
+                await page.waitForFunction(() => document.querySelector('.cp-field-section[data-field=script] [id$="-code-status"]').classList.contains('alert-danger'));
+                assert.equal(await part(field,'cp-field-retry').count(), 0);
                 assert.match(await part(field,'cp-code-status').textContent(),/changed while loading|different records/);
             }else{
                 await openField(page);assert.match(await part(field,'cp-code-status').textContent(),/snapshot interrupts attribution/);
@@ -1418,4 +1436,181 @@ test('long leaderboards scroll independently with their headings fixed at the to
         assert.equal(await board.evaluate(n=>Math.abs(n.querySelector('h3').getBoundingClientRect().top-n.getBoundingClientRect().top-1)<2),true);
         assert.equal(await page.locator('.cp-stats-board').nth(1).evaluate(n=>n.scrollTop),0);
     }finally{await browser.close();}
+});
+
+
+test('partial Table API statistics show available results without a partial notice or retry button', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage();
+        await tableApiFixture(page, { limits: { max_history_chars: 1 } });
+        await page.getByRole('button', { name: 'Statistics', exact: true }).click();
+        await page.waitForFunction(() => document.querySelectorAll('.cp-stats-board h3').length === 4);
+        assert.equal(await page.locator('.cp-stats-facts dd').count(), 6);
+        assert.deepEqual((await page.locator('.cp-stats-facts dd').allTextContents()).slice(-2), ['0', '0']);
+        assert.equal(await page.locator('#cp-statistics-status').textContent(), '');
+        assert.equal(await page.locator('#cp-statistics .alert-danger').count(), 0);
+        assert.equal(await page.getByRole('button', { name: 'Retry statistics' }).count(), 0);
+    } finally { await browser.close(); }
+});
+
+
+test('missing fields stay disabled with an Unavailable label and enable again on another update set', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage();
+        await tableApiFixture(page, { respond: async (route, entries) => {
+            const rows = structuredClone(entries);
+            rows[1].payload = rows[1].payload.replace('<client_script><![CDATA[client();]]></client_script>', '');
+            await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ result: rows }) });
+        } });
+        const field = page.locator('.cp-field-section[data-field="client_script"]');
+        const summary = field.locator('summary');
+        await field.locator('.label.label-warning').waitFor();
+        assert.equal(await field.locator('.label.label-warning').textContent(), 'Unavailable');
+        assert.ok(await summary.evaluate(node => {
+            const label = node.querySelector('.label');
+            return Math.abs(node.getBoundingClientRect().right - parseFloat(getComputedStyle(node).paddingRight) - label.getBoundingClientRect().right) < 1;
+        }), 'Unavailable label aligns with the right edge of the heading');
+        assert.equal(await field.getAttribute('aria-disabled'), 'true');
+        assert.equal(await summary.getAttribute('aria-disabled'), 'true');
+        assert.equal(await summary.getAttribute('tabindex'), '-1');
+        assert.equal(await summary.evaluate(node => getComputedStyle(node).cursor), 'not-allowed');
+        await summary.evaluate(node => node.click());
+        await summary.focus();
+        await page.keyboard.press('Enter');
+        await page.keyboard.press('Space');
+        await field.evaluate(node => node.open = true);
+        await page.waitForFunction(() => !document.querySelector('.cp-field-section[data-field="client_script"]').open);
+        assert.equal(await page.getByRole('button', { name: 'Retry field' }).count(), 0);
+        assert.equal(await page.evaluate(() => window.creditOptions.length), 0);
+        const empty = page.locator('.cp-field-section[data-field=template]');
+        assert.equal(await empty.getAttribute('aria-disabled'), 'true');
+        assert.equal(await empty.evaluate(node => node.open), false);
+        assert.equal(await empty.locator('.da-diff-counts').textContent(), '0 lines');
+        assert.equal(await empty.locator('table').first().isVisible(), false);
+        assert.equal(await empty.locator('.label').count(), 0);
+        await chooseSet(page, original);
+        assert.equal(await field.getAttribute('aria-disabled'), 'false');
+        assert.equal(await field.locator('.label').count(), 0);
+        assert.equal(await summary.getAttribute('tabindex'), '0');
+        await openField(page, 'client_script');
+        assert.equal(await page.evaluate(() => window.creditOptions.at(-1).model.text), 'client();');
+    } finally { await browser.close(); }
+});
+
+
+test('zero-line fields close during loading, block expansion and enable only when an update has code', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage();
+        let finish;
+        let announce;
+        const requested = new Promise(resolve => announce = resolve);
+        await tableApiFixture(page, { respond: (route, entries) => {
+            const rows = structuredClone(entries);
+            rows[0].payload = rows[0].payload.replace('<template/>', '<template><![CDATA[<p>Earlier code</p>]]></template>');
+            finish = () => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ result: rows }) });
+            announce();
+        } });
+        await requested;
+        const field = page.locator('.cp-field-section[data-field=template]');
+        const summary = field.locator('summary');
+        await summary.click();
+        assert.equal(await field.evaluate(node => node.open), true);
+        await finish();
+        await page.waitForFunction(() => document.querySelector('.cp-field-section[data-field=template]').getAttribute('aria-disabled') === 'true');
+        assert.equal(await field.evaluate(node => node.open), false);
+        assert.equal(await field.locator('.da-diff-counts').textContent(), '0 lines');
+        assert.equal(await field.locator('.label').count(), 0);
+        assert.equal(await summary.getAttribute('tabindex'), '-1');
+        await summary.evaluate(node => node.click());
+        await summary.focus();
+        await page.keyboard.press('Enter');
+        await page.keyboard.press('Space');
+        await field.evaluate(node => node.open = true);
+        await page.waitForFunction(() => !document.querySelector('.cp-field-section[data-field=template]').open);
+        assert.equal(await field.locator('table').first().isVisible(), false);
+        assert.equal(await page.evaluate(() => window.creditOptions.length), 0);
+        await chooseSet(page, original);
+        await openField(page, 'template');
+        assert.equal(await page.evaluate(() => window.creditOptions.at(-1).model.text), '<p>Earlier code</p>');
+        await chooseSet(page, update);
+        assert.equal(await field.getAttribute('aria-disabled'), 'true');
+        assert.equal(await field.evaluate(node => node.open), false);
+        assert.equal(await field.locator('table').first().isVisible(), false);
+        assert.equal(await page.evaluate(() => window.creditOptions.length), 1);
+    } finally { await browser.close(); }
+});
+
+
+test('Monaco attribution borders end each update-set group and stay consistent across fields and themes', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage();
+        await initialise(page, 1280, true);
+        await page.evaluate(() => {
+            const first = window.fixture.updates[0], second = window.fixture.updates[1];
+            first.updateSet.name = second.updateSet.name = 'Same name';
+            window.fixture.updates.push(
+                { ...first, id: '7'.repeat(32), author: 'Another author' },
+                { ...first, id: '8'.repeat(32), updateSet: { ...first.updateSet, table: 'sys_remote_update_set' } },
+                { ...first, id: '9'.repeat(32), updateSet: null },
+            );
+            window.fixture.lines = [first.id, '7'.repeat(32), second.id, null, '8'.repeat(32), second.id, '9'.repeat(32)]
+                .map((update, index) => ({ number: index + 1, text: 'line' + index + '();', update }));
+        });
+        const field = await openField(page);
+        const first = await page.evaluate(() => window.creditEditors[0].decorations);
+        assert.deepEqual(first.map(d => [d.range.startLineNumber, d.range.endLineNumber]), [[2, 2], [3, 3], [5, 5], [6, 6]]);
+        assert.equal(first.every(d => d.options.isWholeLine === true && d.options.marginClassName === d.options.className), true);
+        assert.equal(first[1].options.className, first[3].options.className);
+        assert.equal(new Set(first.map(d => d.options.className)).size, 3);
+        await openField(page, 'client_script');
+        assert.deepEqual(await page.evaluate(() => window.creditEditors[1].decorations), first);
+        const colours = [];
+        for (const background of ['255 255 255', '24 26 30']) {
+            colours.push(await page.evaluate(({ background, decorations }) => {
+                document.documentElement.style.setProperty('--now-color_background--primary', background);
+                const editor = document.createElement('div'); editor.className = 'monaco-editor';
+                document.getElementById('credit-plus').appendChild(editor);
+                const values = decorations.map(decoration => {
+                    const line = document.createElement('div'); line.className = decoration.options.className;
+                    editor.appendChild(line);
+                    const style = getComputedStyle(line);
+                    return { background: style.backgroundColor, border: style.borderBottomColor, width: style.borderBottomWidth, style: style.borderBottomStyle };
+                });
+                editor.remove();
+                return values;
+            }, { background, decorations: first }));
+        }
+        assert.deepEqual(colours[0], colours[1]);
+        assert.equal(new Set(colours[0].map(value => value.border)).size, 3);
+        assert.equal(colours[0].every(value => {
+            const alpha = Number(value.border.match(/, ([\d.]+)\)$/)?.[1]);
+            return alpha > 0 && alpha <= 0.5 && value.width === '1px' && value.style === 'solid' && value.background === 'rgba(0, 0, 0, 0)';
+        }), true, 'Group borders are subtle in both themes without filling lines');
+        const rows = await part(field, 'cp-attribution').locator('tr').evaluateAll(rows => rows.map(row => ({
+            number: Number(row.dataset.lineNumber), className: row.className,
+            border: getComputedStyle(row).borderBottomColor, width: getComputedStyle(row).borderBottomWidth,
+            height: row.getBoundingClientRect().height,
+        })));
+        assert.deepEqual(rows.filter(row => row.width === '1px').map(row => row.number), [2, 3, 5, 6]);
+        assert.equal(rows.every(row => row.height === 24), true, 'Borders do not change attribution row heights');
+        first.forEach((decoration, index) => {
+            const row = rows[decoration.range.endLineNumber - 1];
+            assert.equal(row.className, decoration.options.className);
+            assert.equal(row.border, colours[0][index].border, 'Borders extend across the left attribution columns');
+        });
+        await menuAction(page, setCell(field), 'Quick compare');
+        assert.equal(await page.evaluate(() => window.creditEditors.at(-1).decorations), undefined);
+        await part(field, 'cp-diff-close').click();
+        assert.deepEqual(await page.evaluate(() => window.creditEditors.at(-1).decorations), first);
+        await field.locator('summary').click();
+        await openField(page);
+        assert.deepEqual(await page.evaluate(() => window.creditEditors.at(-1).decorations), first);
+        await chooseSet(page, original);
+        await openField(page);
+        assert.deepEqual(await page.evaluate(() => window.creditEditors.at(-1).decorations), first);
+    } finally { await browser.close(); }
 });

@@ -1,5 +1,5 @@
-// Shared pure computation: used by the browser worker and the reusable server API.
-var WidgetEditorCreditEngine = function (limits, whitespace) {
+// Pure computation for the Credit+ browser worker.
+var CreditAnalysis = function (limits, whitespace) {
     this.limits = limits;
     this.whitespace = ['none', 'all', 'changes', 'eol'].indexOf(whitespace) === -1 ? 'all' : whitespace;
     this.previous = Object.create(null);
@@ -7,7 +7,7 @@ var WidgetEditorCreditEngine = function (limits, whitespace) {
     this.updates = [];
     this.warnings = [];
 };
-WidgetEditorCreditEngine.prototype = {
+CreditAnalysis.prototype = {
     keys: function (lines) {
         // A snapshot can be compared again with a different whitespace setting.
         if (lines.creditWhitespace !== this.whitespace || !lines.creditKeys) {
@@ -282,7 +282,7 @@ WidgetEditorCreditEngine.prototype = {
     },
 };
 
-WidgetEditorCreditEngine.prototype.process = function (kind, batch) {
+CreditAnalysis.prototype.process = function (kind, batch) {
     var self = this;
     function lines(code) {
         return code === '' ? [] : code.split('\n');
@@ -389,15 +389,14 @@ WidgetEditorCreditEngine.prototype.process = function (kind, batch) {
     return batch;
 };
 
-// The same asset is a private server helper and a same-origin browser worker.
+// Run matching only in the same-origin browser worker.
 if (typeof WorkerGlobalScope !== 'undefined' && typeof self !== 'undefined' && self instanceof WorkerGlobalScope) {
-    var creditWorkerEngine;
+    var creditAnalysis;
     self.onmessage = function (event) {
         try {
             var input = event.data;
-            if (!creditWorkerEngine)
-                creditWorkerEngine = new WidgetEditorCreditEngine(input.batch.limits, input.batch.whitespace);
-            self.postMessage(creditWorkerEngine.process(input.kind, input.batch));
+            if (!creditAnalysis) creditAnalysis = new CreditAnalysis(input.batch.limits, input.batch.whitespace);
+            self.postMessage(creditAnalysis.process(input.kind, input.batch));
         } catch (error) {
             self.postMessage({ success: false, error: error.message || 'Credit+ calculation failed.' });
         }
