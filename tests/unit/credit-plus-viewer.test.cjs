@@ -1,7 +1,12 @@
-const { test } = require('node:test');
+const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { chromium } = require('@playwright/test');
+
+let browser;
+before(async () => { browser = await chromium.launch({ headless: true }); });
+after(async () => { await browser?.close(); });
+
 const html = fs.readFileSync('src/fluent/generated/other/sys-ui-page/credit_plus.html', 'utf8');
 assert.match(fs.readFileSync('src/fluent/generated/other/sys-ui-page/widget_editor_compare.html', 'utf8'), /credit_update:\s*_weDiffConfigParams.get\('credit_update'\)/);
 const client = fs.readFileSync('src/fluent/generated/other/sys-ui-page/credit_plus.client.js', 'utf8');
@@ -106,10 +111,10 @@ async function initialise(page, width = 1280, monaco = false) {
 }
 
 test('fields start collapsed, author is plain text, and Compare+ links open safely in a new tab', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
         for (const width of [1280, 390]) {
-            const page = await browser.newPage(); await initialise(page, width);
+            const page = await context.newPage(); await initialise(page, width);
             assert.equal(await page.locator('.cp-field-section[open]').count(), 0);
             assert.equal(await page.locator('#cp-table-filters, #cp-removed-view, #cp-removed-panel').count(), 0);
             assert.equal(await page.evaluate(() => window.calls[0].params.sysparm_context), 'true');
@@ -154,14 +159,14 @@ test('fields start collapsed, author is plain text, and Compare+ links open safe
             assert.equal(await empty.locator('table').first().isVisible(), false);
             await page.close();
         }
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 
 test('viewer ignores stale responses after a timeout and allows retry', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
-        const page = await browser.newPage();
+        const page = await context.newPage();
         await page.route('https://credit.test/**', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: markup }));
         await page.goto('https://credit.test/?sysparm_update=' + update);
         await page.evaluate(() => {
@@ -188,13 +193,13 @@ test('viewer ignores stale responses after a timeout and allows retry', async ()
         assert.equal(await page.locator('#cp-loading').count(), 0);
         assert.equal(await page.locator('.cp-field-section').count(), 4);
         assert.equal(await page.locator('.cp-field-section[open]').count(), 0);
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 test('inline diff compares the row update to the selected update and restores attribution', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
-        const page = await browser.newPage(); await initialise(page, 1280, true);
+        const page = await context.newPage(); await initialise(page, 1280, true);
         await page.evaluate(original => window.fixture.lines[0].update = original, original);
         const section = await openField(page);
         const other = await openField(page, 'template');
@@ -230,14 +235,14 @@ test('inline diff compares the row update to the selected update and restores at
         assert.equal(await part(section, 'cp-code-view').isVisible(), true);
         await page.locator('#cp-retry').click();
         assert.equal(await page.locator('.cp-field-section[open]').count(), 0);
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 test('multiple Monaco fields stay aligned and release editors when collapsed or the update set changes', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
         for (const width of [1280, 390]) {
-            const page = await browser.newPage(); await initialise(page, width, true);
+            const page = await context.newPage(); await initialise(page, width, true);
             assert.equal(await page.evaluate(() => window.creditOptions.length), 0);
             await page.evaluate(() => window.fixture.lines = Array.from({ length: 120 }, (_, i) => ({ number: i + 1, text: 'var line' + i + ' = true;', update: window.fixture.selected })));
             const script = await openField(page);
@@ -267,13 +272,13 @@ test('multiple Monaco fields stay aligned and release editors when collapsed or 
             assert.equal(await part(fallback, 'cp-lines').locator('tr').count(), 120);
             await page.close();
         }
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 test('annotations inherit Monaco font metrics and follow geometry changes without cumulative drift', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
-        const page = await browser.newPage();
+        const page = await context.newPage();
         await page.route('https://credit.test/**', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: markup }));
         await page.goto('https://credit.test/?sysparm_update=' + update);
         await page.evaluate(installMonaco);
@@ -305,13 +310,13 @@ test('annotations inherit Monaco font metrics and follow geometry changes withou
         }
         await page.evaluate(() => document.querySelector('#cp-attribution tr[data-line-number="119"] .cp-cell').focus({ preventScroll: true }));
         assert.ok(await page.evaluate(() => creditEditor.getScrollTop()) > 2500, 'Keyboard focus reveals code for an off-screen attribution');
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 test('Polaris captures the record title while History keeps the Credit+ title and record name', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
-        const page = await browser.newPage();
+        const page = await context.newPage();
         await page.route('https://credit.test/**', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: route.request().url().endsWith('/host')
             ? '<span id="shell-title"></span><iframe style="width:100%;height:650px" onload="document.getElementById(\'shell-title\').textContent=this.contentDocument.title" src="/?sysparm_update=' + update + '"></iframe>'
             : initialMetadata('My widget (Widget)') + markup }));
@@ -340,13 +345,13 @@ test('Polaris captures the record title while History keeps the Credit+ title an
         assert.equal(new URL('https://credit.test/' + await frame.evaluate(() => window.historyEntries.at(-1).url)).searchParams.get('sysparm_field'), 'client_script');
         assert.match(html, /we_history_sync\.jsdbx/);
         assert.match(html, /window\.location\.replace\('\/now\/nav\/ui\/classic\/params\/target\//);
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 test('initial historical names and instance titles stay text, including closing script tags', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
-        const page = await browser.newPage();
+        const page = await context.newPage();
         const name = 'Widget </script><img src=x onerror="window.injected=true"> \'quotes\' & more';
         const siteTitle = 'Instance </script><script>window.injected=true</script>';
         await page.route('https://credit.test/**', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: route.request().url().endsWith('/host')
@@ -357,14 +362,14 @@ test('initial historical names and instance titles stay text, including closing 
         assert.equal(await frame.locator('img').count(), 0);
         assert.equal(await frame.evaluate(() => window.injected), undefined);
         assert.match(html, /\$\{HTML:jvar_cp_description\}/);
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 test('Compare+ update-set dropdown shows date, set name and author columns and supports keyboard selection', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
         for (const width of [1280, 390]) {
-            const page = await browser.newPage(); await initialise(page, width);
+            const page = await context.newPage(); await initialise(page, width);
             await page.locator('#cp-update-button').click();
             assert.deepEqual(await page.locator('#cp-update-menu .dc-version-dd-item').evaluateAll(items => items.map(item => Array.from(item.querySelectorAll('.dc-vrow span'), span => span.textContent))), [
                 ['2026-10-02 00:00:00', 'Next release', 'Future author'], ['2026-10-01 00:00:00', 'HM-13489', 'Developer'], ['2026-09-01 00:00:00', 'Default', 'Earlier author']
@@ -387,13 +392,13 @@ test('Compare+ update-set dropdown shows date, set name and author columns and s
             await page.screenshot({ path: '/tmp/credit-plus-fields-' + width + '.png', fullPage: true });
             await page.close();
         }
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 test('Compare+ header pickers search and navigate safely, discarding old record-search replies', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
-        const page = await browser.newPage();
+        const page = await context.newPage();
         await page.route('https://credit.test/**', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: markup }));
         await page.goto('https://credit.test/?sysparm_update=' + update);
         await page.evaluate(fixture => {
@@ -483,13 +488,13 @@ test('Compare+ header pickers search and navigate safely, discarding old record-
         await page.evaluate(() => window.dispatchEvent(new Event('pageshow')));
         assert.equal(await page.locator('#cp-table-input').count(), 1);
         assert.equal(await page.evaluate(() => window.pickers['cp-table-input'].value.id), 'sys_script_include');
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 test('every field resists ServiceNow table/button sizing and uses theme variables for the dropdown', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
-        const page = await browser.newPage(); await initialise(page, 1280, true);
+        const page = await context.newPage(); await initialise(page, 1280, true);
         await page.addStyleTag({ content: 'button { min-height:29.25px; line-height:21px; display:inline-block; } tbody { display:table-row-group; } tr { display:table-row; position:static; } td { display:table-cell; font-size:12px; line-height:21px; } .form-control { background-color:rgba(255,255,255,.45) !important; } :root { --now-color_background--primary:7,8,11; --now-button--secondary--color:132,134,255; }' });
         await page.waitForFunction(() => getComputedStyle(document.getElementById('cp-update-button')).backgroundColor === 'rgb(7, 8, 11)');
         assert.equal(await page.locator('#cp-update-button').evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(7, 8, 11)');
@@ -505,13 +510,13 @@ test('every field resists ServiceNow table/button sizing and uses theme variable
         await page.waitForFunction(() => getComputedStyle(document.getElementById('cp-update-button')).backgroundColor === 'rgb(255, 255, 255)');
         assert.equal(await page.locator('#cp-update-button').evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(255, 255, 255)');
         assert.equal(await page.locator('#cp-update-button').evaluate(node => getComputedStyle(node).color), 'rgb(22, 27, 28)');
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 test('field timeouts, retry and update-set changes discard late responses without reopening fields', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
-        const page = await browser.newPage(); await initialise(page, 1280, true);
+        const page = await context.newPage(); await initialise(page, 1280, true);
         await page.evaluate(fixture => {
             const setTimeout = window.setTimeout; window.pending = [];
             window.setTimeout = (callback, delay) => delay === 180000 ? (window.expire = callback, 123) : setTimeout(callback, delay);
@@ -562,14 +567,14 @@ test('field timeouts, retry and update-set changes discard late responses withou
         assert.equal(await page.locator('.cp-field-section[open]').count(), 0);
         assert.equal(await page.evaluate(() => window.creditOptions.length), 2);
         assert.equal(await page.evaluate(() => window.disposedCreditEditors), 2);
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 test('inline author/set filters combine and clear independently while retaining original Monaco geometry', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
         for (const width of [1280, 390]) for (const useMonaco of [false, true]) {
-            const page = await browser.newPage(); await initialise(page, width, useMonaco);
+            const page = await context.newPage(); await initialise(page, width, useMonaco);
             await page.evaluate(({ update, original }) => {
                 window.fixture.lines = Array.from({ length: 6 }, (_, i) => ({ number: i + 1, text: 'line' + (i + 1) + '();', update: [0, 2, 5].includes(i) ? original : update }));
             }, { update, original });
@@ -609,16 +614,16 @@ test('inline author/set filters combine and clear independently while retaining 
             assert.equal(await page.locator('.cp-field-section[open]').count(), 0);
             await page.close();
         }
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 
 test('Compare+ loads Customer Update snapshots read-only without version queries or parent history changes', async () => {
     const compareClient = fs.readFileSync('src/fluent/generated/other/sys-ui-page/widget_editor_compare.client.js', 'utf8');
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
         for (const denied of [false, true]) {
-            const page = await browser.newPage();
+            const page = await context.newPage();
             await page.route('https://compare.test/**', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: route.request().url().endsWith('/host') ? '<title>Credit: My widget</title><iframe src="/comparison"></iframe>' : '<div id="we-diff-app"></div>' }));
             await page.goto('https://compare.test/host');
             const frame = page.frames()[1];
@@ -662,13 +667,13 @@ test('Compare+ loads Customer Update snapshots read-only without version queries
             assert.equal(await frame.evaluate(() => window.historyEntries.length), 0);
             await page.close();
         }
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 test('closing or reloading discards late inline comparisons and timeouts keep attribution available', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
-        const page = await browser.newPage(); await initialise(page, 1280, true);
+        const page = await context.newPage(); await initialise(page, 1280, true);
         await page.evaluate(original => window.fixture.lines[0].update = original, original);
         let section = await openField(page);
         await page.evaluate(() => {
@@ -717,13 +722,13 @@ test('closing or reloading discards late inline comparisons and timeouts keep at
         assert.equal(await page.evaluate(() => window.options.length), 0);
         section = await openField(page);
         assert.equal(await part(section, 'cp-code-view').isVisible(), true);
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 test('Polaris URL, record title and History follow update selection and survive a shell refresh', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
-        const page = await browser.newPage();
+        const page = await context.newPage();
         const prefix = '/now/nav/ui/classic/params/target/';
         const child = '/ui_page.do?sys_id=9c5bf170283e4d6394aa639c79936587&sysparm_update=' + update;
         await page.route('https://credit.test/**', route => {
@@ -790,14 +795,14 @@ test('Polaris URL, record title and History follow update selection and survive 
         assert.equal(await frame.locator('#cp-statistics-button').evaluate(node => node.classList.contains('active')), false);
         assert.equal(await frame.locator('#cp-statistics').isVisible(), false);
         await page.waitForFunction(() => document.getElementById('shell-title').textContent.includes('My widget (Widget)'));
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 test('statistics load only on demand, render safe leaderboards, cache while open, and reset on selection', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
         for (const width of [1280, 390]) {
-            const page = await browser.newPage(); await initialise(page, width);
+            const page = await context.newPage(); await initialise(page, width);
             await page.evaluate(() => {
                 const Original = window.GlideAjax;
                 window.statsRequests = [];
@@ -908,13 +913,13 @@ test('statistics load only on demand, render safe leaderboards, cache while open
             assert.deepEqual(await page.locator('.cp-stats-percentage').allTextContents(), ['0.0%', '0.0%']);
             await page.close();
         }
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 test('statistics timeout stays visible and reopening discards the expired response', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
-        const page = await browser.newPage(); await initialise(page);
+        const page = await context.newPage(); await initialise(page);
         await page.evaluate(() => {
             const originalTimeout = window.setTimeout;
             window.setTimeout = (callback, delay) => { if (delay === 180000) { window.expireStats = callback; return 0; } return originalTimeout(callback, delay); };
@@ -936,29 +941,29 @@ test('statistics timeout stays visible and reopening discards the expired respon
         await page.evaluate(() => window.statsCallbacks[1]('not JSON'));
         await settle(page);
         assert.equal(await page.locator('#cp-statistics-status').textContent(), 'Statistics could not be loaded.');
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 
 test('statistics age emoji change at the specified day boundaries', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
-        const page = await browser.newPage(); await initialise(page);
+        const page = await context.newPage(); await initialise(page);
         for (const [ageDays, icon] of [[null, '❓'], [0, '👶'], [89, '👶'], [90, '🧒'], [364, '🧒'], [365, '🧑'], [999, '🧑'], [1000, '🧓']]) {
             await page.locator('#cp-retry').click();
             await page.evaluate(ageDays => window.nextAnswer = { success: true, ageDays, founder: '', created: '', updateSetCount: 0, contributorCount: 0, added: 0, removed: 0, creators: [], destroyers: [], creatorSets: [], destroyerSets: [] }, ageDays);
             await page.getByRole('button', { name: 'Statistics', exact: true }).click();
             assert.equal(await page.locator('.cp-stats-facts dt').first().textContent(), 'Age ' + icon);
         }
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 
 test('field loading keeps the Monaco headings, splitter and column widths through completion', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
         for (const width of [1280, 390]) {
-            const page = await browser.newPage(); await initialise(page, width, true);
+            const page = await context.newPage(); await initialise(page, width, true);
             await page.evaluate(() => {
                 window.GlideAjax = function () { this.addParam = () => {}; this.getXMLAnswer = callback => window.fieldResponse = callback; };
             });
@@ -981,13 +986,13 @@ test('field loading keeps the Monaco headings, splitter and column widths throug
             await page.screenshot({ path: '/tmp/credit-stable-field-' + width + '.png', fullPage: true });
             await page.close();
         }
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 test('AngularJS owns field lifecycles and disposes scopes and editors on reload and teardown', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
-        const page = await browser.newPage(); await initialise(page, 1280, true);
+        const page = await context.newPage(); await initialise(page, 1280, true);
         const errors = []; page.on('pageerror', error => errors.push(error.message));
         const watchers = await page.evaluate(() => angular.element(document.getElementById('credit-plus')).injector().get('$rootScope').$$watchersCount);
         for (let i = 0; i < 3; i++) {
@@ -1019,13 +1024,13 @@ test('AngularJS owns field lifecycles and disposes scopes and editors on reload 
         assert.equal(await page.evaluate(() => window.createdModels.length), await page.evaluate(() => window.disposedModels));
         assert.equal(await page.locator('#cp-context-menu').count(), 0);
         assert.deepEqual(errors, []);
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 test('expanding a field scrolls only after its editor is ready and ignores collapsed pending fields', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
-        const page = await browser.newPage(); await initialise(page, 1280, true);
+        const page = await context.newPage(); await initialise(page, 1280, true);
         await page.evaluate(() => {
             window.scrolls = []; window.pendingFields = [];
             const scroll = Element.prototype.scrollIntoView;
@@ -1056,14 +1061,14 @@ test('expanding a field scrolls only after its editor is ready and ignores colla
         await page.waitForFunction(() => window.scrolls.length === 2);
         assert.deepEqual(await page.evaluate(() => window.scrolls[1]), { field: 'template', editors: 2, behavior: 'auto' });
         assert.equal(await page.evaluate(() => window.pendingFields.length), 2);
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 test('dragging the shared splitter shrinks every attribution column and keeps headers aligned', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
         for (const width of [1920, 1280, 390]) {
-            const page = await browser.newPage(); await initialise(page, width, true);
+            const page = await context.newPage(); await initialise(page, width, true);
             await page.emulateMedia({ reducedMotion: 'reduce' });
             await page.evaluate(() => {
                 window.fixture.updates[1].author = 'A developer with a very long display name';
@@ -1122,13 +1127,13 @@ test('dragging the shared splitter shrinks every attribution column and keeps he
             }
             await page.close();
         }
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 test('Statistics scrolls smoothly after opening, never on closing, and respects reduced motion', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
-        const page = await browser.newPage(); await initialise(page);
+        const page = await context.newPage(); await initialise(page);
         await page.evaluate(() => {
             window.statisticsScrolls = [];
             const panel = document.getElementById('cp-statistics'), scroll = panel.scrollIntoView;
@@ -1149,13 +1154,13 @@ test('Statistics scrolls smoothly after opening, never on closing, and respects 
         await button.click();
         await page.waitForFunction(() => statisticsScrolls.length === 2);
         assert.deepEqual(await page.evaluate(() => statisticsScrolls[1]), { behavior: 'auto', visible: true });
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 test('statistics batches merge users and set IDs, reset the timeout and discard stale continuations', async () => {
-    const browser = await chromium.launch({headless:true});
+    const context = await browser.newContext();
     try {
-        const page = await browser.newPage(); await initialise(page);
+        const page = await context.newPage(); await initialise(page);
         await page.evaluate(() => {
             const Ajax = window.GlideAjax;
             window.statsBatches = [];
@@ -1196,13 +1201,13 @@ test('statistics batches merge users and set IDs, reset the timeout and discard 
         await settle(page);
         assert.equal(await page.evaluate(() => window.statsBatches.length),calls);
         assert.equal(await page.locator('#cp-statistics').isVisible(),false);
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 test('real browser workers stream field and statistics batches without server-computed results', async () => {
-    const browser = await chromium.launch({headless:true});
+    const context = await browser.newContext();
     try {
-        const page = await browser.newPage(); await initialise(page,1280,true);
+        const page = await context.newPage(); await initialise(page,1280,true);
         const workerSource = fs.readFileSync('src/fluent/generated/client-development/ui-script/widget_editor_credit_worker.js','utf8');
         await page.route('**/widget_editor_credit_worker.jsdbx?*', route=>route.fulfill({contentType:'application/javascript',body:workerSource}));
         await page.evaluate(() => {
@@ -1227,13 +1232,13 @@ test('real browser workers stream field and statistics batches without server-co
         assert.equal(await page.evaluate(()=>window.workerStarts),2);
         assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.params.sysparm_snapshots==='true').length),4);
         assert.equal(await page.locator('#cp-statistics-status').textContent(),'');
-    } finally {await browser.close();}
+    } finally {await context.close();}
 });
 
 test('unavailable worker shows a retryable field error instead of blocking the main thread', async () => {
-    const browser=await chromium.launch({headless:true});
+    const context = await browser.newContext();
     try {
-        const page=await browser.newPage();await initialise(page);
+        const page=await context.newPage();await initialise(page);
         await page.route('**/widget_editor_credit_worker.jsdbx?*',route=>route.fulfill({status:404,body:'Unavailable'}));
         await page.evaluate(()=>window.nextAnswer={success:true,snapshots:[],limits:{max_lines:50000,diff_work:20000000}});
         const field=page.locator('.cp-field-section[data-field=script]');
@@ -1242,7 +1247,7 @@ test('unavailable worker shows a retryable field error instead of blocking the m
         assert.equal(await part(field,'cp-field-retry').count(), 0);
         assert.match(await part(field,'cp-code-status').textContent(),/browser worker could not load/);
         assert.equal(await page.getByRole('button',{name:'Statistics',exact:true}).isEnabled(),true);
-    }finally{await browser.close();}
+    }finally{await context.close();}
 });
 
 async function tableApiFixture(page, options = {}) {
@@ -1283,9 +1288,9 @@ async function tableApiFixture(page, options = {}) {
 }
 
 test('Table API history populates collapsed line counts and is shared by fields, statistics, quick compare and update selection',async()=>{
-    const browser=await chromium.launch({headless:true});
+    const context = await browser.newContext();
     try {
-        const page=await browser.newPage(),api=await tableApiFixture(page);
+        const page=await context.newPage(),api=await tableApiFixture(page);
         await page.waitForFunction(()=>document.querySelector('.cp-field-section[data-field="script"] .da-diff-counts').textContent==='2 lines');
         assert.equal(api.calls(),1);
         assert.deepEqual(await page.locator('.cp-field-section .da-diff-counts').allTextContents(),['2 lines','1 lines','0 lines','0 lines']);
@@ -1313,15 +1318,15 @@ test('Table API history populates collapsed line counts and is shared by fields,
         await page.evaluate(()=>window.fixture.tableApi.key='changed');
         await chooseSet(page,original);await openField(page);
         assert.equal(api.calls(),3,'changed history invalidates the cache');
-    }finally{await browser.close();}
+    }finally{await context.close();}
 });
 
 test('Table API history batches beyond 100 records and reports denied access with a working retry',async()=>{
-    const browser=await chromium.launch({headless:true});
+    const context = await browser.newContext();
     try {
-        const page=await browser.newPage(); const api=await tableApiFixture(page,{count:101});
+        const page=await context.newPage(); const api=await tableApiFixture(page,{count:101});
         await openField(page); assert.equal(api.calls(),2);
-        const retryPage=await browser.newPage(); const denied=await tableApiFixture(retryPage,{respond:async(route,entries,n)=>route.fulfill({status:n<=2?403:200,contentType:'application/json',body:JSON.stringify(n<=2?{error:{message:'Access denied'}}:{result:entries})})});
+        const retryPage=await context.newPage(); const denied=await tableApiFixture(retryPage,{respond:async(route,entries,n)=>route.fulfill({status:n<=2?403:200,contentType:'application/json',body:JSON.stringify(n<=2?{error:{message:'Access denied'}}:{result:entries})})});
         await retryPage.waitForFunction(()=>document.querySelector('#cp-status').textContent.includes('access was denied'));
         const field=retryPage.locator('.cp-field-section[data-field="script"]');await field.locator('summary').click();
         await retryPage.waitForFunction(() => document.querySelector('.cp-field-section[data-field=script] [id$="-code-status"]').classList.contains('alert-danger'));
@@ -1329,14 +1334,14 @@ test('Table API history batches beyond 100 records and reports denied access wit
         assert.match(await part(field,'cp-code-status').textContent(),/Table API access was denied/);
         await retryPage.getByRole('button', { name: 'Reload', exact: true }).click(); await openField(retryPage);
         assert.equal(denied.calls(),3);
-    }finally{await browser.close();}
+    }finally{await context.close();}
 });
 
 test('Table API rejects reassigned or wrong-record snapshots and tolerates unreadable history gaps',async()=>{
-    const browser=await chromium.launch({headless:true});
+    const context = await browser.newContext();
     try {
         for(const mode of ['reassigned','wrong target','missing','doctype','malformed','duplicate']) {
-            const page=await browser.newPage();
+            const page=await context.newPage();
             await tableApiFixture(page,{respond:async(route,entries)=>{
                 const rows=structuredClone(entries);
                 if(mode==='reassigned')rows[0].update_set='9'.repeat(32);
@@ -1357,26 +1362,26 @@ test('Table API rejects reassigned or wrong-record snapshots and tolerates unrea
             }
             await page.close();
         }
-    }finally{await browser.close();}
+    }finally{await context.close();}
 });
 
 test('bounded history retains selected code and refetches an evicted update when selected',async()=>{
-    const browser=await chromium.launch({headless:true});
+    const context = await browser.newContext();
     try{
-        const page=await browser.newPage(),api=await tableApiFixture(page,{limits:{max_history_chars:1}});
+        const page=await context.newPage(),api=await tableApiFixture(page,{limits:{max_history_chars:1}});
         const field=await openField(page);
         assert.equal(await part(field,'cp-attribution').locator('tr').count(),2);
         assert.match(await part(field,'cp-code-status').textContent(),/Attribution is partial/);
         await chooseSet(page,original);await openField(page);
         assert.equal(api.calls(),2);
         assert.equal(await page.evaluate(()=>window.creditOptions.at(-1).model.text),'one();\ntwo();');
-    }finally{await browser.close();}
+    }finally{await context.close();}
 });
 
 test('Reload cancels pending shared retrieval and late responses cannot replace current code',async()=>{
-    const browser=await chromium.launch({headless:true});
+    const context = await browser.newContext();
     try{
-        const page=await browser.newPage();let oldRoute;let announce;
+        const page=await context.newPage();let oldRoute;let announce;
         const requested=new Promise(resolve=>announce=resolve);
         const api=await tableApiFixture(page,{respond:async(route,entries,n)=>{
             if(n===1){oldRoute=route;announce();return;}
@@ -1388,13 +1393,13 @@ test('Reload cancels pending shared retrieval and late responses cannot replace 
         assert.equal(api.calls(),2);
         assert.equal(await page.evaluate(()=>window.creditOptions.at(-1).model.text),'one();\nthree();');
         assert.equal(await page.locator('.cp-field-section[data-field="script"] [id$="-field-retry"]').isVisible(),false);
-    }finally{await browser.close();}
+    }finally{await context.close();}
 });
 
 test('whitespace popover recalculates open fields and Statistics from the cache and preserves code',async()=>{
-    const browser=await chromium.launch({headless:true});
+    const context = await browser.newContext();
     try{
-        const page=await browser.newPage();
+        const page=await context.newPage();
         const api=await tableApiFixture(page,{respond:async(route,entries)=>{
             const rows=structuredClone(entries);
             rows[1].payload=rows[1].payload.replace('one();\nthree();',' one();\ntwo( );  ');
@@ -1433,13 +1438,13 @@ test('whitespace popover recalculates open fields and Statistics from the cache 
         await page.getByRole('button',{name:'Whitespace settings',exact:true}).click();
         const box=await popover.boundingBox();assert.ok(box.x>=0 && box.x+box.width<=390);
         await page.locator('.dc-title').click();await settle(page);assert.equal(await popover.isVisible(),false);
-    }finally{await browser.close();}
+    }finally{await context.close();}
 });
 
 test('long leaderboards scroll independently with their headings fixed at the top',async()=>{
-    const browser=await chromium.launch({headless:true});
+    const context = await browser.newContext();
     try{
-        const page=await browser.newPage();await initialise(page);
+        const page=await context.newPage();await initialise(page);
         await page.evaluate(()=>{
             window.GlideAjax=function(){this.addParam=()=>{};this.getXMLAnswer=callback=>callback(JSON.stringify({success:true,ageDays:1,founder:'Ada',updateSetCount:100,contributorCount:100,added:100,removed:0,creators:Array.from({length:100},(_,i)=>({name:'Contributor '+i,added:100-i})),destroyers:[],creatorSets:[],destroyerSets:[]}));};
         });
@@ -1451,14 +1456,14 @@ test('long leaderboards scroll independently with their headings fixed at the to
         await page.waitForFunction(()=>document.querySelector('.cp-stats-board').scrollTop>0);
         assert.equal(await board.evaluate(n=>Math.abs(n.querySelector('h3').getBoundingClientRect().top-n.getBoundingClientRect().top-1)<2),true);
         assert.equal(await page.locator('.cp-stats-board').nth(1).evaluate(n=>n.scrollTop),0);
-    }finally{await browser.close();}
+    }finally{await context.close();}
 });
 
 
 test('partial Table API statistics show available results without a partial notice or retry button', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
-        const page = await browser.newPage();
+        const page = await context.newPage();
         await tableApiFixture(page, { limits: { max_history_chars: 1 } });
         await page.getByRole('button', { name: 'Statistics', exact: true }).click();
         await page.waitForFunction(() => document.querySelectorAll('.cp-stats-board h3').length === 4);
@@ -1467,14 +1472,14 @@ test('partial Table API statistics show available results without a partial noti
         assert.equal(await page.locator('#cp-statistics-status').textContent(), '');
         assert.equal(await page.locator('#cp-statistics .alert-danger').count(), 0);
         assert.equal(await page.getByRole('button', { name: 'Retry statistics' }).count(), 0);
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 
 test('missing fields stay disabled with an Unavailable label and enable again on another update set', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
-        const page = await browser.newPage();
+        const page = await context.newPage();
         await tableApiFixture(page, { respond: async (route, entries) => {
             const rows = structuredClone(entries);
             rows[1].payload = rows[1].payload.replace('<client_script><![CDATA[client();]]></client_script>', '');
@@ -1512,14 +1517,14 @@ test('missing fields stay disabled with an Unavailable label and enable again on
         assert.equal(await summary.getAttribute('tabindex'), '0');
         await openField(page, 'client_script');
         assert.equal(await page.evaluate(() => window.creditOptions.at(-1).model.text), 'client();');
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 
 test('zero-line fields close during loading, block expansion and enable only when an update has code', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
-        const page = await browser.newPage();
+        const page = await context.newPage();
         let finish;
         let announce;
         const requested = new Promise(resolve => announce = resolve);
@@ -1556,14 +1561,14 @@ test('zero-line fields close during loading, block expansion and enable only whe
         assert.equal(await field.evaluate(node => node.open), false);
         assert.equal(await field.locator('table').first().isVisible(), false);
         assert.equal(await page.evaluate(() => window.creditOptions.length), 1);
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
 
 
 test('Monaco attribution borders end each update-set group and stay consistent across fields and themes', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
-        const page = await browser.newPage();
+        const page = await context.newPage();
         await initialise(page, 1280, true);
         await page.evaluate(() => {
             const first = window.fixture.updates[0], second = window.fixture.updates[1];
@@ -1628,5 +1633,5 @@ test('Monaco attribution borders end each update-set group and stay consistent a
         await chooseSet(page, original);
         await openField(page);
         assert.deepEqual(await page.evaluate(() => window.creditEditors.at(-1).decorations), first);
-    } finally { await browser.close(); }
+    } finally { await context.close(); }
 });
