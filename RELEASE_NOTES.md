@@ -1,8 +1,10 @@
 ## Credit+
 
 - Add Credit+ to the Widget Editor+ application menu below Code Search+.
+- Improve loading and responsiveness for larger histories, with configurable limits and partial attribution when history is unavailable.
+- Add whitespace matching options for attribution and Statistics.
 - Expand supported script, HTML, JSON and condition fields.
-- Mark update-set attribution groups with subtle borders below each group.
+- Mark update-set attribution groups with subtle borders and colour Statistics boards for additions and removals.
 
 ## Upgrading from 1.24.0
 
