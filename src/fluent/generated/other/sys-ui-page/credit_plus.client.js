@@ -479,6 +479,8 @@
                                     name: entry.name,
                                     href: statisticsUrl(entry),
                                     score: entry[metric].toLocaleString() + ' lines',
+                                    percentage:
+                                        (stats[metric] ? (entry[metric] / stats[metric]) * 100 : 0).toFixed(1) + '%',
                                 };
                             }),
                         });

@@ -834,6 +834,16 @@ test('statistics load only on demand, render safe leaderboards, cache while open
             assert.equal(await page.locator('.cp-stats-board').count(), 4);
             assert.deepEqual(await page.locator('.cp-stats-board').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).borderTopColor)), ['rgba(9, 134, 88, 0.35)', 'rgba(191, 41, 41, 0.35)', 'rgba(9, 134, 88, 0.35)', 'rgba(191, 41, 41, 0.35)']);
             assert.equal(await page.locator('.cp-stats-board').first().locator('li').count(), 4);
+            assert.deepEqual(await page.locator('.cp-stats-percentage').allTextContents(), ['50.0%', '29.3%', '20.7%', '0.0%', '100.0%', '78.1%', '0.0%', '0.0%', '100.0%']);
+            assert.equal(await page.locator('.cp-stats-board').evaluateAll(boards => boards.every(board => {
+                const rows = Array.from(board.querySelectorAll('.cp-stats-entry'));
+                return rows.every(row => {
+                    const score = row.querySelector('.cp-stats-score'), percentage = row.querySelector('.cp-stats-percentage');
+                    return getComputedStyle(score).textAlign === 'right' && getComputedStyle(percentage).textAlign === 'right' &&
+                        score.getBoundingClientRect().right <= percentage.getBoundingClientRect().left && row.scrollWidth <= row.clientWidth &&
+                        Math.abs(percentage.getBoundingClientRect().right - rows[0].querySelector('.cp-stats-percentage').getBoundingClientRect().right) < 1;
+                });
+            })), true);
             assert.equal(await page.locator('#cp-statistics img').count(), 0);
             assert.equal(await page.locator('#cp-statistics-heading').textContent(), 'Statistics 📊');
             assert.deepEqual(await page.locator('.cp-stats-board h3').allTextContents(), ['Builders 👷 - Created by 👤', 'Destroyers 💥 - Created by 👤', 'Expansions 🏗️ - Update sets 📦', 'Demolitions 🧨 - Update sets 📦']);
@@ -891,6 +901,11 @@ test('statistics load only on demand, render safe leaderboards, cache while open
             await page.evaluate(() => window.statsRequests[3].callback(JSON.stringify(window.statsFixture)));
             await settle(page);
             assert.equal(await page.locator('.cp-stats-board').count(), 4);
+            await chooseSet(page, original);
+            await button.click();
+            await page.evaluate(() => window.statsRequests[4].callback(JSON.stringify({ ...window.statsFixture, added: 0, removed: 0, creators: [{ name: 'No additions', added: 0 }], destroyers: [{ name: 'No removals', removed: 0 }], creatorSets: [], destroyerSets: [] })));
+            await settle(page);
+            assert.deepEqual(await page.locator('.cp-stats-percentage').allTextContents(), ['0.0%', '0.0%']);
             await page.close();
         }
     } finally { await browser.close(); }
