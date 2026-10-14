@@ -15,7 +15,7 @@ function openCreditPlus() {
         alert('Select one valid customer update for Credit+.');
         return;
     }
-    var ga = new GlideAjax('CreditPlus');
+    var ga = new GlideAjax('WidgetEditorCreditAjax');
     ga.addParam('sysparm_name', 'validateLaunch');
     ga.addParam('sysparm_update', updateId);
     ga.getXMLAnswer(function (answer) {

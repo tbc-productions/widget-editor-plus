@@ -11,7 +11,7 @@ Record({
         mobile_title: 'System Properties',
         mobile_view_name: 'Mobile',
         query: 'ui_page.do?sys_id=47cb4ac08e0d4437b5c0a482d8411e30',
-        order: 1478,
+        order: 1479,
         override_menu_roles: true,
         require_confirmation: true,
         roles: ['admin'],

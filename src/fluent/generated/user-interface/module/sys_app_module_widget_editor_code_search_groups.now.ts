@@ -11,7 +11,7 @@ Record({
         mobile_title: 'Code Search Groups',
         mobile_view_name: 'Mobile',
         name: 'sn_codesearch_search_group',
-        order: 1477,
+        order: 1478,
         override_menu_roles: true,
         require_confirmation: true,
         roles: ['admin'],

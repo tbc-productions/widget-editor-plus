@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const { XMLParser, XMLValidator } = require('fast-xml-parser');
-const source = fs.readFileSync('src/fluent/generated/server-development/script-include/credit_plus.server.js', 'utf8');
+const source = fs.readFileSync('src/fluent/generated/server-development/script-include/sys_script_include_widget_editor_credit_ajax.server.js', 'utf8');
 const recordId = 'a'.repeat(32), ids = ['b', 'c', 'd', 'e'].map(ch => ch.repeat(32));
 const iterator = values => { let i = 0; return { hasNext: () => i < values.length, next: () => values[i++] }; };
 function xmlNode(value) {
@@ -26,7 +26,7 @@ function harness(entries = [], admin = true, scriptFields = ['script', 'client_s
     const queries = [];
     const context = { Class: { create: () => function () {} }, AbstractAjaxProcessor: {},
         Object: Object.assign(Object.create(Object), { extendsObject: (_base, methods) => methods }),
-        gs: { hasRole: role => role === 'admin' && admin },
+        gs: { hasRole: role => role === 'admin' && admin, getProperty: (name, fallback) => catalog.properties?.[name] ?? fallback },
         GlideDateTime: function (value) {
             const time = Date.parse((value || '2026-10-14 12:00:00').replace(' ', 'T') + 'Z');
             this.isValid = () => Number.isFinite(time);
@@ -41,11 +41,15 @@ function harness(entries = [], admin = true, scriptFields = ['script', 'client_s
             };
             this.getDocumentElement = () => xmlNode(parsed.find(value => !value['?xml']));
         },
-        GlideRecordSecure: function (table) {
+        GlideRecord: function (table) {
             queries.push(table);
             if (table === 'sys_update_set' || table === 'sys_remote_update_set') {
-                let current;
+                let current, matches = [], cursor = 0, ids = [];
                 this.get = id => { current = updateSets.find(set => set.table === table && set.id === id); return !!current; };
+                this.addQuery = (key, operator, value) => { assert.equal(key, 'sys_id'); assert.equal(operator, 'IN'); ids = value.split(','); };
+                this.query = () => { matches = updateSets.filter(set => set.table === table && ids.includes(set.id)); };
+                this.next = () => { current = matches[cursor++]; return !!current; };
+                this.getUniqueValue = () => current.id;
                 this.canRead = () => current.readable !== false;
                 this.getElement = () => ({ canRead: () => current.nameReadable !== false });
                 this.getValue = key => current[key];
@@ -86,25 +90,25 @@ function harness(entries = [], admin = true, scriptFields = ['script', 'client_s
                 return;
             }
             const records = entries;
-            let current, filtered, i = 0, descending = false; const filters = [];
+            let current, filtered, i = 0; const filters = [], orders = [];
             this.get = id => { current = records.find(entry => entry.sys_id === id); return !!current && current.readable !== false; };
             this.canRead = () => current.readable !== false;
             this.getElement = name => ({ canRead: () => current[name + 'Readable'] !== false && (name === 'source' ? current.sourceReadable !== false : name === 'payload' ? current.payloadReadable !== false : true), getRefRecord: () => assert.fail('Use source_table and source explicitly') });
             this.getUniqueValue = () => current.sys_id;
             this.getValue = key => current[key] ?? '';
             this.addQuery = (...args) => { const group = [args]; filters.push(group); return { addOrCondition: (...alternative) => group.push(alternative) }; };
-            this.orderBy = () => {};
-            this.orderByDesc = () => descending = true;
+            this.orderBy = key => orders.push([key, 1]);
+            this.orderByDesc = key => orders.push([key, -1]);
             this.setLimit = limit => this.limit = limit;
             this.query = () => {
                 filtered = records.filter(entry => filters.every(group => group.some(([key, op, value]) => value === undefined ? entry[key] === op : entry[key] <= value)))
-                    .sort((a, b) => a.sys_id.localeCompare(b.sys_id) * (descending ? -1 : 1)).slice(0, this.limit);
+                    .sort((a, b) => { for (const [key, direction] of orders) { const order = String(a[key] || '').localeCompare(String(b[key] || '')) * direction; if (order) return order; } return 0; }).slice(0, this.limit);
             };
             this.next = () => { current = filtered[i++]; return !!current; };
         }
     };
     vm.runInNewContext(source, context);
-    const api = context.CreditPlus.prototype;
+    const api = context.WidgetEditorCreditAjax.prototype;
     api.getParameter = name => name === 'sysparm_update' ? entries.at(-1)?.sys_id : '';
     return { api, queries };
 }
@@ -119,100 +123,97 @@ test('admin guards deny every public entry before querying records', () => {
     assert.equal(JSON.parse(api.getStatistics()).success, false);
     assert.equal(JSON.parse(api.getTables()).success, false);
     assert.equal(JSON.parse(api.getRecords()).success, false);
-    assert.throws(() => api.buildUpdate(ids[0]), /Administrator/);
+    assert.equal(api.buildUpdate, undefined);
     assert.throws(() => api.getPageDescription(ids[0]), /Administrator/);
     assert.deepEqual(queries, []);
 });
 
-test('selected historical update set excludes newer snapshots and retains source attribution', () => {
-    const { api } = harness([update(0, 'var a = 1;\nvar b = 2;'), update(1, ' var a=1;\nvar b = 3;'), update(2, 'future();')]);
-    const result = plain(api.buildUpdate(ids[1], 'script'));
-    assert.deepEqual(result.lines.map(line => line.update), [ids[0], ids[1]]);
-    assert.deepEqual(result.updates.map(entry => entry.id), [ids[0], ids[1]]);
-    assert.equal(result.updates[0].author, 'original');
-    assert.equal(result.updates[0].time, '2026-10-01 00:00:00');
-    assert.deepEqual(result.fields.map(field => field.name), ['client_script', 'script']);
-    assert.equal(result.updates[1].code, undefined);
-    assert.equal(result.updates[1].before, undefined);
-    assert.equal(result.updates[1].removed, undefined);
+test('browser worker retains source attribution across snapshots', () => {
+    const engine = browserAnalysis({ max_lines: 50000, diff_work: 20000000 });
+    const result = engine.process('credit', {
+        success: true, field: 'script', snapshots: [
+            { id: ids[0], author: 'original', values: { script: 'var a = 1;\nvar b = 2;' } },
+            { id: ids[1], author: 'second', values: { script: ' var a=1;\nvar b = 3;' } },
+        ],
+    });
+    assert.deepEqual(plain(result.lines.map(line => line.update)), [ids[0], ids[1]]);
+    assert.deepEqual(plain(result.updates.map(entry => entry.id)), ids.slice(0, 2));
 });
 
-test('discovery includes effective inherited script_plain fields and empty script snapshots', () => {
+test('discovery includes effective inherited script_plain fields', () => {
     const { api } = harness([update(0, 'server();')]);
-    const result = api.buildUpdate(ids[0], 'client_script');
-    assert.equal(result.lines.length, 0);
+    const result = JSON.parse(api.getCredit());
+    assert.deepEqual(result.fields.map(field => field.name), ['client_script', 'script']);
     assert.equal(api.canView({ getUniqueValue: () => ids[0] }), true);
-    assert.throws(() => api.buildUpdate(ids[0], 'description'), /Choose a script field/);
     assert.equal(harness([update(0, '')], true, []).api.canView({ getUniqueValue: () => ids[0] }), false);
 });
 
-test('HTML templates and both JavaScript and encoded condition fields are discovered with their language', () => {
-    const types = ['html_template', 'condition_string', 'conditions', 'condition'];
-    const fields = types.map(type => ({ name: type, type }));
-    const xml = types.map(type => '<' + type + '><![CDATA[' + (type === 'html_template' ? '<p>Template</p>' : type === 'conditions' ? 'active=true^EQ' : 'current.active == true') + ']]></' + type + '>').join('');
-    const { api } = harness([update(0, '', { payload: payload('', 'author', xml) })], true, fields);
+test('all supported script field types are discovered with the correct editor language', () => {
+    const expected = {
+        email_script: 'javascript', html_script: 'html', script: 'javascript', script_client: 'javascript',
+        script_plain: 'javascript', script_server: 'javascript', conditions: 'plaintext', condition_string: 'javascript',
+        variable_conditions: 'plaintext', workflow_conditions: 'plaintext', html: 'html', html_template: 'html',
+        json: 'json', json_translations: 'json',
+    };
+    const types = Object.keys(expected);
+    const fields = types.concat(['string', 'condition', 'css', 'toString']).map(type => ({ name: 'field_' + type, type }));
+    const { api } = harness([update(0, 'code();')], true, fields);
+    const result = JSON.parse(api.getCredit());
+    assert.equal(result.success, true, result.error);
     assert.equal(JSON.parse(api.validateLaunch()).success, true);
-    for (const type of types) {
-        const result = api.buildUpdate(ids[0], type);
-        assert.equal(result.field, type);
-        assert.equal(result.lines.length, 1);
-        assert.equal(result.fields.find(field => field.name === type).language, type === 'html_template' ? 'html' : type === 'conditions' ? 'plaintext' : 'javascript');
-    }
+    assert.deepEqual(Object.fromEntries(result.fields.map(field => [field.name.slice(6), field.language])), expected);
 });
 
 test('customer updates resolve local and retrieved sets directly and respect read access', () => {
     const sets = [{ id: '1'.repeat(32), table: 'sys_update_set', name: 'Original release' }, { id: '2'.repeat(32), table: 'sys_remote_update_set', name: 'Imported release' }];
-    const entries = [update(0, 'retained();'), update(1, 'retained();\nadded();', { update_set: '', remote_update_set: sets[1].id })];
+    const entries = [update(0, 'retained();'), update(1, 'added();', { update_set: '', remote_update_set: sets[1].id })];
     const { api, queries } = harness(entries, true, undefined, sets);
-    const result = plain(api.buildUpdate(ids[1], 'script'));
-    assert.deepEqual(result.updates.map(entry => entry.updateSet), sets);
-    assert.equal(result.lines[0].update, ids[0]);
+    const result = JSON.parse(api.getCredit());
+    assert.deepEqual(result.tableApi.history.map(entry => entry.updateSet), sets);
     assert.equal(queries.includes('sys_update_version'), false);
     for (const inaccessible of [{ update_setReadable: false }, { update_set: 'invalid' }])
-        assert.equal(harness([update(0, 'code();', inaccessible)], true, undefined, sets).api.buildUpdate(ids[0], 'script').updates[0].updateSet, null);
+        assert.equal(JSON.parse(harness([update(0, 'code();', inaccessible)], true, undefined, sets).api.getCredit()).tableApi.history[0].updateSet, null);
     for (const access of [{ readable: false }, { nameReadable: false }])
-        assert.equal(harness([entries[0]], true, undefined, [{ ...sets[0], ...access }]).api.buildUpdate(ids[0], 'script').updates[0].updateSet, null);
+        assert.equal(JSON.parse(harness([entries[0]], true, undefined, [{ ...sets[0], ...access }]).api.getCredit()).tableApi.history[0].updateSet, null);
 });
 
-test('launch and credit work with customer updates alone and stop at the selected update set', () => {
+test('launch and Credit metadata work with customer updates alone', () => {
     const set = { id: '2'.repeat(32), table: 'sys_update_set', name: 'Feature work' };
     const { api } = harness([update(0, 'old();'), update(1, 'captured();'), update(2, 'future();')], true, undefined, [set]);
     api.getParameter = key => key === 'sysparm_update' ? ids[1] : key === 'sysparm_field' ? 'script' : '';
     assert.equal(JSON.parse(api.validateLaunch()).success, true);
     const result = JSON.parse(api.getCredit());
     assert.equal(result.selected, ids[1]);
-    assert.equal(result.lines[0].text, 'captured();');
-    assert.equal(result.updates.length, 2);
-    assert.equal(result.updates[1].updateSet.id, set.id);
+    assert.equal(result.lines, undefined);
+    assert.equal(result.tableApi.history.length, 3);
+    assert.equal(result.tableApi.history[1].updateSet.id, set.id);
     assert.deepEqual(result.updateSets.map(entry => entry.id), ids.slice(0, 3));
     assert.equal(result.updateSets[1].name, 'Feature work');
 });
 
 test('Customer Update timestamps order history independently of XML source edit times', () => {
     const entries = [update(2, 'future();', { sys_updated_on: '2026-09-01 00:00:00' }), update(0, 'baseline();', { sys_updated_on: '2026-10-13 00:00:00' }), update(1, 'baseline();\nadded();')];
-    const result = harness(entries).api.buildUpdate(ids[1], 'script');
-    assert.deepEqual(plain(result.updates.map(entry => entry.id)), [ids[2], ids[1]]);
-    assert.equal(result.lines[0].update, ids[1]);
+    const result = JSON.parse(harness(entries).api.getCredit());
+    assert.deepEqual(result.tableApi.history.map(entry => entry.id), [ids[2], ids[1], ids[0]]);
     assert.equal(result.updateSets.at(-1).time, '2026-10-13 00:00:00');
 });
 
-test('identical duplicates in one update set collapse while conflicting snapshots fail', () => {
+test('duplicate set names and reverted snapshots retain distinct Customer Update identities', () => {
     const first = update(0, 'baseline();');
-    const duplicate = { ...first, sys_id: ids[3] };
-    const { api } = harness([first, duplicate, update(1, 'baseline();\nnew();')]);
-    const result = api.buildUpdate(ids[3], 'script');
-    assert.equal(result.selected, ids[3]);
-    assert.equal(result.updates.length, 1);
-    assert.equal(result.lines[0].update, ids[3]);
-    assert.equal(api.buildUpdate(ids[1], 'script').updates.length, 2);
-    assert.throws(() => harness([first, update(1, 'conflicting();', { update_set: first.update_set })]).api.buildUpdate(ids[1]), /conflicting/);
+    const entries = [first, { ...first, sys_id: ids[3] }, update(1, 'changed();'), update(2, 'baseline();')];
+    const result = JSON.parse(harness(entries).api.getCredit());
+    assert.equal(result.selected, ids[2]);
+    assert.deepEqual(result.tableApi.history.map(entry => entry.id), [ids[0], ids[3], ids[1], ids[2]]);
 });
 
 test('absent or unreadable customer updates fail without reading update versions', () => {
-    assert.throws(() => harness().api.buildUpdate(ids[0]), /unavailable/);
-    assert.throws(() => harness().api.buildUpdate('invalid'), /valid customer update/);
+    const { api } = harness();
+    api.getParameter = () => ids[0];
+    assert.match(JSON.parse(api.getCredit()).error, /unavailable/);
+    api.getParameter = () => 'invalid';
+    assert.match(JSON.parse(api.getCredit()).error, /valid customer update/);
     for (const access of [{ readable: false }, { payloadReadable: false }])
-        assert.throws(() => harness([update(0, 'code();', access)]).api.buildUpdate(ids[0]), /unavailable or unreadable/);
+        assert.match(JSON.parse(harness([update(0, 'code();', access)]).api.getCredit()).error, /unavailable or unreadable/);
 });
 
 test('initial page description reads customer update metadata without exposing code', () => {
@@ -235,77 +236,57 @@ test('malformed, DTD, ambiguous and invalid target payloads fail closed', () => 
     for (const raw of ['<record_update>', '<!DOCTYPE record_update><record_update/>', payload('x').replace(recordId, 'invalid'), payload('x').replace('</record_update>', `<sp_widget><sys_id>${recordId}</sys_id></sp_widget></record_update>`), payload('x').replace('<script>', '<script>').replace('</sp_widget>', '<script>duplicate</script></sp_widget>')]) {
         assert.throws(() => api._payload({ getValue: key => key === 'payload' ? raw : '' }));
     }
-    assert.throws(() => api.buildUpdate('bad'), /valid customer update/);
+    api.getParameter = () => 'bad';
+    assert.match(JSON.parse(api.getCredit()).error, /valid customer update/);
 });
 
-test('empty and absent fields differ; history gaps reset attribution', () => {
-    const missing = update(1, '', { payload: payload('').replace('<script><![CDATA[]]></script>', '') });
-    const { api } = harness([update(0, 'same();'), missing, update(2, 'same();')]);
-    const result = api.buildUpdate(ids[2], 'script');
-    assert.equal(result.lines[0].update, ids[2]);
-    assert.ok(result.warnings.some(warning => /interrupts/.test(warning)));
-    assert.throws(() => api.buildUpdate(ids[1], 'script'), /absent/);
-    const empty = harness([update(0, 'same();'), update(1, ''), update(2, 'same();')]).api.buildUpdate(ids[2], 'script');
-    assert.equal(empty.lines[0].update, ids[2]);
-});
 
-test('deleted snapshots show no code and reset later attribution', () => {
-    const deleted = update(1, 'same();', { payload: payload('same();').replace('INSERT_OR_UPDATE', 'DELETE') });
-    const { api } = harness([update(0, 'same();'), deleted, update(2, 'same();')]);
-    assert.equal(api.buildUpdate(ids[2], 'script').lines[0].update, ids[2]);
-    const result = api.buildUpdate(ids[1], 'script');
-    assert.equal(result.deleted, true);
-    assert.equal(result.lines.length, 0);
-    assert.equal(result.updates[1].author, 'importer');
-    assert.equal(result.updates[1].time, deleted.sys_updated_on);
-});
 
-test('tied or missing Customer Update timestamps, unreadable payloads and target mismatches fail safely', () => {
-    for (const selected of [ids[0], ids[1]])
-        assert.throws(() => harness([update(0, 'a'), update(1, 'b', { sys_updated_on: '2026-10-01 00:00:00' })]).api.buildUpdate(selected, 'script'), /tied/);
-    const missing = { sourceTime: '', sys_updated_on: '' };
-    assert.throws(() => harness([update(0, 'a', missing)]).api.buildUpdate(ids[0], 'script'), /ordering key/);
-    assert.throws(() => harness([update(0, 'a', missing), update(1, 'b')]).api.buildUpdate(ids[1], 'script'), /ordering key/);
-    assert.throws(() => harness([update(0, 'a', { payloadReadable: false }), update(1, 'b')]).api.buildUpdate(ids[1], 'script'), /unreadable/);
-    assert.throws(() => harness([update(0, 'a', { payload: payload('a').replace(recordId, ids[3]) }), update(1, 'b')]).api.buildUpdate(ids[1], 'script'), /different records/);
+
+
+test('timestamp ties order deterministically without reading historical payloads', () => {
+    const entries = [update(0, 'a();', { sys_created_on: '2026-10-01 01:00:00' }), update(1, 'b();', { sys_updated_on: '2026-10-01 00:00:00', sys_created_on: '2026-10-01 02:00:00' })];
+    const { api } = harness(entries.reverse());
+    api.getParameter = () => ids[1];
+    api._loadEntry = () => assert.fail('Metadata must not load history payloads');
+    assert.deepEqual(JSON.parse(api.getCredit()).tableApi.history.map(entry => entry.id), ids.slice(0, 2));
 });
 
 test('LCS preserves whitespace and moved functions including repeated delimiters', () => {
-    const { api } = harness();
+    const engine = browserAnalysis({ max_lines: 50000, diff_work: 20000000 });
     const before = ['function alpha() {', '  alphaValue();', '}', 'function beta() {', '  betaValue();', '}'];
     const after = ['function beta() {', ' betaValue();', '}', 'function alpha() {', ' alphaValue();', '}'];
-    const map = plain(api._match(before, after, { remaining: 10000000 }));
+    const map = plain(engine.match(before, after, { remaining: 10000000 }));
     assert.deepEqual(map, [3, 4, 5, 0, 1, 2]);
-    const result = harness([update(0, before.join('\n')), update(1, after.join('\n'))]).api.buildUpdate(ids[1], 'script');
-    assert.ok(result.lines.every(line => line.update === ids[0]));
 });
 
 test('unique moved lines retain attribution while copies and reintroduced lines do not reuse origins', () => {
-    const { api } = harness();
-    const map = api._match(['alpha();', 'beta();', 'gamma();'], ['gamma();', 'alpha();', 'beta();', 'alpha();'], { remaining: 10000000 });
+    const engine = browserAnalysis({ max_lines: 50000, diff_work: 20000000 });
+    const map = engine.match(['alpha();', 'beta();', 'gamma();'], ['gamma();', 'alpha();', 'beta();', 'alpha();'], { remaining: 10000000 });
     assert.equal(map[0], 2);
     assert.equal(map[3], undefined);
-    const result = harness([update(0, 'alpha();'), update(1, 'beta();'), update(2, 'alpha();')]).api.buildUpdate(ids[2], 'script');
-    assert.equal(result.lines[0].update, ids[2]);
 });
 
-test('line endings, empty scripts and comparison budgets are explicit', () => {
-    const { api } = harness([update(0, 'a();\r\nb();\r')]);
-    assert.deepEqual(plain(api.buildUpdate(ids[0], 'script').lines.map(line => line.text)), ['a();', 'b();', '']);
-    assert.deepEqual(plain(api._match([], ['x'], { remaining: 100 })), []);
-    assert.throws(() => api._match(['a', 'b'], ['a', 'c'], { remaining: 1 }), /budget/);
-    assert.throws(() => api._match(Array(1000).fill('x'), Array(1000).fill('y'), { remaining: 10000000 }), /budget/);
-    assert.throws(() => api._match([], Array(5001).fill('x'), { remaining: 10000000 }), /5,000/);
+test('large sparse diffs work without a quadratic matrix and limits produce partial matching', () => {
+    const engine = browserAnalysis({ max_lines: 50000, diff_work: 20000000 });
+    const before = Array.from({ length: 12000 }, (_, i) => 'line' + i + '();');
+    const after = before.slice(); after[6000] = 'changed();';
+    const map = engine.match(before, after, { remaining: 100 });
+    assert.equal(map[5999], 5999); assert.equal(map[6000], undefined); assert.equal(map[6001], 6001);
+    assert.equal(map.partial, undefined);
+    const repeated = engine.match(Array(1000).fill('a();').concat('b();'), ['b();'].concat(Array(1000).fill('a();')), { remaining: 1 });
+    assert.equal(repeated.partial, true);
+    assert.equal(engine.match([], Array(50001).fill('x'), { remaining: 100 }).partial, true);
 });
 
 test('random duplicate-line diffs never reuse origins or match unequal text', () => {
-    const { api } = harness();
+    const engine = browserAnalysis({ max_lines: 50000, diff_work: 20000000 });
     let seed = 41;
     const random = () => (seed = (seed * 16807) % 2147483647);
     for (let run = 0; run < 200; run++) {
         const oldLines = Array.from({ length: random() % 20 }, () => ['a();', 'b();', '}', '', 'c();'][random() % 5]);
         const newLines = Array.from({ length: random() % 20 }, () => [' a(); ', 'b();', '}', '', 'c();'][random() % 5]);
-        const map = api._match(oldLines, newLines, { remaining: 1000000 });
+        const map = engine.match(oldLines, newLines, { remaining: 1000000 });
         const matched = [...map].filter(index => index !== undefined);
         assert.equal(new Set(matched).size, matched.length);
         map.forEach((oldIndex, newIndex) => assert.equal(oldLines[oldIndex].replace(/\s/g, ''), newLines[newIndex].replace(/\s/g, '')));
@@ -343,25 +324,21 @@ test('context launch uses the clicked row even when other records are checked', 
 test('missing source author/time uses customer update metadata fallback', () => {
     const data = update(0, 'baseline();');
     data.payload = data.payload.replace(/<sys_updated_by>.*?<\/sys_updated_by>/, '').replace(/<sys_updated_on>.*?<\/sys_updated_on>/, '');
-    const result = harness([data]).api.buildUpdate(ids[0], 'script');
-    assert.equal(result.updates[0].author, 'importer');
-    assert.equal(result.updates[0].time, data.sys_updated_on);
-    assert.deepEqual(plain(result.warnings), []);
+    const result = JSON.parse(harness([data]).api.getComparison());
+    assert.equal(result.right.sys_created_by, 'importer');
+    assert.equal(result.right.sys_created_on, data.sys_updated_on);
 });
 
-test('history and payload size limits return no partial attribution', () => {
-    const entries = Array.from({ length: 501 }, (_, index) => ({ ...update(0, ''), sys_id: index.toString(16).padStart(32, '0'), update_set: (index + 1000).toString(16).padStart(32, '0'), sourceTime: '2026-10-01 00:00:00' }));
-    assert.throws(() => harness(entries).api.buildUpdate(entries.at(-1).sys_id, 'script'), /500 customer updates/);
-    const oversized = update(0, '', { payload: 'x'.repeat(2000001) });
-    assert.equal(JSON.parse(harness([oversized]).api.getCredit()).success, false);
-    assert.throws(() => harness([oversized, update(1, 'later();')]).api.buildUpdate(ids[1], 'script'), /2 MB/);
-});
-
-test('attribution responses contain no removed-code history or duplicate snapshot code', () => {
-    const result = harness([update(0, 'old();'), update(1, ''), update(2, 'old();')]).api.buildUpdate(ids[2], 'script');
-    assert.equal(result.lines[0].update, ids[2]);
-    assert.equal(result.removedCount, undefined);
-    for (const snapshot of result.updates) for (const key of ['before', 'code', 'removed', 'removedOrigins', 'removedCount', 'added']) assert.equal(snapshot[key], undefined);
+test('metadata limits retain the selected update and pass browser limits through', () => {
+    const properties = { 'monaco.plus.credit.max_updates': '2', 'monaco.plus.credit.max_history_chars': '10' };
+    const { api } = harness([update(0, 'old();'), update(1, 'middle();'), update(2, 'current();')], true, undefined, [], { properties });
+    api.getParameter = () => ids[0];
+    const result = JSON.parse(api.getCredit());
+    assert.equal(result.partial, true);
+    assert.deepEqual(result.tableApi.history.map(entry => entry.id), ids.slice(0, 3));
+    assert.equal(result.tableApi.limits.max_history_chars, 10);
+    const invalid = harness([], true, undefined, [], { properties: { 'monaco.plus.credit.max_updates': 'invalid', 'monaco.plus.credit.diff_work': '-1' } }).api._limits();
+    assert.equal(invalid.max_updates, 5000); assert.equal(invalid.diff_work, 20000000);
 });
 
 test('Credit+ is declared only as an admin list context action', () => {
@@ -380,12 +357,15 @@ test('record navigation resolves the newest Customer Update without update-versi
     const result = JSON.parse(api.getCredit());
     assert.equal(result.success, true);
     assert.equal(result.selected, ids[0]);
-    assert.equal(result.lines[0].text, 'baseline();');
-    assert.equal(queries.filter(table => table === 'sys_update_xml').length, 2, 'One history query plus the selected update read');
-    assert.throws(() => api.buildUpdate('', 'script', 'sp_widget', 'invalid'), /valid table and record/);
-    assert.throws(() => api.buildUpdate('', 'script', 'sp_widget^ORactive=true', recordId), /valid table and record/);
-    assert.throws(() => harness().api.buildUpdate('', 'script', 'sp_widget', recordId), /No Customer Updates/);
-    assert.throws(() => harness([update(0, 'wrong();', { payload: payload('wrong();').replace(recordId, ids[3]) })]).api.buildUpdate('', 'script', 'sp_widget', recordId), /different record/);
+    assert.equal(result.lines, undefined);
+    assert.equal(queries.filter(table => table === 'sys_update_xml').length, 2, 'History metadata query and selected update only');
+    for (const params of [{ sysparm_table: 'sp_widget', sysparm_record: 'invalid' }, { sysparm_table: 'sp_widget^ORactive=true', sysparm_record: recordId }]) {
+        api.getParameter = key => params[key] || '';
+        assert.match(JSON.parse(api.getCredit()).error, /valid table and record/);
+    }
+    const wrong = harness([update(0, 'wrong();', { payload: payload('wrong();').replace(recordId, ids[3]) })]).api;
+    wrong.getParameter = key => ({ sysparm_table: 'sp_widget', sysparm_record: recordId })[key] || '';
+    assert.match(JSON.parse(wrong.getCredit()).error, /different record/);
 });
 
 test('table picker searches labels and names, includes inherited code fields and paginates', () => {
@@ -438,7 +418,7 @@ test('collapsed viewer metadata includes authors for every set without calculati
     const result = JSON.parse(api.getCredit());
     assert.equal(result.success, true);
     assert.equal(result.selected, ids[1]);
-    assert.deepEqual(result.updateSets.map(set => set.author), ['original', 'second', 'third']);
+    assert.deepEqual(result.updateSets.map(set => set.author), ['importer', 'importer', 'importer']);
     assert.equal(result.lines, undefined);
     assert.equal(result.updates, undefined);
     assert.equal(JSON.stringify(result).includes('secret();'), false);
@@ -465,7 +445,6 @@ test('Compare+ receives adjacent Customer Update snapshots, including local/retr
 
 test('Compare+ rejects missing, unreadable, malformed, ambiguous and mismatched snapshots', () => {
     for (const entries of [
-        [update(0, 'old();'), update(1, 'new();', { sys_updated_on: update(0, '').sys_updated_on })],
         [update(0, '', { payload: '<broken>' }), update(1, 'new();')],
         [update(0, '', { payload: payload('old();').replace(recordId, 'f'.repeat(32)) }), update(1, 'new();')],
         [update(0, 'old();', { payloadReadable: false }), update(1, 'new();')]
@@ -501,31 +480,6 @@ test('inline comparison selects the requested earlier update from the same recor
 });
 
 
-test('statistics rank all fields and all update sets, count removers, and ignore whitespace and moves', () => {
-    const fields = ['script', 'client_script', { name: 'template', label: 'Template', type: 'html_template' }];
-    const xml = (script, client, template, author) => payload(script, author, '<template><![CDATA[' + template + ']]></template><sys_created_by>founder</sys_created_by><sys_created_on>2026-10-01 00:00:00</sys_created_on>').replace('<client_script/>', '<client_script><![CDATA[' + client + ']]></client_script>');
-    const entries = [
-        update(0, '', { payload: xml('a();\nb();', 'c();', '<p/>', 'original') }),
-        update(1, '', { payload: xml(' b();\n a();', 'c();\nx();', '', 'bob') }),
-        update(2, '', { payload: xml('a();', '', '<q/>', 'alice') }),
-        update(3, '', { sys_updated_by: 'bob', payload: xml('a();', '', '<q/>', 'alice').replace('INSERT_OR_UPDATE', 'DELETE') })
-    ];
-    const sets = entries.map((entry, i) => ({ table: 'sys_update_set', id: entry.update_set, name: 'Set ' + i }));
-    const { api } = harness(entries, true, fields, sets);
-    api.getParameter = () => ids[0]; // Older selection still includes the entire history.
-    const stats = JSON.parse(api.getStatistics());
-    assert.equal(stats.success, true, stats.error);
-    assert.equal(stats.added, 6); assert.equal(stats.removed, 6);
-    assert.deepEqual(stats.creators.map(entry => [entry.name, entry.added]), [['original', 4], ['alice', 1], ['bob', 1]]);
-    assert.deepEqual(stats.destroyers.map(entry => [entry.name, entry.removed]), [['alice', 3], ['bob', 3], ['original', 0]]);
-    assert.deepEqual(stats.creatorSets.map(entry => entry.added), [4, 1, 1, 0]);
-    assert.deepEqual(stats.destroyerSets.map(entry => entry.removed), [3, 2, 1, 0]);
-    assert.equal(stats.updateSetCount, 4); assert.equal(stats.contributorCount, 3);
-    assert.equal(stats.fieldCount, 3); assert.equal(stats.founder, 'founder'); assert.equal(stats.ageDays, 13);
-    assert.equal(stats.creationSource, 'snapshot'); assert.equal(stats.gaps, 0);
-    assert.equal(stats.biggestMakeover.name, 'Set 0');
-});
-
 test('statistics use readable record creation metadata, and do not infer a founder or age', () => {
     const entries = [update(0, 'hello();')];
     const record = { sys_id: recordId, sys_created_by: 'live founder', sys_created_on: '2026-10-02 12:00:01' };
@@ -539,29 +493,6 @@ test('statistics use readable record creation metadata, and do not infer a found
     assert.equal(get(null).unknownSetCount, 1);
 });
 
-test('statistics fail safely on invalid histories and limits, and skip field gaps', () => {
-    const stat = (entries, fields) => JSON.parse(harness(entries, true, fields).api.getStatistics());
-    assert.equal(stat([update(0, 'bad', { payload: '<broken>' }), update(1, 'ok();')]).success, false);
-    assert.equal(stat([update(0, 'a();'), update(1, 'b();', { sys_updated_on: '2026-10-01 00:00:00' })]).success, false);
-    assert.equal(stat([update(0, 'a();', { payload: payload('a();').replace(recordId, 'f'.repeat(32)) }), update(1, 'b();')]).success, false);
-    assert.match(stat([update(0, 'x\n'.repeat(5001))]).error, /5,000/);
-    assert.match(stat([update(0, Array.from({length:1100}, (_, i) => 'a' + i).join('\n')), update(1, Array.from({length:1100}, (_, i) => 'b' + i).join('\n'))]).error, /budget/);
-    const result = stat([update(0, 'a();'), update(1, '', { payload: payload('').replace('<script><![CDATA[]]></script>', '') }), update(2, 'a();\nb();')], ['script']);
-    assert.equal(result.success, true, result.error); assert.equal(result.gaps, 1);
-    assert.equal(result.added, 1); assert.equal(result.removed, 0);
-    assert.equal(stat([update(0, '')]).creators[0].added, 0);
-});
-
-
-test('statistics include every user and update set, including zero totals', () => {
-    const entries = ids.map((id, index) => update(index, '', { payload: payload('line();\n'.repeat(index + 1), 'author' + index) }));
-    const stats = JSON.parse(harness(entries).api.getStatistics());
-    assert.equal(stats.success, true, stats.error);
-    for (const key of ['creators', 'destroyers', 'creatorSets', 'destroyerSets']) assert.equal(stats[key].length, 4);
-    assert.equal(stats.destroyers.every(entry => entry.removed === 0), true);
-});
-
-
 test('statistics resolve readable users by exact username for leaders and founder in one query', () => {
     const entries = [update(0, 'one();', { payload: payload('one();', 'user,one', '<sys_created_by>founder</sys_created_by>') }), update(1, 'two();')];
     const users = [
@@ -571,6 +502,7 @@ test('statistics resolve readable users by exact username for leaders and founde
         { sys_id: '4'.repeat(32), user_name: 'unrelated' }
     ];
     const { api, queries } = harness(entries, true, undefined, [], { records: { sys_user: users } });
+    api.getParameter = key => ({ sysparm_update: ids[1], sysparm_authors: '["user,one","second"]' })[key] || '';
     const result = JSON.parse(api.getStatistics());
     assert.equal(result.success, true, result.error);
     assert.equal(result.founderUserId, users[1].sys_id);
@@ -585,4 +517,244 @@ test('missing customer updates return a distinct empty-history code', () => {
     const { api } = harness();
     api.getParameter = key => ({ sysparm_table: 'sp_widget', sysparm_record: recordId, sysparm_context: 'true' })[key] || '';
     assert.equal(JSON.parse(api.getCredit()).errorCode, 'no_customer_updates');
+});
+
+
+
+test('metadata does not parse historical XML and set counts use IDs instead of display names', () => {
+    const entries = [update(0, 'one();'), update(1, 'two();'), update(2, 'three();', {update_set: '2'.repeat(32)})];
+    const sets = [1,2].map(i => ({table:'sys_update_set', id:String(i).repeat(32), name:'Same name'}));
+    const { api } = harness(entries, true, ['script'], sets);
+    const stats = JSON.parse(api.getStatistics());
+    assert.equal(stats.updateSetCount, 2); assert.equal(stats.fieldTotals.length, 1);
+    api._loadEntry = () => assert.fail('Collapsed metadata must not parse historical XML');
+    const context = JSON.parse(api.getCredit());
+    assert.equal(context.updateSets.length, 3); assert.equal(context.requestTimeout, 180000);
+});
+
+test('Credit Script Include name, ACL and caller metadata stay consistent', () => {
+    const metadata = fs.readFileSync('src/fluent/generated/server-development/script-include/sys_script_include_widget_editor_credit_ajax.now.ts','utf8');
+    const acl = fs.readFileSync('src/fluent/generated/security/access-control/sys_security_acl_credit_plus.now.ts','utf8');
+    assert.match(metadata, /name: 'WidgetEditorCreditAjax'/); assert.match(metadata, /global.WidgetEditorCreditAjax/);
+    assert.match(acl, /name: 'WidgetEditorCreditAjax'/);
+    const properties = fs.readFileSync('src/fluent/generated/properties/system-property/sys_properties_widget_editor_credit.now.ts','utf8');
+    assert.equal((properties.match(/installMethod: 'first install'/g)||[]).length, 7);
+    assert.equal((properties.match(/roles: \{ read: \['admin'\], write: \['admin'\] \}/g)||[]).length,7);
+});
+
+test('update-set names are fetched in bounded bulk queries instead of one query per snapshot', () => {
+    const entries = Array.from({length:501}, (_, i) => update(0, 'same();', {
+        sys_id:(i+1000).toString(16).padStart(32,'0'), update_set:(i+2000).toString(16).padStart(32,'0')
+    }));
+    const sets = entries.map(entry => ({table:'sys_update_set',id:entry.update_set,name:'Default'}));
+    const { api, queries } = harness(entries,true,['script'],sets);
+    const context = JSON.parse(api.getCredit());
+    assert.equal(context.updateSets.length,501);
+    assert.equal(queries.filter(table => table === 'sys_update_set').length,2);
+    assert.equal(queries.filter(table => table === 'sys_update_xml').length,2);
+});
+
+test('moving multiple functions keeps repeated closing delimiters with their original blocks', () => {
+    const engine = browserAnalysis({ max_lines: 50000, diff_work: 20000000 });
+    const blocks = Array.from({length:8}, (_, i) => ['function f' + i + '() {', '  doWork' + i + '();', '}']);
+    const original = blocks.flat();
+    for (let shift = 1; shift < blocks.length; shift++) {
+        const moved = blocks.slice(shift).concat(blocks.slice(0,shift)).flat();
+        const mapping = engine.match(original,moved,{remaining:10000000});
+        assert.equal(mapping.filter(index => index !== undefined).length,moved.length);
+        mapping.forEach((oldIndex,newIndex) => assert.equal(original[oldIndex],moved[newIndex]));
+    }
+});
+
+test('repeated-line matching remains complete across 100 large Customer Updates within the default budget', () => {
+    const entries = [], history = [];
+    for (let revision = 0; revision < 100; revision++) {
+        let blocks = Array.from({length:350 + revision % 12}, (_, i) =>
+            'function f' + i + '() {\n    return ' + (i + (i % 17 === revision % 17 ? revision : 0)) + ';\n}');
+        if (revision % 9 === 0) blocks = blocks.slice(20).concat(blocks.slice(0,20));
+        let code = blocks.join('\n');
+        if (revision && revision % 13 === 0) code = history[revision - 6];
+        else if (revision && revision % 10 === 2) code = history[revision - 1].replace(/    /g,'  ');
+        history.push(code);
+        entries.push(update(0,code,{sys_id:revision.toString(16).padStart(32,'0'),sys_updated_on:String(revision).padStart(4,'0')}));
+    }
+    const engine = browserAnalysis({ max_lines: 50000, diff_work: 20000000 });
+    const result = engine.process('credit', { field: 'script', snapshots: history.map((code, i) => ({ id: entries[i].sys_id, values: { script: code } })) });
+    assert.equal(result.updates.length,100);
+    assert.deepEqual(plain(result.warnings),[]);
+    assert.equal(result.lines.map(line => line.text).join('\n'),history.at(-1));
+    assert.ok(result.lines.every(line => line.update));
+});
+
+test('dense repeated-line diffs retain at least the optimal ordered matches without reusing a source', () => {
+    const engine = browserAnalysis({ max_lines: 50000, diff_work: 20000000 });
+    let seed = 197;
+    const random = () => (seed = seed * 16807 % 2147483647);
+    for (let run = 0; run < 80; run++) {
+        const before = Array.from({length:80 + random() % 30}, () => 'repeat' + random() % 3 + '();');
+        const after = Array.from({length:80 + random() % 30}, () => 'repeat' + random() % 3 + '();');
+        const lcs = Array(after.length + 1).fill(0);
+        for (const line of before) {
+            let diagonal = 0;
+            for (let j = 1; j <= after.length; j++) {
+                const prior = lcs[j];
+                lcs[j] = line === after[j-1] ? diagonal + 1 : Math.max(lcs[j],lcs[j-1]);
+                diagonal = prior;
+            }
+        }
+        const map = engine.match(before,after,{remaining:2000000});
+        const sources = [...map].filter(index => index !== undefined);
+        assert.equal(map.partial,undefined);
+        assert.ok(sources.length >= lcs.at(-1));
+        assert.equal(new Set(sources).size,sources.length);
+        map.forEach((i,j) => assert.equal(before[i],after[j]));
+    }
+});
+
+test('reassigned Customer Updates use their current reference and change the history fingerprint', () => {
+    const sets = [{id:'1'.repeat(32),table:'sys_update_set',name:'Original'}, {id:'2'.repeat(32),table:'sys_update_set',name:'Destination'}];
+    const entries = [update(0,'one();'),update(1,'one();\ntwo();')];
+    const {api} = harness(entries,true,['script'],sets);
+    const before = api._historyKey(api._customerUpdates(entries[0].name,ids[1]));
+    entries[0].update_set = sets[1].id;
+    entries[0].sys_mod_count = '2';
+    const result = JSON.parse(api.getCredit());
+    assert.equal(result.tableApi.history[0].updateSet.id,sets[1].id);
+    assert.equal(result.lines, undefined);
+    assert.notEqual(api._historyKey(api._customerUpdates(entries[0].name,ids[1])),before);
+});
+
+function browserAnalysis(limits) {
+    const context = {};
+    vm.runInNewContext(fs.readFileSync('src/fluent/generated/client-development/ui-script/widget_editor_credit_worker.js', 'utf8'),context);
+    return new context.CreditAnalysis(limits);
+}
+
+test('browser statistics count reverts and preserve missing-history gaps', () => {
+    const engine = browserAnalysis({ max_lines: 50000, diff_work: 20000000 });
+    function batch(value) {
+        return {
+            fields: [{ name: 'script' }],
+            snapshots: [{ id: ids[0], author: 'a', values: { script: value } }],
+            creators: [{ name: 'a', added: 0, removed: 0 }],
+            fieldTotals: [{ name: 'Script', added: 0, removed: 0 }],
+            added: 0, removed: 0, gaps: 0, partial: false,
+        };
+    }
+    const results = ['one();', 'two();', 'one();'].map(code => engine.process('statistics', batch(code)));
+    assert.equal(results.reduce((sum, result) => sum + result.added, 0), 3);
+    assert.equal(results.reduce((sum, result) => sum + result.removed, 0), 2);
+    assert.equal(engine.process('statistics', batch(null)).partial, true);
+    assert.equal(engine.process('statistics', batch('unknown();')).added, 0);
+});
+
+test('Table API context supplies authorised ordered IDs, raw set references and limits without history matching',()=>{
+    const entries=[update(0,'one();'),update(1,'two();')];
+    const {api}=harness(entries);
+    api._match=()=>assert.fail('context must not match');
+    const context=JSON.parse(api.getCredit());
+    assert.equal(context.tableApi.name,'sp_widget_'+recordId);
+    assert.deepEqual(Array.from(context.tableApi.history,e=>e.id),entries.map(e=>e.sys_id));
+    assert.equal(context.tableApi.history[0].updateSetId,entries[0].update_set);
+    assert.equal(context.tableApi.limits.max_history_chars,100000000);
+    assert.equal(context.tableApi.history.some(e=>'payload' in e),false);
+    assert.match(JSON.parse(harness(entries,false).api.getCredit()).error,/Administrator/);
+});
+
+test('statistics context resolves browser contributors without comparing history',()=>{
+    const entries=[update(0,'one();'),update(1,'two();')];const {api}=harness(entries);
+    api.getParameter=name=>({sysparm_update:entries[1].sys_id,sysparm_context:'true',sysparm_authors:'["original","second"]'})[name]||'';
+    api._match=()=>assert.fail('context must not match');
+    const stats=JSON.parse(api.getStatistics());
+    assert.equal(stats.success,true);assert.equal(stats.added,0);
+    assert.equal(stats.snapshots,undefined);assert.equal(stats.nextCursor,undefined);
+    assert.equal(stats.destroyers,undefined);assert.equal(stats.creatorSets,undefined);
+    assert.deepEqual(stats.creators.map(a=>a.name),['original','second']);
+    api.getParameter=name=>({sysparm_update:entries[1].sys_id,sysparm_context:'true',sysparm_authors:'{}'})[name]||'';
+    assert.match(JSON.parse(api.getStatistics()).error,/Invalid contributor/);
+});
+
+test('whitespace modes distinguish spacing, indentation and trailing whitespace without stale keys', () => {
+    const oldLines=['  alpha(  beta );  ', 'gamma();'];
+    const newLines=['\talpha( beta );', 'gamma( );'];
+    const limits={max_lines:50000,diff_work:20000000};
+    for(const [mode,expected] of [['all',[0,1]],['none',[undefined,undefined]],['changes',[0,undefined]],['eol',[undefined,undefined]]]) {
+        const engine=browserAnalysis(limits);engine.whitespace=mode;
+        const result=engine.match(oldLines,newLines,{remaining:limits.diff_work});
+        assert.deepEqual([result[0],result[1]],expected,mode);
+    }
+    const engine=browserAnalysis(limits);engine.whitespace='eol';
+    assert.equal(engine.match(['alpha();  '],['alpha();\t'],{remaining:limits.diff_work})[0],0);
+    engine.whitespace='none';
+    assert.equal(engine.match(['alpha();  '],['alpha();\t'],{remaining:limits.diff_work})[0],undefined);
+    assert.deepEqual(oldLines.slice(),['  alpha(  beta );  ', 'gamma();']);
+});
+
+
+test('statistics metadata skips historical XML when record creation details are readable', () => {
+    const record = { sys_id: recordId, sys_created_by: 'founder', sys_created_on: '2026-10-02 00:00:00' };
+    const { api } = harness([update(0, 'old();'), update(1, 'new();')], true, undefined, [], {
+        records: { sp_widget: [record] },
+    });
+    api._loadEntry = () => assert.fail('Readable creation details must not parse historical XML');
+    api._match = () => assert.fail('Statistics metadata must not match code');
+    const stats = JSON.parse(api.getStatistics());
+    assert.equal(stats.success, true, stats.error);
+    assert.equal(stats.founder, 'founder');
+    assert.equal(stats.ageDays, 12);
+    assert.equal(stats.creationSource, 'record');
+});
+
+test('statistics metadata validates contributors and the fallback creation snapshot', () => {
+    const entries = [update(0, 'old();', { payload: payload('old();', 'original',
+        '<sys_created_by>founder</sys_created_by><sys_created_on>2026-10-01 00:00:00</sys_created_on>') }), update(1, 'new();')];
+    const { api } = harness(entries, true, undefined, [], { properties: { 'monaco.plus.credit.max_updates': '2' } });
+    const get = authors => {
+        api.getParameter = key => ({ sysparm_update: ids[1], sysparm_authors: authors })[key] || '';
+        return JSON.parse(api.getStatistics());
+    };
+    const stats = get('["original","second","original"]');
+    assert.equal(stats.success, true, stats.error);
+    assert.equal(stats.founder, 'founder');
+    assert.equal(stats.ageDays, 13);
+    assert.equal(stats.creationSource, 'snapshot');
+    assert.equal(stats.contributorCount, 2);
+    assert.equal(stats.creators.every(author => author.added === 0 && author.removed === 0), true);
+    for (const authors of ['{}', '[null]', '[1]', JSON.stringify(['x'.repeat(257)]), '["a","b","c","d"]', '['])
+        assert.equal(get(authors).success, false);
+    entries[0].payload = entries[0].payload.replace(recordId, ids[3]);
+    assert.match(get('[]').error, /different records/);
+});
+
+
+test('Credit requests always return Table API metadata and have no server attribution entry point', () => {
+    const { api } = harness([update(0, 'secret();'), update(1, 'later();')]);
+    api.getParameter = name => ({ sysparm_update: ids[1], sysparm_field: 'script', sysparm_snapshots: 'true', sysparm_cursor: '1' })[name] || '';
+    api._loadEntry = () => assert.fail('Credit metadata must not load historical code');
+    const result = JSON.parse(api.getCredit());
+    assert.equal(result.success, true, result.error);
+    assert.deepEqual(result.tableApi.history.map(entry => entry.id), ids.slice(0, 2));
+    for (const key of ['lines', 'updates', 'snapshots', 'warnings']) assert.equal(result[key], undefined);
+    assert.equal(JSON.stringify(result).includes('secret();'), false);
+    for (const method of ['buildUpdate', '_match', '_lines', '_fieldSnapshotBatch', '_codeSnapshot'])
+        assert.equal(api[method], undefined);
+    assert.equal(fs.existsSync('src/fluent/generated/server-development/script-include/sys_script_include_widget_editor_credit_engine.now.ts'), false);
+});
+
+
+test('Credit+ module opens its verified UI page below Code Search+ and stays admin-only', () => {
+    const folder = 'src/fluent/generated/user-interface/module/';
+    const modules = fs.readdirSync(folder).filter(name => name.endsWith('.now.ts')).map(name => {
+        const metadata = fs.readFileSync(folder + name, 'utf8');
+        return { metadata, title: metadata.match(/\n        title: '([^']+)'/)?.[1], order: Number(metadata.match(/order: (\d+)/)?.[1]) };
+    }).filter(module => module.title).sort((left, right) => left.order - right.order);
+    const searchIndex = modules.findIndex(module => module.title === 'Code Search+');
+    const credit = modules[searchIndex + 1];
+    assert.equal(credit.title, 'Credit+');
+    assert.match(credit.metadata, /roles: \['admin'\]/);
+    assert.match(credit.metadata, /override_menu_roles: true/);
+    const page = fs.readFileSync('src/fluent/generated/other/sys-ui-page/sys_ui_page_credit_plus.now.ts', 'utf8');
+    const pageId = page.match(/\$id: '([0-9a-f]{32})'/)[1];
+    assert.ok(credit.metadata.includes("query: 'ui_page.do?sys_id=" + pageId + "'"));
+    assert.equal(new Set(modules.map(module => module.order)).size, modules.length);
 });

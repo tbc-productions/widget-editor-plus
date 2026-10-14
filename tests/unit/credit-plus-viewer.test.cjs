@@ -36,6 +36,7 @@ const fixture = {
 };
 
 function installMonaco() {
+    window.creditEditors = [];
     window.createdModels = []; window.disposedModels = 0; window.disposedEditors = 0; window.disposedCreditEditors = 0; window.options = []; window.creditOptions = [];
     window.monaco = { editor: {
         setTheme() {},
@@ -47,6 +48,7 @@ function installMonaco() {
             const editor = { getScrollHeight: () => Math.max(container.clientHeight, options.model.text.split('\n').length * font.lineHeight + padding * 2 + zone), getScrollTop: () => top,
                 getScrollWidth: () => container.clientWidth, getLayoutInfo: () => ({ height: container.clientHeight, contentWidth: container.clientWidth, horizontalScrollbarHeight: 12 }),
                 getOption: () => font,
+                deltaDecorations: (_old, decorations) => { editor.decorations = decorations; return decorations.map((_, i) => 'decoration-' + i); },
                 setHiddenAreas: ranges => { hidden = ranges; window.hiddenRanges = ranges; },
                 getTopForLineNumber: (number, includeZone) => padding + (number - 1 - hidden.reduce((total, range) => total + Math.max(0, Math.min(number - 1, range.endLineNumber) - range.startLineNumber + 1), 0)) * font.lineHeight + (number > 15 && !(number === 16 && includeZone) ? zone : 0),
                 updateOptions: options => { font = { ...font, ...options }; padding = options.padding?.top ?? padding; if (configuration) configuration(); },
@@ -57,7 +59,7 @@ function installMonaco() {
                     else if (position + font.lineHeight > top + container.clientHeight) editor.setScrollTop(position + font.lineHeight - container.clientHeight);
                 },
                 setScrollTop: value => { top = value; if (scroll) scroll(); }, onDidScrollChange: callback => scroll = callback, onDidContentSizeChange() {}, onDidLayoutChange() {}, onDidChangeConfiguration: callback => configuration = callback, onDidChangeViewZones: callback => zonesChanged = callback, layout() {}, dispose: () => window.disposedCreditEditors++ };
-            window.creditEditor = editor; return editor;
+            window.creditEditor = editor; window.creditEditors.push(editor); return editor;
         },
         colorizeModelLine: (model, number) => { const escaped = document.createElement('span'); escaped.textContent = model.text.split('\n')[number - 1]; return '<span class="mtk2">' + escaped.innerHTML + '</span>'; },
         colorize: () => Promise.resolve(''),
@@ -69,7 +71,7 @@ async function openField(page, name = 'script') {
     const section = page.locator('.cp-field-section[data-field="' + name + '"]');
     if (!await section.evaluate(node => node.open)) await section.locator('summary.da-summary').click();
     await page.waitForFunction(name => document.querySelector('.cp-field-section[data-field="' + name + '"] summary .da-diff-counts').textContent.length > 0, name);
-    await page.waitForFunction(name => { const section = document.querySelector('.cp-field-section[data-field="' + name + '"]'); return section.querySelector('[id$="-current-panel"]').hidden || !section.querySelector('[id$="-code-view"]').hidden || section.querySelector('[id$="-lines"]').children.length > 0 || section.querySelector('summary .da-diff-counts').textContent === '0 lines'; }, name);
+    await page.waitForFunction(name => { const section = document.querySelector('.cp-field-section[data-field="' + name + '"]'); return section.querySelector('[id$="-code-loading"]').hidden && (section.querySelector('[id$="-attribution"]').children.length > 0 || section.querySelector('[id$="-lines"]').children.length > 0 || section.querySelector('summary .da-diff-counts').textContent === '0 lines'); }, name);
     return section;
 }
 async function chooseSet(page, id) {
@@ -114,6 +116,7 @@ test('fields start collapsed, author is plain text, and Compare+ links open safe
             const script = await openField(page);
             assert.equal(await part(script, 'cp-lines').locator('.cp-origin a').count(), 0);
             assert.equal(await part(script, 'cp-lines').locator('.cp-origin .cp-cell-text').first().textContent(), 'Developer');
+            assert.equal(await part(script, 'cp-lines').locator('.cp-origin .cp-cell-text').first().getAttribute('title'), 'Developer');
             assert.equal(await page.locator('img').count(), 0);
             assert.equal(await part(script, 'cp-lines').locator('.cp-code').first().textContent(), fixture.lines[0].text);
             assert.equal(await setCell(script).evaluate(node => getComputedStyle(node).cursor), 'pointer');
@@ -140,12 +143,15 @@ test('fields start collapsed, author is plain text, and Compare+ links open safe
             assert.equal(await page.evaluate(() => window.calls.length), 3);
             await page.evaluate(() => window.nextAnswer = { success: false, error: 'Administrator access is required.' });
             await page.locator('#cp-retry').click(); assert.equal(await page.locator('#cp-results').isVisible(), false);
+            assert.equal(await page.locator('#cp-status').evaluate(node => node.classList.contains('alert') && node.classList.contains('alert-danger')), true);
             await page.locator('#cp-retry').click(); assert.equal(await page.locator('.cp-field-section[open]').count(), 0);
             await page.evaluate(() => window.fixture.lines = []);
-            const empty = await openField(page);
-            assert.equal(await part(empty, 'cp-field-status').textContent(), '');
-            assert.equal(await part(empty, 'cp-lines').locator('.cp-empty').textContent(), 'No code in this update set.');
-            assert.equal(await part(empty, 'cp-lines').locator('.cp-empty').getAttribute('colspan'), '5');
+            const empty = page.locator('.cp-field-section[data-field=script]');
+            await empty.locator('summary').click();
+            await page.waitForFunction(() => document.querySelector('.cp-field-section[data-field=script]').getAttribute('aria-disabled') === 'true');
+            assert.equal(await empty.evaluate(node => node.open), false);
+            assert.equal(await empty.locator('.da-diff-counts').textContent(), '0 lines');
+            assert.equal(await empty.locator('table').first().isVisible(), false);
             await page.close();
         }
     } finally { await browser.close(); }
@@ -161,7 +167,7 @@ test('viewer ignores stale responses after a timeout and allows retry', async ()
         await page.evaluate(() => {
             window.pending = [];
             const timeout = window.setTimeout;
-            window.setTimeout = (callback, delay) => { if (delay === 30000) { window.expire = callback; return 1; } return timeout(callback, delay); };
+            window.setTimeout = (callback, delay) => { if (delay === 180000) { window.expire = callback; return 1; } return timeout(callback, delay); };
             window.clearTimeout = () => {};
             window.GlideAjax = function () { this.addParam = () => {}; this.getXMLAnswer = callback => window.pending.push(callback); };
         });
@@ -220,6 +226,7 @@ test('inline diff compares the row update to the selected update and restores at
         await page.evaluate(() => window.nextAnswer = { success: false, error: 'Snapshot unavailable.' });
         await menuAction(page, setCell(section), 'Quick compare');
         assert.equal(await part(section, 'cp-field-status').textContent(), 'Snapshot unavailable.');
+        assert.equal(await part(section, 'cp-code-status').getAttribute('class'), 'alert alert-danger');
         assert.equal(await part(section, 'cp-code-view').isVisible(), true);
         await page.locator('#cp-retry').click();
         assert.equal(await page.locator('.cp-field-section[open]').count(), 0);
@@ -301,7 +308,7 @@ test('annotations inherit Monaco font metrics and follow geometry changes withou
     } finally { await browser.close(); }
 });
 
-test('Polaris captures the record title before asynchronous credit loading and history tracks fields/views', async () => {
+test('Polaris captures the record title while History keeps the Credit+ title and record name', async () => {
     const browser = await chromium.launch({ headless: true });
     try {
         const page = await browser.newPage();
@@ -322,12 +329,15 @@ test('Polaris captures the record title before asynchronous credit loading and h
         assert.equal(await frame.evaluate(() => window.calls[0].sysparm_version), undefined);
         await frame.evaluate(() => window.finishLoading());
         await page.waitForFunction(() => document.title === 'Credit: My widget (Widget) - My instance');
-        assert.equal(await frame.evaluate(() => window.historyEntries.at(-1).title), 'Credit: My widget (Widget)');
+        assert.equal(await frame.evaluate(() => window.historyEntries.at(-1).title), 'Credit+');
+        assert.equal(await frame.evaluate(() => window.historyEntries.at(-1).description), 'My widget');
         await frame.locator('.cp-field-section[data-field="client_script"] summary').click();
         await frame.waitForFunction(() => window.calls.length === 2);
         await frame.evaluate(() => window.finishLoading());
         assert.equal(await page.locator('#shell-title').textContent(), await page.title());
-        assert.match(await frame.evaluate(() => window.historyEntries.at(-1).description), /My widget \(Widget\).*Client script/);
+        assert.equal(await frame.evaluate(() => window.historyEntries.at(-1).description), 'My widget');
+        assert.equal(await frame.evaluate(() => window.historyEntries.at(-1).title), 'Credit+');
+        assert.equal(new URL('https://credit.test/' + await frame.evaluate(() => window.historyEntries.at(-1).url)).searchParams.get('sysparm_field'), 'client_script');
         assert.match(html, /we_history_sync\.jsdbx/);
         assert.match(html, /window\.location\.replace\('\/now\/nav\/ui\/classic\/params\/target\//);
     } finally { await browser.close(); }
@@ -445,7 +455,7 @@ test('Compare+ header pickers search and navigate safely, discarding old record-
         assert.equal(await page.evaluate(() => window.pickers['cp-record-input'].result), null, 'Stale results from another table are discarded');
         await page.evaluate(() => window.choosePicker('cp-record-input', { id: '0'.repeat(32), text: 'No history' }));
         assert.match(await page.locator('#cp-status').textContent(), /No Customer Updates/);
-        assert.equal(await page.locator('#cp-status').evaluate(node => node.classList.contains('cp-error')), false);
+        assert.equal(await page.locator('#cp-status').evaluate(node => node.classList.contains('alert-danger')), false);
         assert.equal(await page.locator('#cp-status-wrap').getAttribute('class'), 'dc-no-versions-overlay');
         assert.equal(await page.locator('#cp-status-content').getAttribute('class'), 'dc-no-versions-content');
         assert.equal(await page.locator('#cp-status-wrap').evaluate(node => getComputedStyle(node).justifyContent), 'center');
@@ -460,7 +470,7 @@ test('Compare+ header pickers search and navigate safely, discarding old record-
         assert.equal(new URL(page.url()).searchParams.get('sysparm_update'), 'e'.repeat(32));
         assert.equal(await page.locator('#cp-update-button').getAttribute('data-value'), 'e'.repeat(32));
         const params = await page.evaluate(() => window.calls.at(-1));
-        assert.equal(params.processor, 'CreditPlus');
+        assert.equal(params.processor, 'WidgetEditorCreditAjax');
         assert.equal(params.sysparm_name, 'getCredit');
         assert.equal(params.sysparm_update, undefined);
         const safe = await page.evaluate(() => {
@@ -504,7 +514,7 @@ test('field timeouts, retry and update-set changes discard late responses withou
         const page = await browser.newPage(); await initialise(page, 1280, true);
         await page.evaluate(fixture => {
             const setTimeout = window.setTimeout; window.pending = [];
-            window.setTimeout = (callback, delay) => delay === 30000 ? (window.expire = callback, 123) : setTimeout(callback, delay);
+            window.setTimeout = (callback, delay) => delay === 180000 ? (window.expire = callback, 123) : setTimeout(callback, delay);
             window.GlideAjax = function () {
                 const params = {}; this.addParam = (key, value) => params[key] = value;
                 this.getXMLAnswer = callback => {
@@ -520,7 +530,9 @@ test('field timeouts, retry and update-set changes discard late responses withou
         await settle(page);
         assert.equal(await part(section, 'cp-code-loading').isVisible(), false);
         assert.match(await part(section, 'cp-field-status').textContent(), /timed out/);
-        await part(section, 'cp-field-retry').click();
+        assert.equal(await part(section, 'cp-field-retry').count(), 0);
+        await section.locator('summary.da-summary').click();
+        await section.locator('summary.da-summary').click();
         await page.evaluate(fixture => window.pending[0].callback(JSON.stringify(fixture)), fixture);
         await settle(page);
         assert.equal(await part(section, 'cp-field-status').textContent(), '');
@@ -623,7 +635,7 @@ test('Compare+ loads Customer Update snapshots read-only without version queries
                         let result;
                         if (params.sysparm_name === 'getUserPrefs') result = { success: true, value: '{}' };
                         else if (params.sysparm_name === 'getDiffFieldDefs') result = { success: true, table_label: 'Widget', fields: [{ key: 'script', label: 'Server script', renderAs: 'code', language: 'javascript' }] };
-                        else if (name === 'CreditPlus' && params.sysparm_name === 'getComparison') result = denied ? { success: false, error: 'Administrator access is required.' } : { success: true, table: 'sp_widget', record, recordName: 'My widget', left: { sys_id: original, sys_created_on: '2026-10-02 00:00:00', sys_created_by: 'Earlier author', fields: { script: 'before();' }, update_set_name: 'Earlier set', update_set_table: 'sys_update_set' }, right: { sys_id: update, sys_created_on: '2026-10-01 00:00:00', sys_created_by: 'Developer', fields: { script: 'after();' }, update_set_name: 'Imported set', update_set_sys_id: 'f'.repeat(32), update_set_table: 'sys_remote_update_set' } };
+                        else if (name === 'WidgetEditorCreditAjax' && params.sysparm_name === 'getComparison') result = denied ? { success: false, error: 'Administrator access is required.' } : { success: true, table: 'sp_widget', record, recordName: 'My widget', left: { sys_id: original, sys_created_on: '2026-10-02 00:00:00', sys_created_by: 'Earlier author', fields: { script: 'before();' }, update_set_name: 'Earlier set', update_set_table: 'sys_update_set' }, right: { sys_id: update, sys_created_on: '2026-10-01 00:00:00', sys_created_by: 'Developer', fields: { script: 'after();' }, update_set_name: 'Imported set', update_set_sys_id: 'f'.repeat(32), update_set_table: 'sys_remote_update_set' } };
                         else throw Error('Unexpected comparison request: ' + params.sysparm_name);
                         timer(() => callback({ responseXML: { documentElement: { getAttribute: () => JSON.stringify(result) } } }), 0);
                     };
@@ -662,7 +674,7 @@ test('closing or reloading discards late inline comparisons and timeouts keep at
         await page.evaluate(() => {
             const Ajax = window.GlideAjax, timeout = window.setTimeout;
             window.pendingComparisons = [];
-            window.setTimeout = function (callback, delay) { if (delay === 30000) window.expireComparison = callback; return timeout(callback, delay); };
+            window.setTimeout = function (callback, delay) { if (delay === 180000) window.expireComparison = callback; return timeout(callback, delay); };
             window.GlideAjax = function (name) {
                 const request = new Ajax(name); const params = {}; const add = request.addParam;
                 request.addParam = (key, value) => { params[key] = value; add(key, value); };
@@ -752,7 +764,8 @@ test('Polaris URL, record title and History follow update selection and survive 
         assert.equal(new URL('https://credit.test/' + decodeURIComponent(new URL(page.url()).pathname.slice(prefix.length))).searchParams.get('sysparm_update'), original);
         assert.equal(await page.evaluate(() => history.state.shellState), 'preserved');
         const entry = await frame.evaluate(() => window.historyEntries.at(-1));
-        assert.match(entry.title, /My widget \(Widget\)/);
+        assert.equal(entry.title, 'Credit+');
+        assert.equal(entry.description, 'My widget');
         assert.equal(new URL('https://credit.test/' + entry.url).searchParams.get('sysparm_update'), original);
         assert.ok(entry.match.includes('url=' + child.slice(1)));
         assert.equal(await frame.evaluate(() => window.statisticsCalls), 0);
@@ -766,6 +779,8 @@ test('Polaris URL, record title and History follow update selection and survive 
         assert.equal(await frame.locator('#cp-update-button').getAttribute('data-value'), original);
         assert.equal(await frame.locator('#cp-statistics').isVisible(), true);
         assert.equal(await frame.evaluate(() => window.statisticsCalls), 1);
+        assert.equal(await frame.evaluate(() => window.historyEntries.at(-1).title), 'Credit+');
+        assert.equal(await frame.evaluate(() => window.historyEntries.at(-1).description), 'My widget');
         assert.equal(await frame.locator('#cp-statistics-button').getAttribute('aria-pressed'), 'true');
         assert.equal(await frame.locator('#cp-statistics-button').evaluate(node => node.classList.contains('active')), true);
         await frame.getByRole('button', { name: 'Statistics', exact: true }).click();
@@ -817,10 +832,27 @@ test('statistics load only on demand, render safe leaderboards, cache while open
             await page.evaluate(() => window.statsRequests[0].callback(JSON.stringify(window.statsFixture)));
             await settle(page);
             assert.equal(await page.locator('.cp-stats-board').count(), 4);
+            assert.deepEqual(await page.locator('.cp-stats-board').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).borderTopColor)), ['rgba(9, 134, 88, 0.35)', 'rgba(191, 41, 41, 0.35)', 'rgba(9, 134, 88, 0.35)', 'rgba(191, 41, 41, 0.35)']);
             assert.equal(await page.locator('.cp-stats-board').first().locator('li').count(), 4);
+            assert.deepEqual(await page.locator('.cp-stats-percentage').allTextContents(), ['50.0%', '29.3%', '20.7%', '0.0%', '100.0%', '78.1%', '0.0%', '0.0%', '100.0%']);
+            assert.equal(await page.locator('.cp-stats-board').evaluateAll(boards => boards.every(board => {
+                const rows = Array.from(board.querySelectorAll('.cp-stats-entry'));
+                return rows.every(row => {
+                    const score = row.querySelector('.cp-stats-score'), percentage = row.querySelector('.cp-stats-percentage');
+                    return getComputedStyle(score).textAlign === 'right' && getComputedStyle(percentage).textAlign === 'right' &&
+                        score.getBoundingClientRect().right <= percentage.getBoundingClientRect().left && row.scrollWidth <= row.clientWidth &&
+                        Math.abs(percentage.getBoundingClientRect().right - rows[0].querySelector('.cp-stats-percentage').getBoundingClientRect().right) < 1;
+                });
+            })), true);
             assert.equal(await page.locator('#cp-statistics img').count(), 0);
             assert.equal(await page.locator('#cp-statistics-heading').textContent(), 'Statistics 📊');
             assert.deepEqual(await page.locator('.cp-stats-board h3').allTextContents(), ['Builders 👷 - Created by 👤', 'Destroyers 💥 - Created by 👤', 'Expansions 🏗️ - Update sets 📦', 'Demolitions 🧨 - Update sets 📦']);
+            assert.equal(await page.locator('.cp-stats-board h3').first().evaluate(node => getComputedStyle(node).fontWeight), '600');
+            const makeover = page.locator('.cp-stats-facts dd').last();
+            await makeover.locator('a').evaluate(node => node.textContent = 'Credit+ Test ct20261014a - ' + 'Biggest update set '.repeat(8));
+            assert.equal(await makeover.locator('a').evaluate(node => getComputedStyle(node).whiteSpace), 'normal');
+            assert.equal(await makeover.evaluate(node => node.scrollWidth <= node.clientWidth), true);
+            assert.equal(await makeover.locator('a').evaluate(node => node.getBoundingClientRect().height > parseFloat(getComputedStyle(node).fontSize) * 2), true);
             assert.equal(await page.locator('.cp-stats-skeleton').count(), 0);
             assert.equal(await page.locator('#cp-statistics .cp-stats-emoji').count(), 17);
             assert.equal(await page.locator('#cp-statistics .cp-stats-emoji').evaluateAll(nodes => nodes.every(node => getComputedStyle(node).fontSize === getComputedStyle(document.querySelector('.cp-stats-medal')).fontSize)), true);
@@ -864,22 +896,28 @@ test('statistics load only on demand, render safe leaderboards, cache while open
             await page.evaluate(() => window.statsRequests[2].callback(JSON.stringify({ success: false, error: 'History unavailable.' })));
             await settle(page);
             assert.equal(await page.locator('#cp-statistics-status').textContent(), 'History unavailable.');
-            await page.getByRole('button', { name: 'Retry statistics' }).click();
+            assert.equal(await page.getByRole('button', { name: 'Retry statistics' }).count(), 0);
+            await button.click(); await button.click();
             await page.evaluate(() => window.statsRequests[3].callback(JSON.stringify(window.statsFixture)));
             await settle(page);
             assert.equal(await page.locator('.cp-stats-board').count(), 4);
+            await chooseSet(page, original);
+            await button.click();
+            await page.evaluate(() => window.statsRequests[4].callback(JSON.stringify({ ...window.statsFixture, added: 0, removed: 0, creators: [{ name: 'No additions', added: 0 }], destroyers: [{ name: 'No removals', removed: 0 }], creatorSets: [], destroyerSets: [] })));
+            await settle(page);
+            assert.deepEqual(await page.locator('.cp-stats-percentage').allTextContents(), ['0.0%', '0.0%']);
             await page.close();
         }
     } finally { await browser.close(); }
 });
 
-test('statistics timeout allows retry and discards the expired response', async () => {
+test('statistics timeout stays visible and reopening discards the expired response', async () => {
     const browser = await chromium.launch({ headless: true });
     try {
         const page = await browser.newPage(); await initialise(page);
         await page.evaluate(() => {
             const originalTimeout = window.setTimeout;
-            window.setTimeout = (callback, delay) => { if (delay === 30000) { window.expireStats = callback; return 0; } return originalTimeout(callback, delay); };
+            window.setTimeout = (callback, delay) => { if (delay === 180000) { window.expireStats = callback; return 0; } return originalTimeout(callback, delay); };
             window.statsCallbacks = [];
             window.GlideAjax = function () { this.addParam = () => {}; this.getXMLAnswer = callback => window.statsCallbacks.push(callback); };
         });
@@ -892,7 +930,9 @@ test('statistics timeout allows retry and discards the expired response', async 
         await settle(page);
         assert.match(await page.locator('#cp-statistics-status').textContent(), /timed out/);
         assert.equal(await page.locator('.cp-stats-skeleton').count(), 0);
-        await page.getByRole('button', { name: 'Retry statistics' }).click();
+        assert.equal(await page.getByRole('button', { name: 'Retry statistics' }).count(), 0);
+        const statistics = page.getByRole('button', { name: 'Statistics', exact: true });
+        await statistics.click(); await statistics.click();
         await page.evaluate(() => window.statsCallbacks[1]('not JSON'));
         await settle(page);
         assert.equal(await page.locator('#cp-statistics-status').textContent(), 'Statistics could not be loaded.');
@@ -1109,5 +1149,484 @@ test('Statistics scrolls smoothly after opening, never on closing, and respects 
         await button.click();
         await page.waitForFunction(() => statisticsScrolls.length === 2);
         assert.deepEqual(await page.evaluate(() => statisticsScrolls[1]), { behavior: 'auto', visible: true });
+    } finally { await browser.close(); }
+});
+
+test('statistics batches merge users and set IDs, reset the timeout and discard stale continuations', async () => {
+    const browser = await chromium.launch({headless:true});
+    try {
+        const page = await browser.newPage(); await initialise(page);
+        await page.evaluate(() => {
+            const Ajax = window.GlideAjax;
+            window.statsBatches = [];
+            window.GlideAjax = function (name) {
+                const original = new Ajax(name), params = {};
+                this.addParam = (key,value) => { params[key]=value; original.addParam(key,value); };
+                this.getXMLAnswer = callback => params.sysparm_name === 'getStatistics'
+                    ? window.statsBatches.push({params,callback}) : original.getXMLAnswer(callback);
+            };
+            const set = {id:'1'.repeat(32),table:'sys_update_set',name:'Same name'};
+            window.batch = {success:true,ageDays:10,founder:'Ada',founderUserId:'2'.repeat(32),updateSetCount:1,
+                contributorCount:1,added:3,removed:1,gaps:0,partial:false,
+                creators:[{name:'Ada',userId:'2'.repeat(32),added:3,removed:1}],
+                creatorSets:[{key:'set-1',name:'Same name',updateSet:set,added:3,removed:1}],
+                fieldTotals:[{name:'Script',added:3,removed:1}],nextCursor:'1',historyKey:'stable'};
+        });
+        await page.getByRole('button',{name:'Statistics',exact:true}).click();
+        await page.evaluate(() => window.statsBatches[0].callback(JSON.stringify(window.batch)));
+        await settle(page);
+        assert.equal(await page.evaluate(() => window.statsBatches.length),2);
+        assert.equal(await page.evaluate(() => window.statsBatches[1].params.sysparm_cursor),'1');
+        assert.equal(await page.evaluate(() => window.statsBatches[1].params.sysparm_history_key),'stable');
+        await page.evaluate(() => window.statsBatches[1].callback(JSON.stringify({...window.batch,added:2,removed:0,
+            creators:[{...window.batch.creators[0],added:2,removed:0}],
+            creatorSets:[{...window.batch.creatorSets[0],added:2,removed:0}],fieldTotals:[{name:'Script',added:2,removed:0}],nextCursor:''})));
+        await settle(page);
+        assert.equal(await page.locator('.cp-stats-board').first().locator('li').count(),1);
+        assert.match(await page.locator('.cp-stats-board').first().textContent(),/5 lines/);
+        assert.match(await page.locator('.cp-stats-board').nth(1).textContent(),/1 lines/);
+        assert.equal(await page.locator('.cp-stats-skeleton').count(),0);
+        await chooseSet(page,original);
+        await page.getByRole('button',{name:'Statistics',exact:true}).click();
+        await page.evaluate(() => window.statsBatches[2].callback(JSON.stringify(window.batch)));
+        await settle(page);
+        const calls = await page.evaluate(() => window.statsBatches.length);
+        await chooseSet(page,update);
+        await page.evaluate(() => window.statsBatches.at(-1).callback(JSON.stringify(window.batch)));
+        await settle(page);
+        assert.equal(await page.evaluate(() => window.statsBatches.length),calls);
+        assert.equal(await page.locator('#cp-statistics').isVisible(),false);
+    } finally { await browser.close(); }
+});
+
+test('real browser workers stream field and statistics batches without server-computed results', async () => {
+    const browser = await chromium.launch({headless:true});
+    try {
+        const page = await browser.newPage(); await initialise(page,1280,true);
+        const workerSource = fs.readFileSync('src/fluent/generated/client-development/ui-script/widget_editor_credit_worker.js','utf8');
+        await page.route('**/widget_editor_credit_worker.jsdbx?*', route=>route.fulfill({contentType:'application/javascript',body:workerSource}));
+        await page.evaluate(() => {
+            const NativeWorker=window.Worker; window.workerStarts=0; window.workerStops=0;
+            window.Worker=function(url){window.workerStarts++;const worker=new NativeWorker(url),stop=worker.terminate.bind(worker);worker.terminate=()=>{window.workerStops++;stop();};return worker;};
+            window.GlideAjax=function(){const params={};this.addParam=(k,v)=>params[k]=v;this.getXMLAnswer=callback=>{
+                window.calls.push({params});
+                const index=Number(params.sysparm_cursor),snapshot=window.fixture.updates[index];
+                const batch={...window.fixture,field:'script',snapshots:[{...snapshot,values:{script:index?'one();\nthree();':'one();\ntwo();'}}],limits:{max_lines:50000,diff_work:20000000},historyKey:'stable',nextCursor:index?'':'1'};
+                if(params.sysparm_name==='getStatistics')Object.assign(batch,{founder:'Founder',founderUserId:'',ageDays:3,updateSetCount:2,unknownSetCount:0,fields:[{name:'script',label:'Server script'}],fieldTotals:[{name:'Server script',added:0,removed:0}],creators:[{name:snapshot.author,added:0,removed:0}],added:0,removed:0,gaps:0,partial:false});
+                callback(JSON.stringify(batch));
+            };};
+        });
+        const field=await openField(page);
+        await page.waitForFunction(()=>window.workerStops===1);
+        assert.equal(await part(field,'cp-attribution').locator('tr').count(),2);
+        assert.deepEqual(await part(field,'cp-attribution').locator('.cp-origin .cp-cell-text').allTextContents(),['Earlier author','Developer']);
+        assert.equal(await page.evaluate(()=>window.creditOptions.length),1);
+        await page.getByRole('button',{name:'Statistics',exact:true}).click();
+        await page.waitForFunction(()=>window.workerStops===2);
+        assert.deepEqual(await page.locator('.cp-stats-facts dd').allTextContents(),['3 days','Founder','2','2','3','1','Server script','Imported release']);
+        assert.equal(await page.evaluate(()=>window.workerStarts),2);
+        assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.params.sysparm_snapshots==='true').length),4);
+        assert.equal(await page.locator('#cp-statistics-status').textContent(),'');
+    } finally {await browser.close();}
+});
+
+test('unavailable worker shows a retryable field error instead of blocking the main thread', async () => {
+    const browser=await chromium.launch({headless:true});
+    try {
+        const page=await browser.newPage();await initialise(page);
+        await page.route('**/widget_editor_credit_worker.jsdbx?*',route=>route.fulfill({status:404,body:'Unavailable'}));
+        await page.evaluate(()=>window.nextAnswer={success:true,snapshots:[],limits:{max_lines:50000,diff_work:20000000}});
+        const field=page.locator('.cp-field-section[data-field=script]');
+        await field.locator('summary.da-summary').click();
+        await page.waitForFunction(() => document.querySelector('.cp-field-section[data-field=script] [id$="-code-status"]').classList.contains('alert-danger'));
+        assert.equal(await part(field,'cp-field-retry').count(), 0);
+        assert.match(await part(field,'cp-code-status').textContent(),/browser worker could not load/);
+        assert.equal(await page.getByRole('button',{name:'Statistics',exact:true}).isEnabled(),true);
+    }finally{await browser.close();}
+});
+
+async function tableApiFixture(page, options = {}) {
+    await initialise(page,1280,true);
+    const entries = [original,update,'d'.repeat(32)].map((id,index)=>({
+        sys_id:id, name:'sp_widget_'+fixture.record,sys_created_on:'2026-09-01 00:00:00',sys_updated_on:fixture.updateSets[index].time,
+        sys_mod_count:'0',update_set:index===1?'':'e'.repeat(32),remote_update_set:index===1?'f'.repeat(32):'',
+        payload:`<record_update table="sp_widget"><sp_widget action="INSERT_OR_UPDATE"><sys_id>${fixture.record}</sys_id><sys_updated_by>${fixture.updateSets[index].author}</sys_updated_by><sys_updated_on>${fixture.updateSets[index].time}</sys_updated_on><script><![CDATA[${index===1?'one();\nthree();':'one();\ntwo();'}]]></script><client_script><![CDATA[client();]]></client_script><template/><condition/></sp_widget><sys_app_file><script>Ignore companion record</script></sys_app_file></record_update>`
+    }));
+    if(options.count)for(let i=3;i<options.count;i++)entries.push({...entries[2],sys_id:i.toString(16).padStart(32,'0')});
+    const manifest = {name:entries[0].name,key:'fixture-history',limits:{max_payload_chars:20000000,max_history_chars:100000000,max_lines:50000,diff_work:20000000},history:entries.map((row,index)=>({id:row.sys_id,orderTime:row.sys_updated_on,created:row.sys_created_on,revision:0,updateSetId:row.update_set,remoteUpdateSetId:row.remote_update_set,author:fixture.updateSets[Math.min(index,2)].author,time:row.sys_updated_on,updateSet:index===1?fixture.updates[1].updateSet:fixture.updates[0].updateSet}))};
+    Object.assign(manifest.limits,options.limits||{});
+    let calls = 0;
+    await page.route('**/api/now/table/sys_update_xml?*',async route=>{
+        calls++;
+        if(options.respond)return options.respond(route,entries,calls);
+        const url=new URL(route.request().url());
+        assert.equal(url.searchParams.get('sysparm_display_value'),'false');
+        const ids=url.searchParams.get('sysparm_query').split('^')[0].slice(8).split(',');
+        await route.fulfill({contentType:'application/json',body:JSON.stringify({result:entries.filter(row=>ids.includes(row.sys_id))})});
+    });
+    await page.route('**/widget_editor_credit_worker.jsdbx?*',route=>route.fulfill({contentType:'application/javascript',body:fs.readFileSync('src/fluent/generated/client-development/ui-script/widget_editor_credit_worker.js','utf8')}));
+    await page.evaluate(manifest=>{
+        window.fixture.tableApi=manifest;
+        window.GlideAjax=function(){const params={};this.addParam=(k,v)=>params[k]=v;this.getXMLAnswer=callback=>{
+            window.calls.push({params});
+            if(params.sysparm_name==='getStatistics') {
+                if(params.sysparm_context!=='true')throw new Error('Server must not calculate statistics');
+                callback(JSON.stringify({success:true,historyKey:window.fixture.tableApi.key,founder:'Founder',founderUserId:'',ageDays:3,updateSetCount:2,unknownSetCount:0,fieldTotals:window.fixture.fields.map(f=>({name:f.label,added:0,removed:0})),creators:JSON.parse(params.sysparm_authors).map(name=>({name,added:0,removed:0})),added:0,removed:0,gaps:0,partial:false}));
+            } else {
+                if(params.sysparm_context!=='true')throw new Error('Server must not calculate fields or comparisons');
+                callback(JSON.stringify({...window.fixture,selected:params.sysparm_update||window.fixture.selected}));
+            }
+        };};
+    },manifest);
+    await page.getByRole('button',{name:'Reload',exact:true}).click(); await settle(page);
+    return {entries,manifest,calls:()=>calls};
+}
+
+test('Table API history populates collapsed line counts and is shared by fields, statistics, quick compare and update selection',async()=>{
+    const browser=await chromium.launch({headless:true});
+    try {
+        const page=await browser.newPage(),api=await tableApiFixture(page);
+        await page.waitForFunction(()=>document.querySelector('.cp-field-section[data-field="script"] .da-diff-counts').textContent==='2 lines');
+        assert.equal(api.calls(),1);
+        assert.deepEqual(await page.locator('.cp-field-section .da-diff-counts').allTextContents(),['2 lines','1 lines','0 lines','0 lines']);
+        assert.equal(await page.locator('.cp-field-section[open]').count(),0);
+        assert.equal(await page.evaluate(()=>window.creditOptions.length),0);
+        assert.equal(await page.evaluate(()=>window.calls.some(c=>c.params.sysparm_name==='getStatistics')),false);
+        await page.locator('.cp-field-section[data-field="script"] summary').click();
+        await page.locator('.cp-field-section[data-field="client_script"] summary').click();
+        await page.getByRole('button',{name:'Statistics',exact:true}).click();
+        await page.waitForFunction(()=>document.querySelectorAll('.cp-stats-board li').length>0);
+        const field=await openField(page);
+        assert.equal(api.calls(),1);
+        assert.deepEqual(await part(field,'cp-attribution').locator('.cp-origin .cp-cell-text').allTextContents(),['Earlier author','Developer']);
+        assert.deepEqual((await page.locator('.cp-stats-facts dd').allTextContents()).slice(2,6),['2','3','5','2']);
+        await menuAction(page,setCell(field),'Quick compare');
+        await page.waitForFunction(()=>!!window.lastModels);
+        assert.equal(await page.evaluate(()=>window.lastModels.original.text),'one();\ntwo();');
+        await chooseSet(page,'d'.repeat(32)); await openField(page);
+        assert.equal(api.calls(),1,'another update set uses the same history cache');
+        await page.getByRole('button',{name:'Statistics',exact:true}).click();
+        await page.waitForFunction(()=>document.querySelectorAll('.cp-stats-board li').length>0);
+        assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.params.sysparm_name==='getStatistics').length),1);
+        await page.getByRole('button',{name:'Reload',exact:true}).click(); await openField(page);
+        assert.equal(api.calls(),2,'Reload refetches history');
+        await page.evaluate(()=>window.fixture.tableApi.key='changed');
+        await chooseSet(page,original);await openField(page);
+        assert.equal(api.calls(),3,'changed history invalidates the cache');
+    }finally{await browser.close();}
+});
+
+test('Table API history batches beyond 100 records and reports denied access with a working retry',async()=>{
+    const browser=await chromium.launch({headless:true});
+    try {
+        const page=await browser.newPage(); const api=await tableApiFixture(page,{count:101});
+        await openField(page); assert.equal(api.calls(),2);
+        const retryPage=await browser.newPage(); const denied=await tableApiFixture(retryPage,{respond:async(route,entries,n)=>route.fulfill({status:n<=2?403:200,contentType:'application/json',body:JSON.stringify(n<=2?{error:{message:'Access denied'}}:{result:entries})})});
+        await retryPage.waitForFunction(()=>document.querySelector('#cp-status').textContent.includes('access was denied'));
+        const field=retryPage.locator('.cp-field-section[data-field="script"]');await field.locator('summary').click();
+        await retryPage.waitForFunction(() => document.querySelector('.cp-field-section[data-field=script] [id$="-code-status"]').classList.contains('alert-danger'));
+        assert.equal(await part(field,'cp-field-retry').count(), 0);
+        assert.match(await part(field,'cp-code-status').textContent(),/Table API access was denied/);
+        await retryPage.getByRole('button', { name: 'Reload', exact: true }).click(); await openField(retryPage);
+        assert.equal(denied.calls(),3);
+    }finally{await browser.close();}
+});
+
+test('Table API rejects reassigned or wrong-record snapshots and tolerates unreadable history gaps',async()=>{
+    const browser=await chromium.launch({headless:true});
+    try {
+        for(const mode of ['reassigned','wrong target','missing','doctype','malformed','duplicate']) {
+            const page=await browser.newPage();
+            await tableApiFixture(page,{respond:async(route,entries)=>{
+                const rows=structuredClone(entries);
+                if(mode==='reassigned')rows[0].update_set='9'.repeat(32);
+                if(mode==='wrong target')rows[0].payload=rows[0].payload.replace(fixture.record,'9'.repeat(32));
+                if(mode==='missing')rows.shift();
+                if(mode==='doctype')rows[0].payload='<!DOCTYPE record_update>'+rows[0].payload;
+                if(mode==='malformed')rows[0].payload='<record_update>';
+                if(mode==='duplicate')rows[0].payload=rows[0].payload.replace('</sp_widget>','<script>duplicate</script></sp_widget>');
+                await route.fulfill({contentType:'application/json',body:JSON.stringify({result:rows})});
+            }});
+            const field=page.locator('.cp-field-section[data-field="script"]');await field.locator('summary').click();
+            if(['reassigned','wrong target'].includes(mode)) {
+                await page.waitForFunction(() => document.querySelector('.cp-field-section[data-field=script] [id$="-code-status"]').classList.contains('alert-danger'));
+                assert.equal(await part(field,'cp-field-retry').count(), 0);
+                assert.match(await part(field,'cp-code-status').textContent(),/changed while loading|different records/);
+            }else{
+                await openField(page);assert.match(await part(field,'cp-code-status').textContent(),/snapshot interrupts attribution/);
+            }
+            await page.close();
+        }
+    }finally{await browser.close();}
+});
+
+test('bounded history retains selected code and refetches an evicted update when selected',async()=>{
+    const browser=await chromium.launch({headless:true});
+    try{
+        const page=await browser.newPage(),api=await tableApiFixture(page,{limits:{max_history_chars:1}});
+        const field=await openField(page);
+        assert.equal(await part(field,'cp-attribution').locator('tr').count(),2);
+        assert.match(await part(field,'cp-code-status').textContent(),/Attribution is partial/);
+        await chooseSet(page,original);await openField(page);
+        assert.equal(api.calls(),2);
+        assert.equal(await page.evaluate(()=>window.creditOptions.at(-1).model.text),'one();\ntwo();');
+    }finally{await browser.close();}
+});
+
+test('Reload cancels pending shared retrieval and late responses cannot replace current code',async()=>{
+    const browser=await chromium.launch({headless:true});
+    try{
+        const page=await browser.newPage();let oldRoute;let announce;
+        const requested=new Promise(resolve=>announce=resolve);
+        const api=await tableApiFixture(page,{respond:async(route,entries,n)=>{
+            if(n===1){oldRoute=route;announce();return;}
+            await route.fulfill({contentType:'application/json',body:JSON.stringify({result:entries})});
+        }});
+        await page.locator('.cp-field-section[data-field="script"] summary').click();await requested;
+        await page.getByRole('button',{name:'Reload',exact:true}).click();await openField(page);
+        await oldRoute.fulfill({contentType:'application/json',body:'{"result":[]}'}).catch(()=>{});
+        assert.equal(api.calls(),2);
+        assert.equal(await page.evaluate(()=>window.creditOptions.at(-1).model.text),'one();\nthree();');
+        assert.equal(await page.locator('.cp-field-section[data-field="script"] [id$="-field-retry"]').isVisible(),false);
+    }finally{await browser.close();}
+});
+
+test('whitespace popover recalculates open fields and Statistics from the cache and preserves code',async()=>{
+    const browser=await chromium.launch({headless:true});
+    try{
+        const page=await browser.newPage();
+        const api=await tableApiFixture(page,{respond:async(route,entries)=>{
+            const rows=structuredClone(entries);
+            rows[1].payload=rows[1].payload.replace('one();\nthree();',' one();\ntwo( );  ');
+            await route.fulfill({contentType:'application/json',body:JSON.stringify({result:rows})});
+        }});
+        const field=await openField(page);
+        const authors=()=>part(field,'cp-attribution').locator('.cp-origin .cp-cell-text').allTextContents();
+        assert.deepEqual(await authors(),['Earlier author','Earlier author']);
+        await page.getByRole('button',{name:'Statistics',exact:true}).click();
+        await page.waitForFunction(()=>document.querySelectorAll('.cp-stats-board li').length>0);
+        const totals=await page.locator('.cp-stats-facts dd').allTextContents();
+        await page.getByRole('button',{name:'Whitespace settings',exact:true}).click();
+        const popover=page.getByRole('dialog',{name:'Attribution and Statistics whitespace settings'});
+        assert.equal(await popover.locator('input:checked').inputValue(),'all');
+        await popover.getByLabel('Show all changes',{exact:true}).check();
+        await openField(page);
+        await page.waitForFunction(()=>document.querySelectorAll('.cp-stats-board li').length>0);
+        assert.deepEqual(await authors(),['Developer','Developer']);
+        assert.notDeepEqual(await page.locator('.cp-stats-facts dd').allTextContents(),totals);
+        assert.equal(new URL(page.url()).searchParams.get('sysparm_whitespace'),'none');
+        assert.equal(api.calls(),1);
+        assert.equal(await page.evaluate(()=>window.creditOptions.at(-1).model.text),' one();\ntwo( );  ');
+        assert.equal(await page.locator('.cp-field-section[open]').count(),1);
+        // Opening a field can move focus away; reopen only when needed.
+        if(!await popover.isVisible())await page.getByRole('button',{name:'Whitespace settings',exact:true}).click();
+        await popover.getByLabel('Ignore whitespace when comparing lines',{exact:true}).check();
+        await openField(page);
+        assert.deepEqual(await authors(),['Earlier author','Earlier author']);
+        assert.equal(new URL(page.url()).searchParams.has('sysparm_whitespace'),false);
+        assert.equal(api.calls(),1);
+        if(!await popover.isVisible())await page.getByRole('button',{name:'Whitespace settings',exact:true}).click();
+        await page.keyboard.press('Escape');
+        assert.equal(await popover.isVisible(),false);
+        assert.equal(await page.getByRole('button',{name:'Whitespace settings',exact:true}).evaluate(n=>n===document.activeElement),true);
+        await page.setViewportSize({width:390,height:844});
+        await page.getByRole('button',{name:'Whitespace settings',exact:true}).click();
+        const box=await popover.boundingBox();assert.ok(box.x>=0 && box.x+box.width<=390);
+        await page.locator('.dc-title').click();await settle(page);assert.equal(await popover.isVisible(),false);
+    }finally{await browser.close();}
+});
+
+test('long leaderboards scroll independently with their headings fixed at the top',async()=>{
+    const browser=await chromium.launch({headless:true});
+    try{
+        const page=await browser.newPage();await initialise(page);
+        await page.evaluate(()=>{
+            window.GlideAjax=function(){this.addParam=()=>{};this.getXMLAnswer=callback=>callback(JSON.stringify({success:true,ageDays:1,founder:'Ada',updateSetCount:100,contributorCount:100,added:100,removed:0,creators:Array.from({length:100},(_,i)=>({name:'Contributor '+i,added:100-i})),destroyers:[],creatorSets:[],destroyerSets:[]}));};
+        });
+        await page.getByRole('button',{name:'Statistics',exact:true}).click();await settle(page);
+        const board=page.locator('.cp-stats-board').first();
+        assert.equal(await board.locator('li').count(),100);
+        assert.equal(await board.evaluate(n=>n.clientHeight<n.scrollHeight && n.getBoundingClientRect().height<=innerHeight*.75+1),true);
+        await board.focus();await page.keyboard.press('End');
+        await page.waitForFunction(()=>document.querySelector('.cp-stats-board').scrollTop>0);
+        assert.equal(await board.evaluate(n=>Math.abs(n.querySelector('h3').getBoundingClientRect().top-n.getBoundingClientRect().top-1)<2),true);
+        assert.equal(await page.locator('.cp-stats-board').nth(1).evaluate(n=>n.scrollTop),0);
+    }finally{await browser.close();}
+});
+
+
+test('partial Table API statistics show available results without a partial notice or retry button', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage();
+        await tableApiFixture(page, { limits: { max_history_chars: 1 } });
+        await page.getByRole('button', { name: 'Statistics', exact: true }).click();
+        await page.waitForFunction(() => document.querySelectorAll('.cp-stats-board h3').length === 4);
+        assert.equal(await page.locator('.cp-stats-facts dd').count(), 6);
+        assert.deepEqual((await page.locator('.cp-stats-facts dd').allTextContents()).slice(-2), ['0', '0']);
+        assert.equal(await page.locator('#cp-statistics-status').textContent(), '');
+        assert.equal(await page.locator('#cp-statistics .alert-danger').count(), 0);
+        assert.equal(await page.getByRole('button', { name: 'Retry statistics' }).count(), 0);
+    } finally { await browser.close(); }
+});
+
+
+test('missing fields stay disabled with an Unavailable label and enable again on another update set', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage();
+        await tableApiFixture(page, { respond: async (route, entries) => {
+            const rows = structuredClone(entries);
+            rows[1].payload = rows[1].payload.replace('<client_script><![CDATA[client();]]></client_script>', '');
+            await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ result: rows }) });
+        } });
+        const field = page.locator('.cp-field-section[data-field="client_script"]');
+        const summary = field.locator('summary');
+        await field.locator('.label.label-warning').waitFor();
+        assert.equal(await field.locator('.label.label-warning').textContent(), 'Unavailable');
+        assert.ok(await summary.evaluate(node => {
+            const label = node.querySelector('.label');
+            return Math.abs(node.getBoundingClientRect().right - parseFloat(getComputedStyle(node).paddingRight) - label.getBoundingClientRect().right) < 1;
+        }), 'Unavailable label aligns with the right edge of the heading');
+        assert.equal(await field.getAttribute('aria-disabled'), 'true');
+        assert.equal(await summary.getAttribute('aria-disabled'), 'true');
+        assert.equal(await summary.getAttribute('tabindex'), '-1');
+        assert.equal(await summary.evaluate(node => getComputedStyle(node).cursor), 'not-allowed');
+        await summary.evaluate(node => node.click());
+        await summary.focus();
+        await page.keyboard.press('Enter');
+        await page.keyboard.press('Space');
+        await field.evaluate(node => node.open = true);
+        await page.waitForFunction(() => !document.querySelector('.cp-field-section[data-field="client_script"]').open);
+        assert.equal(await page.getByRole('button', { name: 'Retry field' }).count(), 0);
+        assert.equal(await page.evaluate(() => window.creditOptions.length), 0);
+        const empty = page.locator('.cp-field-section[data-field=template]');
+        assert.equal(await empty.getAttribute('aria-disabled'), 'true');
+        assert.equal(await empty.evaluate(node => node.open), false);
+        assert.equal(await empty.locator('.da-diff-counts').textContent(), '0 lines');
+        assert.equal(await empty.locator('table').first().isVisible(), false);
+        assert.equal(await empty.locator('.label').count(), 0);
+        await chooseSet(page, original);
+        assert.equal(await field.getAttribute('aria-disabled'), 'false');
+        assert.equal(await field.locator('.label').count(), 0);
+        assert.equal(await summary.getAttribute('tabindex'), '0');
+        await openField(page, 'client_script');
+        assert.equal(await page.evaluate(() => window.creditOptions.at(-1).model.text), 'client();');
+    } finally { await browser.close(); }
+});
+
+
+test('zero-line fields close during loading, block expansion and enable only when an update has code', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage();
+        let finish;
+        let announce;
+        const requested = new Promise(resolve => announce = resolve);
+        await tableApiFixture(page, { respond: (route, entries) => {
+            const rows = structuredClone(entries);
+            rows[0].payload = rows[0].payload.replace('<template/>', '<template><![CDATA[<p>Earlier code</p>]]></template>');
+            finish = () => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ result: rows }) });
+            announce();
+        } });
+        await requested;
+        const field = page.locator('.cp-field-section[data-field=template]');
+        const summary = field.locator('summary');
+        await summary.click();
+        assert.equal(await field.evaluate(node => node.open), true);
+        await finish();
+        await page.waitForFunction(() => document.querySelector('.cp-field-section[data-field=template]').getAttribute('aria-disabled') === 'true');
+        assert.equal(await field.evaluate(node => node.open), false);
+        assert.equal(await field.locator('.da-diff-counts').textContent(), '0 lines');
+        assert.equal(await field.locator('.label').count(), 0);
+        assert.equal(await summary.getAttribute('tabindex'), '-1');
+        await summary.evaluate(node => node.click());
+        await summary.focus();
+        await page.keyboard.press('Enter');
+        await page.keyboard.press('Space');
+        await field.evaluate(node => node.open = true);
+        await page.waitForFunction(() => !document.querySelector('.cp-field-section[data-field=template]').open);
+        assert.equal(await field.locator('table').first().isVisible(), false);
+        assert.equal(await page.evaluate(() => window.creditOptions.length), 0);
+        await chooseSet(page, original);
+        await openField(page, 'template');
+        assert.equal(await page.evaluate(() => window.creditOptions.at(-1).model.text), '<p>Earlier code</p>');
+        await chooseSet(page, update);
+        assert.equal(await field.getAttribute('aria-disabled'), 'true');
+        assert.equal(await field.evaluate(node => node.open), false);
+        assert.equal(await field.locator('table').first().isVisible(), false);
+        assert.equal(await page.evaluate(() => window.creditOptions.length), 1);
+    } finally { await browser.close(); }
+});
+
+
+test('Monaco attribution borders end each update-set group and stay consistent across fields and themes', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage();
+        await initialise(page, 1280, true);
+        await page.evaluate(() => {
+            const first = window.fixture.updates[0], second = window.fixture.updates[1];
+            first.updateSet.name = second.updateSet.name = 'Same name';
+            window.fixture.updates.push(
+                { ...first, id: '7'.repeat(32), author: 'Another author' },
+                { ...first, id: '8'.repeat(32), updateSet: { ...first.updateSet, table: 'sys_remote_update_set' } },
+                { ...first, id: '9'.repeat(32), updateSet: null },
+            );
+            window.fixture.lines = [first.id, '7'.repeat(32), second.id, null, '8'.repeat(32), second.id, '9'.repeat(32)]
+                .map((update, index) => ({ number: index + 1, text: 'line' + index + '();', update }));
+        });
+        const field = await openField(page);
+        const first = await page.evaluate(() => window.creditEditors[0].decorations);
+        assert.deepEqual(first.map(d => [d.range.startLineNumber, d.range.endLineNumber]), [[2, 2], [3, 3], [5, 5], [6, 6]]);
+        assert.equal(first.every(d => d.options.isWholeLine === true && d.options.marginClassName === d.options.className), true);
+        assert.equal(first[1].options.className, first[3].options.className);
+        assert.equal(new Set(first.map(d => d.options.className)).size, 3);
+        await openField(page, 'client_script');
+        assert.deepEqual(await page.evaluate(() => window.creditEditors[1].decorations), first);
+        const colours = [];
+        for (const background of ['255 255 255', '24 26 30']) {
+            colours.push(await page.evaluate(({ background, decorations }) => {
+                document.documentElement.style.setProperty('--now-color_background--primary', background);
+                const editor = document.createElement('div'); editor.className = 'monaco-editor';
+                document.getElementById('credit-plus').appendChild(editor);
+                const values = decorations.map(decoration => {
+                    const line = document.createElement('div'); line.className = decoration.options.className;
+                    editor.appendChild(line);
+                    const style = getComputedStyle(line);
+                    return { background: style.backgroundColor, border: style.borderBottomColor, width: style.borderBottomWidth, style: style.borderBottomStyle };
+                });
+                editor.remove();
+                return values;
+            }, { background, decorations: first }));
+        }
+        assert.deepEqual(colours[0], colours[1]);
+        assert.equal(new Set(colours[0].map(value => value.border)).size, 3);
+        assert.equal(colours[0].every(value => {
+            const alpha = Number(value.border.match(/, ([\d.]+)\)$/)?.[1]);
+            return alpha > 0 && alpha <= 0.5 && value.width === '1px' && value.style === 'solid' && value.background === 'rgba(0, 0, 0, 0)';
+        }), true, 'Group borders are subtle in both themes without filling lines');
+        const rows = await part(field, 'cp-attribution').locator('tr').evaluateAll(rows => rows.map(row => ({
+            number: Number(row.dataset.lineNumber), className: row.className,
+            border: getComputedStyle(row).borderBottomColor, width: getComputedStyle(row).borderBottomWidth,
+            height: row.getBoundingClientRect().height,
+        })));
+        assert.deepEqual(rows.filter(row => row.width === '1px').map(row => row.number), [2, 3, 5, 6]);
+        assert.equal(rows.every(row => row.height === 24), true, 'Borders do not change attribution row heights');
+        first.forEach((decoration, index) => {
+            const row = rows[decoration.range.endLineNumber - 1];
+            assert.equal(row.className, decoration.options.className);
+            assert.equal(row.border, colours[0][index].border, 'Borders extend across the left attribution columns');
+        });
+        await menuAction(page, setCell(field), 'Quick compare');
+        assert.equal(await page.evaluate(() => window.creditEditors.at(-1).decorations), undefined);
+        await part(field, 'cp-diff-close').click();
+        assert.deepEqual(await page.evaluate(() => window.creditEditors.at(-1).decorations), first);
+        await field.locator('summary').click();
+        await openField(page);
+        assert.deepEqual(await page.evaluate(() => window.creditEditors.at(-1).decorations), first);
+        await chooseSet(page, original);
+        await openField(page);
+        assert.deepEqual(await page.evaluate(() => window.creditEditors.at(-1).decorations), first);
     } finally { await browser.close(); }
 });

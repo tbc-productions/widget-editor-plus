@@ -392,6 +392,70 @@ declare global {
                         table: 'sys_security_acl'
                         id: '3bd862d0819e4f9281df97d5d8ac9741'
                     }
+                    'widget-editor-credit-diff-work': {
+                        table: 'sys_properties'
+                        id: '9869f3198c44478bb6febcca66617c5c'
+                    }
+                    'widget-editor-credit-diff-work-category': {
+                        table: 'sys_properties_category_m2m'
+                        id: 'f859e75689574b2c8eda84762cb68ce0'
+                    }
+                    'widget-editor-credit-max-history-chars': {
+                        table: 'sys_properties'
+                        id: 'dbade29a639a44fca930dae6702466e5'
+                    }
+                    'widget-editor-credit-max-history-chars-category': {
+                        table: 'sys_properties_category_m2m'
+                        id: '365191e4b49f421ead286d35aae2f3df'
+                    }
+                    'widget-editor-credit-max-lines': {
+                        table: 'sys_properties'
+                        id: '304813d781ee4b46ba6ebf7cb504d677'
+                    }
+                    'widget-editor-credit-max-lines-category': {
+                        table: 'sys_properties_category_m2m'
+                        id: '87d79e904be54a59a8cfc9285c944c54'
+                    }
+                    'widget-editor-credit-max-payload-chars': {
+                        table: 'sys_properties'
+                        id: '547cdc4cfb49475cb8ee8bbc65594ab4'
+                    }
+                    'widget-editor-credit-max-payload-chars-category': {
+                        table: 'sys_properties_category_m2m'
+                        id: 'b09d6ecb14ab4bef9e4f64a5ef612361'
+                    }
+                    'widget-editor-credit-max-updates': {
+                        table: 'sys_properties'
+                        id: 'a765618cdc824d15a123635b96b1d375'
+                    }
+                    'widget-editor-credit-max-updates-category': {
+                        table: 'sys_properties_category_m2m'
+                        id: '2f5a29bc12554e0b844947fd57a03124'
+                    }
+                    'widget-editor-credit-module': {
+                        table: 'sys_app_module'
+                        id: 'c7a47a8531be44b4badb086fe4ffeec1'
+                    }
+                    'widget-editor-credit-request-timeout-seconds': {
+                        table: 'sys_properties'
+                        id: '89cbe5ec0d3142a09910d15db0aa83cc'
+                    }
+                    'widget-editor-credit-request-timeout-seconds-category': {
+                        table: 'sys_properties_category_m2m'
+                        id: '0e4b8a49dbd34eb69a9cb37a2ae70678'
+                    }
+                    'widget-editor-credit-statistics-batch-size': {
+                        table: 'sys_properties'
+                        id: 'b6533a3efe42429abeb29101219c8cde'
+                    }
+                    'widget-editor-credit-statistics-batch-size-category': {
+                        table: 'sys_properties_category_m2m'
+                        id: '4b20f8087295466996ffd2f2f7a40e37'
+                    }
+                    'widget-editor-credit-worker': {
+                        table: 'sys_ui_script'
+                        id: '3d7b432692da4fe38a9764ef2a74f8a9'
+                    }
                     'widget-editor-diff-module': {
                         table: 'sys_app_module'
                         id: 'bc7f98e35baa4911b82d59b8365a264a'
