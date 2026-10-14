@@ -69,7 +69,7 @@ async function openField(page, name = 'script') {
     const section = page.locator('.cp-field-section[data-field="' + name + '"]');
     if (!await section.evaluate(node => node.open)) await section.locator('summary.da-summary').click();
     await page.waitForFunction(name => document.querySelector('.cp-field-section[data-field="' + name + '"] summary .da-diff-counts').textContent.length > 0, name);
-    await page.waitForFunction(name => { const section = document.querySelector('.cp-field-section[data-field="' + name + '"]'); return section.querySelector('[id$="-current-panel"]').hidden || !section.querySelector('[id$="-code-view"]').hidden || section.querySelector('[id$="-lines"]').children.length > 0 || section.querySelector('summary .da-diff-counts').textContent === '0 lines'; }, name);
+    await page.waitForFunction(name => { const section = document.querySelector('.cp-field-section[data-field="' + name + '"]'); return section.querySelector('[id$="-code-loading"]').hidden && (section.querySelector('[id$="-attribution"]').children.length > 0 || section.querySelector('[id$="-lines"]').children.length > 0 || section.querySelector('summary .da-diff-counts').textContent === '0 lines'); }, name);
     return section;
 }
 async function chooseSet(page, id) {
@@ -114,6 +114,7 @@ test('fields start collapsed, author is plain text, and Compare+ links open safe
             const script = await openField(page);
             assert.equal(await part(script, 'cp-lines').locator('.cp-origin a').count(), 0);
             assert.equal(await part(script, 'cp-lines').locator('.cp-origin .cp-cell-text').first().textContent(), 'Developer');
+            assert.equal(await part(script, 'cp-lines').locator('.cp-origin .cp-cell-text').first().getAttribute('title'), 'Developer');
             assert.equal(await page.locator('img').count(), 0);
             assert.equal(await part(script, 'cp-lines').locator('.cp-code').first().textContent(), fixture.lines[0].text);
             assert.equal(await setCell(script).evaluate(node => getComputedStyle(node).cursor), 'pointer');
@@ -140,6 +141,7 @@ test('fields start collapsed, author is plain text, and Compare+ links open safe
             assert.equal(await page.evaluate(() => window.calls.length), 3);
             await page.evaluate(() => window.nextAnswer = { success: false, error: 'Administrator access is required.' });
             await page.locator('#cp-retry').click(); assert.equal(await page.locator('#cp-results').isVisible(), false);
+            assert.equal(await page.locator('#cp-status').evaluate(node => node.classList.contains('alert') && node.classList.contains('alert-danger')), true);
             await page.locator('#cp-retry').click(); assert.equal(await page.locator('.cp-field-section[open]').count(), 0);
             await page.evaluate(() => window.fixture.lines = []);
             const empty = await openField(page);
@@ -220,6 +222,7 @@ test('inline diff compares the row update to the selected update and restores at
         await page.evaluate(() => window.nextAnswer = { success: false, error: 'Snapshot unavailable.' });
         await menuAction(page, setCell(section), 'Quick compare');
         assert.equal(await part(section, 'cp-field-status').textContent(), 'Snapshot unavailable.');
+        assert.equal(await part(section, 'cp-code-status').getAttribute('class'), 'alert alert-danger');
         assert.equal(await part(section, 'cp-code-view').isVisible(), true);
         await page.locator('#cp-retry').click();
         assert.equal(await page.locator('.cp-field-section[open]').count(), 0);
@@ -445,7 +448,7 @@ test('Compare+ header pickers search and navigate safely, discarding old record-
         assert.equal(await page.evaluate(() => window.pickers['cp-record-input'].result), null, 'Stale results from another table are discarded');
         await page.evaluate(() => window.choosePicker('cp-record-input', { id: '0'.repeat(32), text: 'No history' }));
         assert.match(await page.locator('#cp-status').textContent(), /No Customer Updates/);
-        assert.equal(await page.locator('#cp-status').evaluate(node => node.classList.contains('cp-error')), false);
+        assert.equal(await page.locator('#cp-status').evaluate(node => node.classList.contains('alert-danger')), false);
         assert.equal(await page.locator('#cp-status-wrap').getAttribute('class'), 'dc-no-versions-overlay');
         assert.equal(await page.locator('#cp-status-content').getAttribute('class'), 'dc-no-versions-content');
         assert.equal(await page.locator('#cp-status-wrap').evaluate(node => getComputedStyle(node).justifyContent), 'center');
@@ -821,6 +824,12 @@ test('statistics load only on demand, render safe leaderboards, cache while open
             assert.equal(await page.locator('#cp-statistics img').count(), 0);
             assert.equal(await page.locator('#cp-statistics-heading').textContent(), 'Statistics 📊');
             assert.deepEqual(await page.locator('.cp-stats-board h3').allTextContents(), ['Builders 👷 - Created by 👤', 'Destroyers 💥 - Created by 👤', 'Expansions 🏗️ - Update sets 📦', 'Demolitions 🧨 - Update sets 📦']);
+            assert.equal(await page.locator('.cp-stats-board h3').first().evaluate(node => getComputedStyle(node).fontWeight), '600');
+            const makeover = page.locator('.cp-stats-facts dd').last();
+            await makeover.locator('a').evaluate(node => node.textContent = 'Credit+ Test ct20261014a - ' + 'Biggest update set '.repeat(8));
+            assert.equal(await makeover.locator('a').evaluate(node => getComputedStyle(node).whiteSpace), 'normal');
+            assert.equal(await makeover.evaluate(node => node.scrollWidth <= node.clientWidth), true);
+            assert.equal(await makeover.locator('a').evaluate(node => node.getBoundingClientRect().height > parseFloat(getComputedStyle(node).fontSize) * 2), true);
             assert.equal(await page.locator('.cp-stats-skeleton').count(), 0);
             assert.equal(await page.locator('#cp-statistics .cp-stats-emoji').count(), 17);
             assert.equal(await page.locator('#cp-statistics .cp-stats-emoji').evaluateAll(nodes => nodes.every(node => getComputedStyle(node).fontSize === getComputedStyle(document.querySelector('.cp-stats-medal')).fontSize)), true);
@@ -1157,4 +1166,256 @@ test('statistics batches merge users and set IDs, reset the timeout and discard 
         assert.equal(await page.evaluate(() => window.statsBatches.length),calls);
         assert.equal(await page.locator('#cp-statistics').isVisible(),false);
     } finally { await browser.close(); }
+});
+
+test('real browser workers stream field and statistics batches without server-computed results', async () => {
+    const browser = await chromium.launch({headless:true});
+    try {
+        const page = await browser.newPage(); await initialise(page,1280,true);
+        const workerSource = fs.readFileSync('src/fluent/generated/server-development/script-include/sys_script_include_widget_editor_credit_engine.server.js','utf8');
+        await page.route('**/widget_editor_credit_worker.jsdbx?*', route=>route.fulfill({contentType:'application/javascript',body:workerSource}));
+        await page.evaluate(() => {
+            const NativeWorker=window.Worker; window.workerStarts=0; window.workerStops=0;
+            window.Worker=function(url){window.workerStarts++;const worker=new NativeWorker(url),stop=worker.terminate.bind(worker);worker.terminate=()=>{window.workerStops++;stop();};return worker;};
+            window.GlideAjax=function(){const params={};this.addParam=(k,v)=>params[k]=v;this.getXMLAnswer=callback=>{
+                window.calls.push({params});
+                const index=Number(params.sysparm_cursor),snapshot=window.fixture.updates[index];
+                const batch={...window.fixture,field:'script',snapshots:[{...snapshot,values:{script:index?'one();\nthree();':'one();\ntwo();'}}],limits:{max_lines:50000,diff_work:20000000},historyKey:'stable',nextCursor:index?'':'1'};
+                if(params.sysparm_name==='getStatistics')Object.assign(batch,{founder:'Founder',founderUserId:'',ageDays:3,updateSetCount:2,unknownSetCount:0,fields:[{name:'script',label:'Server script'}],fieldTotals:[{name:'Server script',added:0,removed:0}],creators:[{name:snapshot.author,added:0,removed:0}],added:0,removed:0,gaps:0,partial:false});
+                callback(JSON.stringify(batch));
+            };};
+        });
+        const field=await openField(page);
+        await page.waitForFunction(()=>window.workerStops===1);
+        assert.equal(await part(field,'cp-attribution').locator('tr').count(),2);
+        assert.deepEqual(await part(field,'cp-attribution').locator('.cp-origin .cp-cell-text').allTextContents(),['Earlier author','Developer']);
+        assert.equal(await page.evaluate(()=>window.creditOptions.length),1);
+        await page.getByRole('button',{name:'Statistics',exact:true}).click();
+        await page.waitForFunction(()=>window.workerStops===2);
+        assert.deepEqual(await page.locator('.cp-stats-facts dd').allTextContents(),['3 days','Founder','2','2','3','1','Server script','Imported release']);
+        assert.equal(await page.evaluate(()=>window.workerStarts),2);
+        assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.params.sysparm_snapshots==='true').length),4);
+        assert.equal(await page.locator('#cp-statistics-status').textContent(),'');
+    } finally {await browser.close();}
+});
+
+test('unavailable worker shows a retryable field error instead of blocking the main thread', async () => {
+    const browser=await chromium.launch({headless:true});
+    try {
+        const page=await browser.newPage();await initialise(page);
+        await page.route('**/widget_editor_credit_worker.jsdbx?*',route=>route.fulfill({status:404,body:'Unavailable'}));
+        await page.evaluate(()=>window.nextAnswer={success:true,snapshots:[],limits:{max_lines:50000,diff_work:20000000}});
+        const field=page.locator('.cp-field-section[data-field=script]');
+        await field.locator('summary.da-summary').click();
+        await part(field,'cp-field-retry').waitFor({state:'visible'});
+        assert.match(await part(field,'cp-code-status').textContent(),/browser worker could not load/);
+        assert.equal(await page.getByRole('button',{name:'Statistics',exact:true}).isEnabled(),true);
+    }finally{await browser.close();}
+});
+
+async function tableApiFixture(page, options = {}) {
+    await initialise(page,1280,true);
+    const entries = [original,update,'d'.repeat(32)].map((id,index)=>({
+        sys_id:id, name:'sp_widget_'+fixture.record,sys_created_on:'2026-09-01 00:00:00',sys_updated_on:fixture.updateSets[index].time,
+        sys_mod_count:'0',update_set:index===1?'':'e'.repeat(32),remote_update_set:index===1?'f'.repeat(32):'',
+        payload:`<record_update table="sp_widget"><sp_widget action="INSERT_OR_UPDATE"><sys_id>${fixture.record}</sys_id><sys_updated_by>${fixture.updateSets[index].author}</sys_updated_by><sys_updated_on>${fixture.updateSets[index].time}</sys_updated_on><script><![CDATA[${index===1?'one();\nthree();':'one();\ntwo();'}]]></script><client_script><![CDATA[client();]]></client_script><template/><condition/></sp_widget><sys_app_file><script>Ignore companion record</script></sys_app_file></record_update>`
+    }));
+    if(options.count)for(let i=3;i<options.count;i++)entries.push({...entries[2],sys_id:i.toString(16).padStart(32,'0')});
+    const manifest = {name:entries[0].name,key:'fixture-history',limits:{max_payload_chars:20000000,max_history_chars:100000000,max_lines:50000,diff_work:20000000},history:entries.map((row,index)=>({id:row.sys_id,orderTime:row.sys_updated_on,created:row.sys_created_on,revision:0,updateSetId:row.update_set,remoteUpdateSetId:row.remote_update_set,author:fixture.updateSets[Math.min(index,2)].author,time:row.sys_updated_on,updateSet:index===1?fixture.updates[1].updateSet:fixture.updates[0].updateSet}))};
+    Object.assign(manifest.limits,options.limits||{});
+    let calls = 0;
+    await page.route('**/api/now/table/sys_update_xml?*',async route=>{
+        calls++;
+        if(options.respond)return options.respond(route,entries,calls);
+        const url=new URL(route.request().url());
+        assert.equal(url.searchParams.get('sysparm_display_value'),'false');
+        const ids=url.searchParams.get('sysparm_query').split('^')[0].slice(8).split(',');
+        await route.fulfill({contentType:'application/json',body:JSON.stringify({result:entries.filter(row=>ids.includes(row.sys_id))})});
+    });
+    await page.route('**/widget_editor_credit_worker.jsdbx?*',route=>route.fulfill({contentType:'application/javascript',body:fs.readFileSync('src/fluent/generated/server-development/script-include/sys_script_include_widget_editor_credit_engine.server.js','utf8')}));
+    await page.evaluate(manifest=>{
+        window.fixture.tableApi=manifest;
+        window.GlideAjax=function(){const params={};this.addParam=(k,v)=>params[k]=v;this.getXMLAnswer=callback=>{
+            window.calls.push({params});
+            if(params.sysparm_name==='getStatistics') {
+                if(params.sysparm_context!=='true')throw new Error('Server must not calculate statistics');
+                callback(JSON.stringify({success:true,historyKey:window.fixture.tableApi.key,founder:'Founder',founderUserId:'',ageDays:3,updateSetCount:2,unknownSetCount:0,fieldTotals:window.fixture.fields.map(f=>({name:f.label,added:0,removed:0})),creators:JSON.parse(params.sysparm_authors).map(name=>({name,added:0,removed:0})),added:0,removed:0,gaps:0,partial:false}));
+            } else {
+                if(params.sysparm_context!=='true')throw new Error('Server must not calculate fields or comparisons');
+                callback(JSON.stringify({...window.fixture,selected:params.sysparm_update||window.fixture.selected}));
+            }
+        };};
+    },manifest);
+    await page.getByRole('button',{name:'Reload',exact:true}).click(); await settle(page);
+    return {entries,manifest,calls:()=>calls};
+}
+
+test('Table API history populates collapsed line counts and is shared by fields, statistics, quick compare and update selection',async()=>{
+    const browser=await chromium.launch({headless:true});
+    try {
+        const page=await browser.newPage(),api=await tableApiFixture(page);
+        await page.waitForFunction(()=>document.querySelector('.cp-field-section[data-field="script"] .da-diff-counts').textContent==='2 lines');
+        assert.equal(api.calls(),1);
+        assert.deepEqual(await page.locator('.cp-field-section .da-diff-counts').allTextContents(),['2 lines','1 lines','0 lines','0 lines']);
+        assert.equal(await page.locator('.cp-field-section[open]').count(),0);
+        assert.equal(await page.evaluate(()=>window.creditOptions.length),0);
+        assert.equal(await page.evaluate(()=>window.calls.some(c=>c.params.sysparm_name==='getStatistics')),false);
+        await page.locator('.cp-field-section[data-field="script"] summary').click();
+        await page.locator('.cp-field-section[data-field="client_script"] summary').click();
+        await page.getByRole('button',{name:'Statistics',exact:true}).click();
+        await page.waitForFunction(()=>document.querySelectorAll('.cp-stats-board li').length>0);
+        const field=await openField(page);
+        assert.equal(api.calls(),1);
+        assert.deepEqual(await part(field,'cp-attribution').locator('.cp-origin .cp-cell-text').allTextContents(),['Earlier author','Developer']);
+        assert.deepEqual((await page.locator('.cp-stats-facts dd').allTextContents()).slice(2,6),['2','3','5','2']);
+        await menuAction(page,setCell(field),'Quick compare');
+        await page.waitForFunction(()=>!!window.lastModels);
+        assert.equal(await page.evaluate(()=>window.lastModels.original.text),'one();\ntwo();');
+        await chooseSet(page,'d'.repeat(32)); await openField(page);
+        assert.equal(api.calls(),1,'another update set uses the same history cache');
+        await page.getByRole('button',{name:'Statistics',exact:true}).click();
+        await page.waitForFunction(()=>document.querySelectorAll('.cp-stats-board li').length>0);
+        assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.params.sysparm_name==='getStatistics').length),1);
+        await page.getByRole('button',{name:'Reload',exact:true}).click(); await openField(page);
+        assert.equal(api.calls(),2,'Reload refetches history');
+        await page.evaluate(()=>window.fixture.tableApi.key='changed');
+        await chooseSet(page,original);await openField(page);
+        assert.equal(api.calls(),3,'changed history invalidates the cache');
+    }finally{await browser.close();}
+});
+
+test('Table API history batches beyond 100 records and reports denied access with a working retry',async()=>{
+    const browser=await chromium.launch({headless:true});
+    try {
+        const page=await browser.newPage(); const api=await tableApiFixture(page,{count:101});
+        await openField(page); assert.equal(api.calls(),2);
+        const retryPage=await browser.newPage(); const denied=await tableApiFixture(retryPage,{respond:async(route,entries,n)=>route.fulfill({status:n<=2?403:200,contentType:'application/json',body:JSON.stringify(n<=2?{error:{message:'Access denied'}}:{result:entries})})});
+        await retryPage.waitForFunction(()=>document.querySelector('#cp-status').textContent.includes('access was denied'));
+        const field=retryPage.locator('.cp-field-section[data-field="script"]');await field.locator('summary').click();
+        await part(field,'cp-field-retry').waitFor({state:'visible'});
+        assert.match(await part(field,'cp-code-status').textContent(),/Table API access was denied/);
+        await part(field,'cp-field-retry').click(); await openField(retryPage);
+        assert.equal(denied.calls(),3);
+    }finally{await browser.close();}
+});
+
+test('Table API rejects reassigned or wrong-record snapshots and tolerates unreadable history gaps',async()=>{
+    const browser=await chromium.launch({headless:true});
+    try {
+        for(const mode of ['reassigned','wrong target','missing','doctype','malformed','duplicate']) {
+            const page=await browser.newPage();
+            await tableApiFixture(page,{respond:async(route,entries)=>{
+                const rows=structuredClone(entries);
+                if(mode==='reassigned')rows[0].update_set='9'.repeat(32);
+                if(mode==='wrong target')rows[0].payload=rows[0].payload.replace(fixture.record,'9'.repeat(32));
+                if(mode==='missing')rows.shift();
+                if(mode==='doctype')rows[0].payload='<!DOCTYPE record_update>'+rows[0].payload;
+                if(mode==='malformed')rows[0].payload='<record_update>';
+                if(mode==='duplicate')rows[0].payload=rows[0].payload.replace('</sp_widget>','<script>duplicate</script></sp_widget>');
+                await route.fulfill({contentType:'application/json',body:JSON.stringify({result:rows})});
+            }});
+            const field=page.locator('.cp-field-section[data-field="script"]');await field.locator('summary').click();
+            if(['reassigned','wrong target'].includes(mode)) {
+                await part(field,'cp-field-retry').waitFor({state:'visible'});
+                assert.match(await part(field,'cp-code-status').textContent(),/changed while loading|different records/);
+            }else{
+                await openField(page);assert.match(await part(field,'cp-code-status').textContent(),/snapshot interrupts attribution/);
+            }
+            await page.close();
+        }
+    }finally{await browser.close();}
+});
+
+test('bounded history retains selected code and refetches an evicted update when selected',async()=>{
+    const browser=await chromium.launch({headless:true});
+    try{
+        const page=await browser.newPage(),api=await tableApiFixture(page,{limits:{max_history_chars:1}});
+        const field=await openField(page);
+        assert.equal(await part(field,'cp-attribution').locator('tr').count(),2);
+        assert.match(await part(field,'cp-code-status').textContent(),/Attribution is partial/);
+        await chooseSet(page,original);await openField(page);
+        assert.equal(api.calls(),2);
+        assert.equal(await page.evaluate(()=>window.creditOptions.at(-1).model.text),'one();\ntwo();');
+    }finally{await browser.close();}
+});
+
+test('Reload cancels pending shared retrieval and late responses cannot replace current code',async()=>{
+    const browser=await chromium.launch({headless:true});
+    try{
+        const page=await browser.newPage();let oldRoute;let announce;
+        const requested=new Promise(resolve=>announce=resolve);
+        const api=await tableApiFixture(page,{respond:async(route,entries,n)=>{
+            if(n===1){oldRoute=route;announce();return;}
+            await route.fulfill({contentType:'application/json',body:JSON.stringify({result:entries})});
+        }});
+        await page.locator('.cp-field-section[data-field="script"] summary').click();await requested;
+        await page.getByRole('button',{name:'Reload',exact:true}).click();await openField(page);
+        await oldRoute.fulfill({contentType:'application/json',body:'{"result":[]}'}).catch(()=>{});
+        assert.equal(api.calls(),2);
+        assert.equal(await page.evaluate(()=>window.creditOptions.at(-1).model.text),'one();\nthree();');
+        assert.equal(await page.locator('.cp-field-section[data-field="script"] [id$="-field-retry"]').isVisible(),false);
+    }finally{await browser.close();}
+});
+
+test('whitespace popover recalculates open fields and Statistics from the cache and preserves code',async()=>{
+    const browser=await chromium.launch({headless:true});
+    try{
+        const page=await browser.newPage();
+        const api=await tableApiFixture(page,{respond:async(route,entries)=>{
+            const rows=structuredClone(entries);
+            rows[1].payload=rows[1].payload.replace('one();\nthree();',' one();\ntwo( );  ');
+            await route.fulfill({contentType:'application/json',body:JSON.stringify({result:rows})});
+        }});
+        const field=await openField(page);
+        const authors=()=>part(field,'cp-attribution').locator('.cp-origin .cp-cell-text').allTextContents();
+        assert.deepEqual(await authors(),['Earlier author','Earlier author']);
+        await page.getByRole('button',{name:'Statistics',exact:true}).click();
+        await page.waitForFunction(()=>document.querySelectorAll('.cp-stats-board li').length>0);
+        const totals=await page.locator('.cp-stats-facts dd').allTextContents();
+        await page.getByRole('button',{name:'Whitespace settings',exact:true}).click();
+        const popover=page.getByRole('dialog',{name:'Attribution and Statistics whitespace settings'});
+        assert.equal(await popover.locator('input:checked').inputValue(),'all');
+        await popover.getByLabel('Show all changes',{exact:true}).check();
+        await openField(page);
+        await page.waitForFunction(()=>document.querySelectorAll('.cp-stats-board li').length>0);
+        assert.deepEqual(await authors(),['Developer','Developer']);
+        assert.notDeepEqual(await page.locator('.cp-stats-facts dd').allTextContents(),totals);
+        assert.equal(new URL(page.url()).searchParams.get('sysparm_whitespace'),'none');
+        assert.equal(api.calls(),1);
+        assert.equal(await page.evaluate(()=>window.creditOptions.at(-1).model.text),' one();\ntwo( );  ');
+        assert.equal(await page.locator('.cp-field-section[open]').count(),1);
+        // Opening a field can move focus away; reopen only when needed.
+        if(!await popover.isVisible())await page.getByRole('button',{name:'Whitespace settings',exact:true}).click();
+        await popover.getByLabel('Ignore whitespace when comparing lines',{exact:true}).check();
+        await openField(page);
+        assert.deepEqual(await authors(),['Earlier author','Earlier author']);
+        assert.equal(new URL(page.url()).searchParams.has('sysparm_whitespace'),false);
+        assert.equal(api.calls(),1);
+        if(!await popover.isVisible())await page.getByRole('button',{name:'Whitespace settings',exact:true}).click();
+        await page.keyboard.press('Escape');
+        assert.equal(await popover.isVisible(),false);
+        assert.equal(await page.getByRole('button',{name:'Whitespace settings',exact:true}).evaluate(n=>n===document.activeElement),true);
+        await page.setViewportSize({width:390,height:844});
+        await page.getByRole('button',{name:'Whitespace settings',exact:true}).click();
+        const box=await popover.boundingBox();assert.ok(box.x>=0 && box.x+box.width<=390);
+        await page.locator('.dc-title').click();await settle(page);assert.equal(await popover.isVisible(),false);
+    }finally{await browser.close();}
+});
+
+test('long leaderboards scroll independently with their headings fixed at the top',async()=>{
+    const browser=await chromium.launch({headless:true});
+    try{
+        const page=await browser.newPage();await initialise(page);
+        await page.evaluate(()=>{
+            window.GlideAjax=function(){this.addParam=()=>{};this.getXMLAnswer=callback=>callback(JSON.stringify({success:true,ageDays:1,founder:'Ada',updateSetCount:100,contributorCount:100,added:100,removed:0,creators:Array.from({length:100},(_,i)=>({name:'Contributor '+i,added:100-i})),destroyers:[],creatorSets:[],destroyerSets:[]}));};
+        });
+        await page.getByRole('button',{name:'Statistics',exact:true}).click();await settle(page);
+        const board=page.locator('.cp-stats-board').first();
+        assert.equal(await board.locator('li').count(),100);
+        assert.equal(await board.evaluate(n=>n.clientHeight<n.scrollHeight && n.getBoundingClientRect().height<=innerHeight*.75+1),true);
+        await board.focus();await page.keyboard.press('End');
+        await page.waitForFunction(()=>document.querySelector('.cp-stats-board').scrollTop>0);
+        assert.equal(await board.evaluate(n=>Math.abs(n.querySelector('h3').getBoundingClientRect().top-n.getBoundingClientRect().top-1)<2),true);
+        assert.equal(await page.locator('.cp-stats-board').nth(1).evaluate(n=>n.scrollTop),0);
+    }finally{await browser.close();}
 });

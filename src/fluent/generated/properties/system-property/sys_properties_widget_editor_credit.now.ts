@@ -28,7 +28,7 @@ export const creditMaxHistoryCharsProperty = Property({
     name: 'monaco.plus.credit.max_history_chars',
     type: 'integer',
     value: '100000000',
-    description: 'Maximum historical XML characters parsed per Credit+ field request or statistics batch. Remaining code is displayed with partial attribution when exceeded.',
+    description: 'Maximum extracted code characters retained in the Credit+ browser history cache; the selected snapshot is always retained. Also limits XML read per legacy server snapshot batch or reusable attribution request.',
     ignoreCache: true,
     roles: { read: ['admin'], write: ['admin'] },
 })
@@ -50,7 +50,7 @@ export const creditDiffWorkProperty = Property({
     name: 'monaco.plus.credit.diff_work',
     type: 'integer',
     value: '20000000',
-    description: 'Maximum matching operations per Credit+ field request or statistics comparison. Matching stops conservatively with partial results when exceeded.',
+    description: 'Maximum matching operations per Credit+ browser comparison (or reusable server attribution request). Matching stops conservatively with partial results when exceeded.',
     ignoreCache: true,
     roles: { read: ['admin'], write: ['admin'] },
 })
@@ -61,7 +61,7 @@ export const creditRequestTimeoutSecondsProperty = Property({
     name: 'monaco.plus.credit.request_timeout_seconds',
     type: 'integer',
     value: '180',
-    description: 'Browser timeout in seconds for each Credit+ request. Statistics use separate requests for each batch.',
+    description: 'Browser timeout in seconds for Credit+ Table API requests, field/statistics loading and worker calculations.',
     ignoreCache: true,
     roles: { read: ['admin'], write: ['admin'] },
 })
@@ -72,7 +72,7 @@ export const creditStatisticsBatchSizeProperty = Property({
     name: 'monaco.plus.credit.statistics_batch_size',
     type: 'integer',
     value: '10',
-    description: 'Maximum Customer Updates processed per Credit+ statistics request. Smaller batches reduce request duration. Batches also stop after approximately five seconds between snapshots.',
+    description: 'Maximum Customer Updates loaded per legacy Credit+ server field or statistics batch. Smaller batches reduce server request duration. Table API retrieval uses up to 100 records per request.',
     ignoreCache: true,
     roles: { read: ['admin'], write: ['admin'] },
 })

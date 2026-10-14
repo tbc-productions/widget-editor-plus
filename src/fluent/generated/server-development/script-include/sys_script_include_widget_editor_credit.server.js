@@ -52,7 +52,10 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                     this.getParameter('sysparm_field'),
                     this.getParameter('sysparm_table'),
                     this.getParameter('sysparm_record'),
-                    this.getParameter('sysparm_context') === 'true'
+                    String(this.getParameter('sysparm_context')) === 'true',
+                    String(this.getParameter('sysparm_snapshots')) === 'true'
+                        ? { cursor: this.getParameter('sysparm_cursor'), key: this.getParameter('sysparm_history_key') }
+                        : null
                 )
             );
         } catch (e) {
@@ -63,7 +66,10 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     getStatistics: function () {
         if (!gs.hasRole('admin')) return JSON.stringify({ success: false, error: 'Administrator access is required.' });
         try {
-            var selected = this._customerUpdate(this.getParameter('sysparm_update')),
+            var metadataOnly = String(this.getParameter('sysparm_context')) === 'true',
+                exportSnapshots = String(this.getParameter('sysparm_snapshots')) === 'true',
+                snapshots = [],
+                selected = this._customerUpdate(this.getParameter('sysparm_update')),
                 target = this._payload(selected),
                 fields = this._fields(target.table),
                 name = String(selected.getValue('name') || '');
@@ -75,7 +81,7 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 throw new Error('Invalid statistics cursor.');
             var start = Number(cursor),
                 historyKey = this._historyKey(history);
-            if (start && this.getParameter('sysparm_history_key') !== historyKey)
+            if (start && String(this.getParameter('sysparm_history_key') || '') !== historyKey)
                 throw new Error('Customer Updates changed while loading statistics. Retry statistics.');
             var authors = Object.create(null),
                 sets = [],
@@ -91,7 +97,7 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 removed = 0,
                 partial = !!history.partial,
                 began = Date.now();
-            if (start) {
+            if (start && !exportSnapshots) {
                 var prior = this._loadEntry(history[start - 1], budget);
                 if (!prior) partial = true;
                 if (prior && (prior.table !== target.table || prior.id !== target.id))
@@ -105,7 +111,7 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                           );
                 }, this);
             }
-            var end = Math.min(history.length, start + this._limits().statistics_batch_size),
+            var end = metadataOnly ? start : Math.min(history.length, start + this._limits().statistics_batch_size),
                 h = start;
             for (; h < end; h++) {
                 if (h > start && Date.now() - began >= 5000) break;
@@ -123,6 +129,10 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                     removed: 0,
                 };
                 sets.push(set);
+                if (exportSnapshots) {
+                    snapshots.push(this._codeSnapshot(entry, parsed, fields));
+                    continue;
+                }
                 for (var f = 0; f < fields.length; f++) {
                     var field = fields[f].name;
                     if (
@@ -198,6 +208,15 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                     : '';
                 creationSource = 'record';
             }
+            if (metadataOnly) {
+                var requestedAuthors = JSON.parse(String(this.getParameter('sysparm_authors') || '[]'));
+                if (!Array.isArray(requestedAuthors) || requestedAuthors.length > this._limits().max_updates + 1)
+                    throw new Error('Invalid contributor list.');
+                requestedAuthors.forEach(function (name) {
+                    if (typeof name !== 'string' || name.length > 256) throw new Error('Invalid contributor.');
+                    authors[name] = { name: name, added: 0, removed: 0 };
+                });
+            }
             var userNames = Object.keys(authors),
                 userIds = Object.create(null);
             if (founder && userNames.indexOf(founder) === -1) userNames.push(founder);
@@ -253,12 +272,65 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 gaps: gaps,
                 partial: partial,
                 fieldTotals: fieldTotals,
-                nextCursor: h < history.length ? String(h) : '',
+                snapshots: exportSnapshots ? snapshots : undefined,
+                fields: exportSnapshots ? fields : undefined,
+                limits: exportSnapshots ? this._limits() : undefined,
+                nextCursor: !metadataOnly && h < history.length ? String(h) : '',
                 historyKey: historyKey,
             });
         } catch (e) {
             return JSON.stringify({ success: false, error: e.message });
         }
+    },
+
+    _codeSnapshot: function (entry, parsed, fields) {
+        var values = Object.create(null);
+        fields.forEach(function (field) {
+            values[field.name] =
+                !parsed ||
+                (parsed.action !== 'DELETE' && !Object.prototype.hasOwnProperty.call(parsed.values, field.name))
+                    ? null
+                    : parsed.action === 'DELETE'
+                      ? ''
+                      : String(parsed.values[field.name]).replace(/\r\n?/g, '\n');
+        });
+        return { id: entry.id, author: entry.author, time: entry.time, updateSet: entry.updateSet, values: values };
+    },
+
+    _fieldSnapshotBatch: function (history, target, context, field, batch) {
+        var key = this._historyKey(history),
+            cursor = String(batch.cursor || '0');
+        var selectedIndex = history.findIndex(function (entry) {
+            return entry.id === context.selected;
+        });
+        if (!/^\d+$/.test(cursor) || Number(cursor) > selectedIndex) throw new Error('Invalid field cursor.');
+        if (Number(cursor) && String(batch.key || '') !== key)
+            throw new Error('Customer Updates changed while loading this field. Retry the field.');
+        var start = Number(cursor),
+            end = Math.min(selectedIndex + 1, start + this._limits().statistics_batch_size),
+            budget = { chars: 0 },
+            snapshots = [],
+            began = Date.now(),
+            h = start;
+        for (; h < end; h++) {
+            if (h > start && Date.now() - began >= 5000) break;
+            var entry = history[h],
+                parsed = entry.id === context.selected ? target : this._loadEntry(entry, budget);
+            if (parsed && (parsed.table !== target.table || parsed.id !== target.id))
+                throw new Error('History payloads identify different records.');
+            if (entry.id === context.selected) {
+                entry.author = String((target.action !== 'DELETE' && target.values.sys_updated_by) || entry.author);
+                entry.time = String((target.action !== 'DELETE' && target.values.sys_updated_on) || entry.orderTime);
+            }
+            snapshots.push(this._codeSnapshot(entry, parsed, [{ name: field }]));
+        }
+        return Object.assign(context, {
+            field: field,
+            snapshots: snapshots,
+            limits: this._limits(),
+            historyKey: key,
+            nextCursor: h <= selectedIndex ? String(h) : '',
+        });
     },
 
     getComparison: function () {
@@ -398,7 +470,7 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     },
 
     // Reusable server entry point; helpers beginning with _ cannot be called through GlideAjax.
-    buildUpdate: function (updateId, field, table, recordId, metadataOnly) {
+    buildUpdate: function (updateId, field, table, recordId, metadataOnly, batch) {
         if (!gs.hasRole('admin')) throw new Error('Administrator access is required.');
         updateId = String(updateId || '').toLowerCase();
         var history;
@@ -455,9 +527,13 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             }),
         };
         // The collapsed viewer needs metadata only; calculate code attribution when a field is expanded.
-        if (metadataOnly) return context;
+        if (metadataOnly) {
+            context.tableApi = { name: name, key: this._historyKey(history), history: history, limits: this._limits() };
+            return context;
+        }
         if (!selectedDeleted && !Object.prototype.hasOwnProperty.call(target.values, field))
             throw new Error('This script field is absent from the selected payload.');
+        if (batch) return this._fieldSnapshotBatch(history, target, context, field, batch);
         var snapshots = [],
             warnings = [];
         var previous = [],
@@ -625,6 +701,12 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 orderTime: String(record.getValue('sys_updated_on') || record.getValue('sys_created_on') || ''),
                 created: String(record.getValue('sys_created_on') || ''),
                 revision: Number(record.getValue('sys_mod_count') || 0),
+                updateSetId: record.getElement('update_set').canRead()
+                    ? String(record.getValue('update_set') || '')
+                    : '',
+                remoteUpdateSetId: record.getElement('remote_update_set').canRead()
+                    ? String(record.getValue('remote_update_set') || '')
+                    : '',
                 author: String(record.getValue('sys_updated_by') || record.getValue('sys_created_by') || 'Unknown'),
                 updateSet: reference,
             };
@@ -666,7 +748,14 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         var left = 2166136261,
             right = 5381;
         history.forEach(function (entry) {
-            var text = entry.id + entry.orderTime + entry.created + entry.revision;
+            var text =
+                entry.id +
+                entry.orderTime +
+                entry.created +
+                entry.revision +
+                entry.updateSetId +
+                ':' +
+                entry.remoteUpdateSetId;
             for (var i = 0; i < text.length; i++) {
                 left = Math.imul(left ^ text.charCodeAt(i), 16777619);
                 right = Math.imul(right, 33) ^ text.charCodeAt(i);
@@ -745,151 +834,7 @@ WidgetEditorCredit.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     },
 
     _match: function (oldLines, newLines, budget) {
-        var a = oldLines.map(function (line) {
-            return line.replace(/\s/g, '');
-        });
-        var b = newLines.map(function (line) {
-            return line.replace(/\s/g, '');
-        });
-        var n = a.length,
-            m = b.length,
-            map = [],
-            used = [],
-            i,
-            j;
-        var begin = 0,
-            oldEnd = n,
-            newEnd = m;
-        while (begin < oldEnd && begin < newEnd && a[begin] === b[begin]) {
-            map[begin] = begin;
-            used[begin] = true;
-            begin++;
-        }
-        while (oldEnd > begin && newEnd > begin && a[oldEnd - 1] === b[newEnd - 1]) {
-            oldEnd--;
-            newEnd--;
-            map[newEnd] = oldEnd;
-            used[oldEnd] = true;
-        }
-        if (begin === n && begin === m) return map;
-        if (n > this._limits().max_lines || m > this._limits().max_lines) {
-            map.partial = true;
-            return map;
-        }
-        if (!n || !m) return map;
-        var positions = Object.create(null);
-        for (i = begin; i < oldEnd; i++) (positions[a[i]] || (positions[a[i]] = [])).push(i);
-        // Sparse LCS (Hunt–Szymanski) avoids allocating an old-lines × new-lines matrix.
-        var tails = [],
-            chains = [],
-            exhausted = false;
-        for (j = begin; j < newEnd; j++) {
-            var candidates = positions[b[j]] || [];
-            for (var c = candidates.length - 1; c >= 0; c--) {
-                if (--budget.remaining < 0) {
-                    exhausted = true;
-                    break;
-                }
-                var oldIndex = candidates[c],
-                    low = 0,
-                    high = tails.length;
-                while (low < high) {
-                    var middle = (low + high) >>> 1;
-                    if (tails[middle] < oldIndex) low = middle + 1;
-                    else high = middle;
-                }
-                if (tails[low] === oldIndex) continue;
-                // Account for retained traceback links as well as candidate comparisons.
-                if ((budget.remaining -= 32) < 0) {
-                    exhausted = true;
-                    break;
-                }
-                tails[low] = oldIndex;
-                chains[low] = { old: oldIndex, next: j, previous: low ? chains[low - 1] : null };
-            }
-            if (exhausted) break;
-        }
-        var chain = chains[chains.length - 1];
-        while (chain) {
-            map[chain.next] = chain.old;
-            used[chain.old] = true;
-            chain = chain.previous;
-        }
-        // Keep repeated closing delimiters with their moved code rather than a suffix anchor.
-        var inverse = [];
-        map.forEach(function (oldIndex, newIndex) {
-            inverse[oldIndex] = newIndex;
-        });
-        for (j = 0; j + 1 < m; j++) {
-            i = map[j];
-            if (i === undefined || !/\w/.test(b[j]) || /\w/.test(b[j + 1]) || a[i + 1] !== b[j + 1]) continue;
-            var displaced = inverse[i + 1],
-                oldNext = map[j + 1];
-            if (oldNext === i + 1) continue;
-            if (displaced !== undefined) {
-                delete map[displaced];
-            }
-            if (oldNext !== undefined) {
-                used[oldNext] = false;
-                delete inverse[oldNext];
-            }
-            map[j + 1] = i + 1;
-            used[i + 1] = true;
-            inverse[i + 1] = j + 1;
-        }
-        // Moved blocks use indexed candidates; a source line can never credit a second copy.
-        while (!exhausted) {
-            var best = null;
-            for (j = 0; j < m; j++) {
-                if (map[j] !== undefined) continue;
-                var candidates = positions[b[j]] || [];
-                for (var c = 0; c < candidates.length; c++) {
-                    if (--budget.remaining < 0) {
-                        exhausted = true;
-                        break;
-                    }
-                    i = candidates[c];
-                    if (used[i]) continue;
-                    var length = 0,
-                        score = 0;
-                    while (
-                        i + length < n &&
-                        j + length < m &&
-                        !used[i + length] &&
-                        map[j + length] === undefined &&
-                        a[i + length] === b[j + length]
-                    ) {
-                        if (--budget.remaining < 0) {
-                            exhausted = true;
-                            break;
-                        }
-                        score += a[i + length].length;
-                        length++;
-                    }
-                    if (exhausted) break;
-                    if (length >= 2 && score >= 20 && (!best || score > best.score))
-                        best = { i: i, j: j, length: length, score: score };
-                }
-                if (exhausted) break;
-            }
-            if (!best || exhausted) break;
-            for (var k = 0; k < best.length; k++) {
-                map[best.j + k] = best.i + k;
-                used[best.i + k] = true;
-            }
-        }
-        var oldOccurrences = Object.create(null),
-            newOccurrences = Object.create(null);
-        for (i = 0; i < n; i++)
-            if (!used[i] && /\w/.test(a[i])) (oldOccurrences[a[i]] || (oldOccurrences[a[i]] = [])).push(i);
-        for (j = 0; j < m; j++)
-            if (map[j] === undefined && /\w/.test(b[j])) (newOccurrences[b[j]] || (newOccurrences[b[j]] = [])).push(j);
-        Object.keys(newOccurrences).forEach(function (line) {
-            if (oldOccurrences[line] && oldOccurrences[line].length === 1 && newOccurrences[line].length === 1)
-                map[newOccurrences[line][0]] = oldOccurrences[line][0];
-        });
-        if (exhausted) map.partial = true;
-        return map;
+        return new WidgetEditorCreditEngine(this._limits()).match(oldLines, newLines, budget);
     },
 
     type: 'WidgetEditorCredit',

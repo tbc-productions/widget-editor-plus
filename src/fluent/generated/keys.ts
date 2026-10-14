@@ -400,6 +400,10 @@ declare global {
                         table: 'sys_properties_category_m2m'
                         id: 'f859e75689574b2c8eda84762cb68ce0'
                     }
+                    'widget-editor-credit-engine': {
+                        table: 'sys_script_include'
+                        id: 'dad3034ba974421381b14ddcaeeac448'
+                    }
                     'widget-editor-credit-max-history-chars': {
                         table: 'sys_properties'
                         id: 'dbade29a639a44fca930dae6702466e5'
@@ -447,6 +451,10 @@ declare global {
                     'widget-editor-credit-statistics-batch-size-category': {
                         table: 'sys_properties_category_m2m'
                         id: '4b20f8087295466996ffd2f2f7a40e37'
+                    }
+                    'widget-editor-credit-worker': {
+                        table: 'sys_ui_script'
+                        id: '3d7b432692da4fe38a9764ef2a74f8a9'
                     }
                     'widget-editor-diff-module': {
                         table: 'sys_app_module'

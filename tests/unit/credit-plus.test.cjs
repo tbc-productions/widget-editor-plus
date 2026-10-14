@@ -107,7 +107,7 @@ function harness(entries = [], admin = true, scriptFields = ['script', 'client_s
             this.next = () => { current = filtered[i++]; return !!current; };
         }
     };
-    vm.runInNewContext(source, context);
+    vm.runInNewContext(fs.readFileSync('src/fluent/generated/server-development/script-include/sys_script_include_widget_editor_credit_engine.server.js', 'utf8') + '\n' + source, context);
     const api = context.WidgetEditorCredit.prototype;
     api.getParameter = name => name === 'sysparm_update' ? entries.at(-1)?.sys_id : '';
     return { api, queries };
@@ -673,4 +673,180 @@ test('moving multiple functions keeps repeated closing delimiters with their ori
         assert.equal(mapping.filter(index => index !== undefined).length,moved.length);
         mapping.forEach((oldIndex,newIndex) => assert.equal(original[oldIndex],moved[newIndex]));
     }
+});
+
+test('statistics continuation accepts string-wrapper parameters from the platform', () => {
+    const { api } = harness([update(0, 'one();'), update(1, 'one();\ntwo();')], true, ['script'], [], {
+        properties: { 'monaco.plus.credit.statistics_batch_size': '1' }
+    });
+    api.getParameter = key => key === 'sysparm_update' ? ids[1] : '';
+    const first = JSON.parse(api.getStatistics());
+    assert.equal(first.nextCursor, '1');
+    api.getParameter = key => ({
+        sysparm_update: ids[1], sysparm_cursor: '1', sysparm_history_key: new String(first.historyKey)
+    })[key] || '';
+    const second = JSON.parse(api.getStatistics());
+    assert.equal(second.success, true, second.error);
+    assert.equal(second.nextCursor, '');
+    assert.equal(second.added, 1);
+});
+
+test('repeated-line matching remains complete across 100 large Customer Updates within the default budget', () => {
+    const entries = [], history = [];
+    for (let revision = 0; revision < 100; revision++) {
+        let blocks = Array.from({length:350 + revision % 12}, (_, i) =>
+            'function f' + i + '() {\n    return ' + (i + (i % 17 === revision % 17 ? revision : 0)) + ';\n}');
+        if (revision % 9 === 0) blocks = blocks.slice(20).concat(blocks.slice(0,20));
+        let code = blocks.join('\n');
+        if (revision && revision % 13 === 0) code = history[revision - 6];
+        else if (revision && revision % 10 === 2) code = history[revision - 1].replace(/    /g,'  ');
+        history.push(code);
+        entries.push(update(0,code,{sys_id:revision.toString(16).padStart(32,'0'),sys_updated_on:String(revision).padStart(4,'0')}));
+    }
+    const result = harness(entries,true,['script']).api.buildUpdate(entries.at(-1).sys_id,'script');
+    assert.equal(result.updates.length,100);
+    assert.deepEqual(plain(result.warnings),[]);
+    assert.equal(result.lines.map(line => line.text).join('\n'),history.at(-1));
+    assert.ok(result.lines.every(line => line.update));
+});
+
+test('dense repeated-line diffs retain at least the optimal ordered matches without reusing a source', () => {
+    const {api} = harness();
+    let seed = 197;
+    const random = () => (seed = seed * 16807 % 2147483647);
+    for (let run = 0; run < 80; run++) {
+        const before = Array.from({length:80 + random() % 30}, () => 'repeat' + random() % 3 + '();');
+        const after = Array.from({length:80 + random() % 30}, () => 'repeat' + random() % 3 + '();');
+        const lcs = Array(after.length + 1).fill(0);
+        for (const line of before) {
+            let diagonal = 0;
+            for (let j = 1; j <= after.length; j++) {
+                const prior = lcs[j];
+                lcs[j] = line === after[j-1] ? diagonal + 1 : Math.max(lcs[j],lcs[j-1]);
+                diagonal = prior;
+            }
+        }
+        const map = api._match(before,after,{remaining:2000000});
+        const sources = [...map].filter(index => index !== undefined);
+        assert.equal(map.partial,undefined);
+        assert.ok(sources.length >= lcs.at(-1));
+        assert.equal(new Set(sources).size,sources.length);
+        map.forEach((i,j) => assert.equal(before[i],after[j]));
+    }
+});
+
+test('reassigned Customer Updates use their current update set reference, including continuation validation', () => {
+    const sets = [{id:'1'.repeat(32),table:'sys_update_set',name:'Original'}, {id:'2'.repeat(32),table:'sys_update_set',name:'Destination'}];
+    const entries = [update(0,'one();'),update(1,'one();\ntwo();')];
+    const {api} = harness(entries,true,['script'],sets);
+    const before = api._historyKey(api._customerUpdates(entries[0].name,ids[1]));
+    entries[0].update_set = sets[1].id;
+    entries[0].sys_mod_count = '2';
+    const result = api.buildUpdate(ids[1],'script');
+    assert.equal(result.updates[0].updateSet.id,sets[1].id);
+    assert.equal(result.lines[0].update,ids[0]);
+    assert.notEqual(api._historyKey(api._customerUpdates(entries[0].name,ids[1])),before);
+});
+
+function browserEngine(limits) {
+    const context = {};
+    vm.runInNewContext(fs.readFileSync('src/fluent/generated/server-development/script-include/sys_script_include_widget_editor_credit_engine.server.js', 'utf8'),context);
+    return new context.WidgetEditorCreditEngine(limits);
+}
+
+test('field snapshot batches perform no server matching and the worker retains attribution across batches', () => {
+    const entries = [update(0,'one();\ntwo();'),update(1,' one();\nchanged();'),update(2,'future();')];
+    const {api} = harness(entries,true,['script'],[],{properties:{'monaco.plus.credit.statistics_batch_size':'1'}});
+    const expected = plain(api.buildUpdate(ids[1],'script'));
+    api._match = () => assert.fail('Snapshot transport must not match on the server');
+    let cursor='0', key='', result, engine;
+    do {
+        api.getParameter = name => ({sysparm_update:ids[1],sysparm_field:'script',sysparm_snapshots:'true',sysparm_cursor:cursor,sysparm_history_key:key})[name] || '';
+        const batch=JSON.parse(api.getCredit());
+        assert.equal(batch.success,true,batch.error);
+        assert.equal(batch.snapshots.length,1);
+        assert.deepEqual(Object.keys(batch.snapshots[0].values),['script']);
+        assert.equal(JSON.stringify(batch).includes('Companion code'),false);
+        engine ||= browserEngine(batch.limits);
+        result=engine.process('credit',batch);
+        cursor=result.nextCursor; key=result.historyKey;
+    } while(cursor);
+    assert.deepEqual(plain(result.lines),expected.lines);
+    assert.equal(result.updates.length,2);
+    assert.deepEqual(plain(result.warnings),[]);
+});
+
+test('field continuation rejects reassignment even if timestamps and modification counts were suppressed', () => {
+    const sets=[{id:'1'.repeat(32),table:'sys_update_set',name:'First'},{id:'2'.repeat(32),table:'sys_update_set',name:'Second'}];
+    const entries=[update(0,'one();'),update(1,'two();')];
+    const {api}=harness(entries,true,['script'],sets,{properties:{'monaco.plus.credit.statistics_batch_size':'1'}});
+    const first=api.buildUpdate(ids[1],'script','','',false,{cursor:'0'});
+    entries[0].update_set=sets[1].id;
+    assert.throws(()=>api.buildUpdate(ids[1],'script','','',false,{cursor:'1',key:first.historyKey}),/changed/);
+    assert.throws(()=>api.buildUpdate(ids[1],'script','','',false,{cursor:'-1'}),/cursor/);
+    assert.throws(()=>api.buildUpdate(ids[1],'description','','',false,{cursor:'0'}),/script field/);
+});
+
+test('statistics snapshot batches defer matching, count reverts once, and preserve missing-history gaps', () => {
+    const entries=[update(0,'one();'),update(1,'two();'),update(2,'one();')];
+    const {api}=harness(entries,true,['script'],[],{properties:{'monaco.plus.credit.statistics_batch_size':'1'}});
+    api._match=()=>assert.fail('Statistics transport must not match on the server');
+    let cursor='0',key='',engine,added=0,removed=0;
+    do {
+        api.getParameter=name=>({sysparm_update:ids[2],sysparm_snapshots:'true',sysparm_cursor:cursor,sysparm_history_key:key})[name]||'';
+        const batch=JSON.parse(api.getStatistics());
+        assert.equal(batch.success,true,batch.error);
+        assert.equal(batch.added,0);
+        engine ||= browserEngine(batch.limits);
+        const result=engine.process('statistics',batch);
+        added+=result.added; removed+=result.removed;
+        assert.equal(result.partial,false);
+        cursor=result.nextCursor; key=result.historyKey;
+    } while(cursor);
+    assert.equal(added,3); assert.equal(removed,2);
+    const limits=api._limits(), gapEngine=browserEngine(limits);
+    function batch(value) {return {fields:[{name:'script'}],snapshots:[{id:ids[0],author:'a',values:{script:value}}],creators:[{name:'a',added:0,removed:0}],fieldTotals:[{name:'Script',added:0,removed:0}],added:0,removed:0,gaps:0,partial:false};}
+    gapEngine.process('statistics',batch('one();'));
+    assert.equal(gapEngine.process('statistics',batch(null)).partial,true);
+    assert.equal(gapEngine.process('statistics',batch('unknown();')).added,0);
+});
+
+test('Table API context supplies authorised ordered IDs, raw set references and limits without history matching',()=>{
+    const entries=[update(0,'one();'),update(1,'two();')];
+    const {api}=harness(entries);
+    api._match=()=>assert.fail('context must not match');
+    const context=api.buildUpdate(entries[1].sys_id,'','','',true);
+    assert.equal(context.tableApi.name,'sp_widget_'+recordId);
+    assert.deepEqual(Array.from(context.tableApi.history,e=>e.id),entries.map(e=>e.sys_id));
+    assert.equal(context.tableApi.history[0].updateSetId,entries[0].update_set);
+    assert.equal(context.tableApi.limits.max_history_chars,100000000);
+    assert.equal(context.tableApi.history.some(e=>'payload' in e),false);
+    assert.throws(()=>harness(entries,false).api.buildUpdate(entries[1].sys_id,'','','',true),/Administrator/);
+});
+
+test('statistics context resolves browser contributors without comparing history',()=>{
+    const entries=[update(0,'one();'),update(1,'two();')];const {api}=harness(entries);
+    api.getParameter=name=>({sysparm_update:entries[1].sys_id,sysparm_context:'true',sysparm_authors:'["original","second"]'})[name]||'';
+    api._match=()=>assert.fail('context must not match');
+    const stats=JSON.parse(api.getStatistics());
+    assert.equal(stats.success,true);assert.equal(stats.nextCursor,'');assert.equal(stats.added,0);
+    assert.deepEqual(stats.creators.map(a=>a.name),['original','second']);
+    api.getParameter=name=>({sysparm_update:entries[1].sys_id,sysparm_context:'true',sysparm_authors:'{}'})[name]||'';
+    assert.match(JSON.parse(api.getStatistics()).error,/Invalid contributor/);
+});
+
+test('whitespace modes distinguish spacing, indentation and trailing whitespace without stale keys', () => {
+    const oldLines=['  alpha(  beta );  ', 'gamma();'];
+    const newLines=['\talpha( beta );', 'gamma( );'];
+    const limits={max_lines:50000,diff_work:20000000};
+    for(const [mode,expected] of [['all',[0,1]],['none',[undefined,undefined]],['changes',[0,undefined]],['eol',[undefined,undefined]]]) {
+        const engine=browserEngine(limits);engine.whitespace=mode;
+        const result=engine.match(oldLines,newLines,{remaining:limits.diff_work});
+        assert.deepEqual([result[0],result[1]],expected,mode);
+    }
+    const engine=browserEngine(limits);engine.whitespace='eol';
+    assert.equal(engine.match(['alpha();  '],['alpha();\t'],{remaining:limits.diff_work})[0],0);
+    engine.whitespace='none';
+    assert.equal(engine.match(['alpha();  '],['alpha();\t'],{remaining:limits.diff_work})[0],undefined);
+    assert.deepEqual(oldLines.slice(),['  alpha(  beta );  ', 'gamma();']);
 });

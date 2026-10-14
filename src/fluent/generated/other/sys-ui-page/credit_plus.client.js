@@ -32,6 +32,57 @@
                     isFinite(Number(config.requestTimeout)) && Number(config.requestTimeout) > 0
                         ? Math.min(Number(config.requestTimeout), 2147483000)
                         : 180000;
+                ctrl.whitespaceOptions = [
+                    { value: 'none', label: 'Show all changes' },
+                    { value: 'all', label: 'Ignore whitespace when comparing lines' },
+                    { value: 'changes', label: 'Ignore changes in amount of whitespace' },
+                    { value: 'eol', label: 'Ignore changes in whitespace at EOL' },
+                ];
+                ctrl.whitespaceMode = params.get('sysparm_whitespace') || 'all';
+                if (
+                    !ctrl.whitespaceOptions.some(function (option) {
+                        return option.value === ctrl.whitespaceMode;
+                    })
+                )
+                    ctrl.whitespaceMode = 'all';
+                ctrl.whitespaceOpen = false;
+                ctrl.toggleWhitespace = function () {
+                    ctrl.whitespaceOpen = !ctrl.whitespaceOpen;
+                    if (ctrl.whitespaceOpen)
+                        $scope.$$postDigest(function () {
+                            document.querySelector('#cp-whitespace-popover input:checked').focus();
+                        });
+                };
+                function closeWhitespace(restoreFocus) {
+                    if (!ctrl.whitespaceOpen) return;
+                    ctrl.whitespaceOpen = false;
+                    if (restoreFocus) document.getElementById('cp-whitespace-button').focus();
+                    changed();
+                }
+                listen(document, 'click', function (event) {
+                    if (!event.target.closest('#cp-whitespace-control')) closeWhitespace(false);
+                });
+                listen(document, 'focusin', function (event) {
+                    if (!event.target.closest('#cp-whitespace-control')) closeWhitespace(false);
+                });
+                listen(document, 'keydown', function (event) {
+                    if (event.key === 'Escape' && ctrl.whitespaceOpen) {
+                        event.preventDefault();
+                        closeWhitespace(true);
+                    }
+                });
+                ctrl.changeWhitespace = function () {
+                    closeMenu(false);
+                    fieldViews.forEach(function (view) {
+                        view.recalculate();
+                    });
+                    var statisticsOpen = ctrl.statistics.open;
+                    resetStatistics();
+                    ctrl.statistics.open = statisticsOpen;
+                    if (statisticsOpen) loadStatistics();
+                    updateUrl();
+                    updateTitle();
+                };
                 var openStatisticsOnLoad = params.get('sysparm_statistics') === 'true';
                 var launchUrl = window.location.pathname.substring(1) + window.location.search,
                     notifiedTitle = '',
@@ -53,6 +104,256 @@
                     titleTimer,
                     contextTimer;
 
+                var historyCache;
+                function clearHistory() {
+                    if (historyCache) {
+                        historyCache.cancelled = true;
+                        historyCache.requests.forEach(function (request) {
+                            request.abort();
+                        });
+                    }
+                    historyCache = null;
+                }
+                function tableApi(path, query, cache) {
+                    return new Promise(function (resolve, reject) {
+                        var xhr = new XMLHttpRequest();
+                        cache.requests.push(xhr);
+                        xhr.open('GET', '/api/now/table/' + path + '?' + query.toString());
+                        xhr.setRequestHeader('Accept', 'application/json');
+                        if (window.g_ck) xhr.setRequestHeader('X-UserToken', window.g_ck);
+                        xhr.timeout = requestTimeout;
+                        function finish(error, result) {
+                            var index = cache.requests.indexOf(xhr);
+                            if (index !== -1) cache.requests.splice(index, 1);
+                            if (error) reject(error);
+                            else resolve(result);
+                        }
+                        xhr.onload = function () {
+                            if (xhr.status !== 200) {
+                                finish(
+                                    new Error(
+                                        xhr.status === 401 || xhr.status === 403
+                                            ? 'Customer Update Table API access was denied. Check your session and table access.'
+                                            : 'Customer Updates could not be retrieved (HTTP ' +
+                                              xhr.status +
+                                              '). Retry the field.'
+                                    )
+                                );
+                                return;
+                            }
+                            try {
+                                var response = JSON.parse(xhr.responseText);
+                                if (!Array.isArray(response.result)) throw new Error('Invalid Table API response.');
+                                finish(null, response.result);
+                            } catch (error) {
+                                finish(error);
+                            }
+                        };
+                        xhr.onerror = function () {
+                            finish(
+                                new Error('Customer Updates could not be retrieved. Check your connection and retry.')
+                            );
+                        };
+                        xhr.ontimeout = function () {
+                            finish(new Error('Customer Update retrieval timed out. Retry the field.'));
+                        };
+                        xhr.onabort = function () {
+                            finish(new Error('History loading was cancelled.'));
+                        };
+                        if (cache.cancelled) xhr.onabort();
+                        else xhr.send();
+                    });
+                }
+                function extractSnapshot(raw, entry, context) {
+                    var snapshot = Object.assign({}, entry, { values: Object.create(null) });
+                    context.fields.forEach(function (field) {
+                        snapshot.values[field.name] = null;
+                    });
+                    if (
+                        !raw ||
+                        typeof raw.payload !== 'string' ||
+                        !raw.payload ||
+                        raw.payload.length > context.tableApi.limits.max_payload_chars ||
+                        /<!DOCTYPE|<!ENTITY/i.test(raw.payload)
+                    )
+                        return snapshot;
+                    var doc = new DOMParser().parseFromString(raw.payload, 'application/xml');
+                    if (doc.getElementsByTagName('parsererror').length) return snapshot;
+                    var root = doc.documentElement;
+                    if (!root || root.nodeName !== 'record_update') return snapshot;
+                    var table = root.getAttribute('table') || context.table;
+                    var records = Array.prototype.filter.call(root.children, function (node) {
+                        return node.nodeName === table;
+                    });
+                    if (records.length !== 1) return snapshot;
+                    var record = records[0],
+                        values = Object.create(null),
+                        duplicate = false;
+                    Array.prototype.forEach.call(record.children, function (node) {
+                        if (Object.prototype.hasOwnProperty.call(values, node.nodeName)) duplicate = true;
+                        values[node.nodeName] = node.textContent || '';
+                    });
+                    if (duplicate) return snapshot;
+                    if (table !== context.table || String(values.sys_id || '').trim() !== context.record)
+                        throw new Error('History payloads identify different records. Reload Credit+.');
+                    var deleted = record.getAttribute('action') === 'DELETE';
+                    snapshot.author = (!deleted && values.sys_updated_by) || entry.author;
+                    snapshot.time = (!deleted && values.sys_updated_on) || entry.orderTime;
+                    context.fields.forEach(function (field) {
+                        snapshot.values[field.name] = deleted
+                            ? ''
+                            : Object.prototype.hasOwnProperty.call(values, field.name)
+                              ? values[field.name].replace(/\r\n?/g, '\n')
+                              : null;
+                    });
+                    return snapshot;
+                }
+                function showLineCounts(cache) {
+                    if (!ctrl.data || !cache.snapshots || historyCache !== cache) return;
+                    var selected = cache.byId[ctrl.data.selected];
+                    if (!selected) return;
+                    ctrl.fields.forEach(function (field) {
+                        var code = selected.values[field.name];
+                        field.lineCount =
+                            typeof code === 'string' ? (code === '' ? 0 : code.split('\n').length) + ' lines' : '';
+                    });
+                    ctrl.status = '';
+                    ctrl.error = false;
+                    changed();
+                }
+                function sharedHistory(context) {
+                    var manifest = context.tableApi;
+                    var key =
+                        context.table +
+                        ':' +
+                        context.record +
+                        ':' +
+                        manifest.key +
+                        ':' +
+                        JSON.stringify([context.fields, manifest.limits]);
+                    if (historyCache && historyCache.key === key && !historyCache.dropped[context.selected])
+                        return historyCache.promise;
+                    clearHistory();
+                    var cache = (historyCache = {
+                        key: key,
+                        requests: [],
+                        cancelled: false,
+                        byId: Object.create(null),
+                        dropped: Object.create(null),
+                        partial: context.partial,
+                    });
+                    var retained = 0,
+                        offset = 0;
+                    // Retain the selected snapshot first, then the newest history within the cache budget.
+                    var entries = manifest.history.slice().reverse();
+                    var selectedIndex = entries.findIndex(function (entry) {
+                        return entry.id === context.selected;
+                    });
+                    if (selectedIndex > 0) entries.unshift(entries.splice(selectedIndex, 1)[0]);
+                    function next() {
+                        if (cache.cancelled) throw new Error('History loading was cancelled.');
+                        if (offset >= entries.length) {
+                            cache.snapshots = manifest.history.map(function (entry) {
+                                return cache.byId[entry.id];
+                            });
+                            showLineCounts(cache);
+                            return cache;
+                        }
+                        // Bound each request independently of the total history size.
+                        var batch = entries.slice(offset, offset + 100);
+                        offset += batch.length;
+                        if (
+                            batch.some(function (entry) {
+                                return !/^[0-9a-f]{32}$/.test(entry.id);
+                            })
+                        )
+                            throw new Error('Invalid Customer Update history.');
+                        var query = new URLSearchParams({
+                            sysparm_query:
+                                'sys_idIN' +
+                                batch
+                                    .map(function (entry) {
+                                        return entry.id;
+                                    })
+                                    .join(',') +
+                                '^ORDERBYsys_id',
+                            sysparm_fields:
+                                'sys_id,name,payload,sys_updated_on,sys_created_on,sys_mod_count,update_set,remote_update_set',
+                            sysparm_limit: String(batch.length),
+                            sysparm_display_value: 'false',
+                            sysparm_exclude_reference_link: 'true',
+                        });
+                        return tableApi('sys_update_xml', query, cache).then(function (rows) {
+                            if (cache.cancelled) throw new Error('History loading was cancelled.');
+                            var byId = Object.create(null);
+                            rows.forEach(function (row) {
+                                if (
+                                    byId[row.sys_id] ||
+                                    !batch.some(function (entry) {
+                                        return entry.id === row.sys_id;
+                                    })
+                                )
+                                    throw new Error('Unexpected Customer Update response.');
+                                byId[row.sys_id] = row;
+                            });
+                            batch.forEach(function (entry) {
+                                var row = byId[entry.id];
+                                if (
+                                    row &&
+                                    (row.name !== manifest.name ||
+                                        (row.sys_updated_on || row.sys_created_on || '') !== entry.orderTime ||
+                                        (row.sys_created_on || '') !== entry.created ||
+                                        Number(row.sys_mod_count || 0) !== entry.revision ||
+                                        (row.update_set || '') !== entry.updateSetId ||
+                                        (row.remote_update_set || '') !== entry.remoteUpdateSetId)
+                                )
+                                    throw new Error('Customer Updates changed while loading. Reload Credit+.');
+                                var snapshot = extractSnapshot(row, entry, context);
+                                var size = context.fields.reduce(function (total, field) {
+                                    return total + (snapshot.values[field.name] || '').length;
+                                }, 0);
+                                if (
+                                    retained + size > manifest.limits.max_history_chars &&
+                                    entry.id !== context.selected
+                                ) {
+                                    cache.dropped[entry.id] = true;
+                                    snapshot = extractSnapshot(null, entry, context);
+                                    cache.partial = true;
+                                } else retained += size;
+                                cache.byId[entry.id] = snapshot;
+                            });
+                            return next();
+                        });
+                    }
+                    cache.promise = Promise.resolve()
+                        .then(next)
+                        .catch(function (error) {
+                            if (historyCache === cache) clearHistory();
+                            throw error;
+                        });
+                    return cache.promise;
+                }
+
+                function matchBatch(worker, kind, batch, completed, failed) {
+                    worker.onmessage = function (event) {
+                        changed();
+                        if (!event.data || !event.data.success)
+                            failed((event.data || {}).error || 'Calculation failed.');
+                        else {
+                            try {
+                                completed(event.data);
+                            } catch (error) {
+                                failed(error.message || 'Calculation failed.');
+                            }
+                        }
+                    };
+                    worker.onerror = function () {
+                        failed('The browser worker could not load. Reload Credit+ and retry.');
+                    };
+                    batch.whitespace = ctrl.whitespaceMode;
+                    worker.postMessage({ kind: kind, batch: batch });
+                }
+
                 function element(tag, text, className) {
                     var node = document.createElement(tag);
                     if (text !== undefined) node.textContent = text;
@@ -62,6 +363,7 @@
 
                 var statisticsRequest = 0,
                     statisticsTimer,
+                    statisticsWorker,
                     statisticsScrollFrame;
                 ctrl.medals = ['\uD83C\uDFC6', '\uD83E\uDD48', '\uD83E\uDD49'];
                 ctrl.skeletonFacts = [0, 1, 2, 3, 4, 5, 6, 7];
@@ -87,6 +389,8 @@
                 }
                 function resetStatistics() {
                     statisticsRequest++;
+                    if (statisticsWorker) statisticsWorker.terminate();
+                    statisticsWorker = null;
                     window.clearTimeout(statisticsTimer);
                     window.cancelAnimationFrame(statisticsScrollFrame);
                     ctrl.statistics = { open: false, loading: false, loaded: false, error: '', facts: [], boards: [] };
@@ -168,6 +472,11 @@
                     ctrl.statistics.error = '';
                     changed();
                     function failed(message) {
+                        if (request !== statisticsRequest || $scope.$$destroyed) return;
+                        statisticsRequest++;
+                        if (statisticsWorker) statisticsWorker.terminate();
+                        statisticsWorker = null;
+                        window.clearTimeout(statisticsTimer);
                         if (accumulated) complete();
                         ctrl.statistics.loading = false;
                         ctrl.statistics.error = message;
@@ -218,6 +527,8 @@
                         });
                     }
                     function complete() {
+                        if (statisticsWorker) statisticsWorker.terminate();
+                        statisticsWorker = null;
                         var stats = accumulated.summary;
                         function rank(object, metric) {
                             return Object.keys(object)
@@ -260,12 +571,12 @@
                     function nextBatch() {
                         statisticsTimer = window.setTimeout(function () {
                             if (request !== statisticsRequest) return;
-                            statisticsRequest++;
                             failed('The request timed out. Retry statistics.');
                         }, requestTimeout);
                         try {
                             var ga = new GlideAjax('WidgetEditorCredit');
                             ga.addParam('sysparm_name', 'getStatistics');
+                            ga.addParam('sysparm_snapshots', 'true');
                             ga.addParam('sysparm_update', data.selected);
                             ga.addParam('sysparm_cursor', cursor);
                             ga.addParam('sysparm_history_key', historyKey);
@@ -279,23 +590,39 @@
                                         failed(stats.error || 'Statistics could not be loaded.');
                                         return;
                                     }
-                                    if (!stats.fieldTotals && !stats.nextCursor && !accumulated) {
-                                        renderStatistics(stats);
-                                        ctrl.statistics.loaded = true;
-                                        ctrl.statistics.loading = false;
-                                        return;
+                                    function accept(stats) {
+                                        if (request !== statisticsRequest || $scope.$$destroyed) return;
+                                        window.clearTimeout(statisticsTimer);
+                                        if (!stats.fieldTotals && !stats.nextCursor && !accumulated) {
+                                            renderStatistics(stats);
+                                            ctrl.statistics.loaded = true;
+                                            ctrl.statistics.loading = false;
+                                            return;
+                                        }
+                                        merge(stats);
+                                        if (stats.nextCursor) {
+                                            if (
+                                                !/^\d+$/.test(stats.nextCursor) ||
+                                                Number(stats.nextCursor) <= Number(cursor)
+                                            )
+                                                throw new Error('Invalid statistics cursor.');
+                                            cursor = stats.nextCursor;
+                                            historyKey = stats.historyKey;
+                                            nextBatch();
+                                        } else complete();
+                                        changed();
                                     }
-                                    merge(stats);
-                                    if (stats.nextCursor) {
-                                        if (
-                                            !/^\d+$/.test(stats.nextCursor) ||
-                                            Number(stats.nextCursor) <= Number(cursor)
-                                        )
-                                            throw new Error('Invalid statistics cursor.');
-                                        cursor = stats.nextCursor;
-                                        historyKey = stats.historyKey;
-                                        nextBatch();
-                                    } else complete();
+                                    if (stats.snapshots) {
+                                        if (!statisticsWorker)
+                                            statisticsWorker = new Worker(
+                                                '/widget_editor_credit_worker.jsdbx?sysparm_substitute=false&v=2'
+                                            );
+                                        statisticsTimer = window.setTimeout(function () {
+                                            if (request !== statisticsRequest) return;
+                                            failed('Calculation timed out. Retry statistics.');
+                                        }, requestTimeout);
+                                        matchBatch(statisticsWorker, 'statistics', stats, accept, failed);
+                                    } else accept(stats);
                                 } catch (e) {
                                     failed('Statistics could not be loaded.');
                                 }
@@ -305,7 +632,80 @@
                             failed('Statistics could not be loaded.');
                         }
                     }
-                    nextBatch();
+                    if (data.tableApi) {
+                        var context = data;
+                        statisticsTimer = window.setTimeout(function () {
+                            failed('Statistics timed out. Retry statistics.');
+                        }, requestTimeout);
+                        sharedHistory(context)
+                            .then(function (cache) {
+                                if (request !== statisticsRequest || $scope.$$destroyed) return;
+                                if (!cache.statisticsInfo) {
+                                    cache.statisticsInfo = new Promise(function (resolve, reject) {
+                                        var authors = [];
+                                        cache.snapshots.forEach(function (snapshot) {
+                                            if (authors.indexOf(snapshot.author) === -1) authors.push(snapshot.author);
+                                        });
+                                        var ga = new GlideAjax('WidgetEditorCredit');
+                                        ga.addParam('sysparm_name', 'getStatistics');
+                                        ga.addParam('sysparm_context', 'true');
+                                        ga.addParam('sysparm_update', context.selected);
+                                        ga.addParam('sysparm_authors', JSON.stringify(authors));
+                                        var infoTimer = window.setTimeout(function () {
+                                            reject(new Error('Statistics details timed out. Retry statistics.'));
+                                        }, requestTimeout);
+                                        ga.getXMLAnswer(function (answer) {
+                                            window.clearTimeout(infoTimer);
+                                            try {
+                                                var stats = JSON.parse(answer || '{}');
+                                                if (!stats.success)
+                                                    throw new Error(stats.error || 'Statistics details unavailable.');
+                                                if (stats.historyKey !== context.tableApi.key)
+                                                    throw new Error('Customer Updates changed. Reload Credit+.');
+                                                resolve(stats);
+                                            } catch (error) {
+                                                reject(error);
+                                            }
+                                        });
+                                    }).catch(function (error) {
+                                        cache.statisticsInfo = null;
+                                        throw error;
+                                    });
+                                }
+                                return cache.statisticsInfo.then(function (info) {
+                                    if (request !== statisticsRequest || $scope.$$destroyed) return;
+                                    window.clearTimeout(statisticsTimer);
+                                    statisticsTimer = window.setTimeout(function () {
+                                        failed('Calculation timed out. Retry statistics.');
+                                    }, requestTimeout);
+                                    statisticsWorker = new Worker(
+                                        '/widget_editor_credit_worker.jsdbx?sysparm_substitute=false&v=2'
+                                    );
+                                    matchBatch(
+                                        statisticsWorker,
+                                        'statistics',
+                                        Object.assign({}, info, {
+                                            snapshots: cache.snapshots,
+                                            fields: context.fields,
+                                            limits: context.tableApi.limits,
+                                            partial: cache.partial,
+                                            nextCursor: '',
+                                        }),
+                                        function (stats) {
+                                            if (request !== statisticsRequest || $scope.$$destroyed) return;
+                                            window.clearTimeout(statisticsTimer);
+                                            merge(stats);
+                                            complete();
+                                            changed();
+                                        },
+                                        failed
+                                    );
+                                });
+                            })
+                            .catch(function (error) {
+                                failed(error.message || 'Statistics could not be loaded.');
+                            });
+                    } else nextBatch();
                 }
                 ctrl.toggleStatistics = function () {
                     setStatisticsOpen(!ctrl.statistics.open);
@@ -323,6 +723,8 @@
                 }
 
                 function updateUrl() {
+                    if (ctrl.whitespaceMode === 'all') params.delete('sysparm_whitespace');
+                    else params.set('sysparm_whitespace', ctrl.whitespaceMode);
                     if (openStatisticsOnLoad || ctrl.statistics.open) params.set('sysparm_statistics', 'true');
                     else params.delete('sysparm_statistics');
                     if (updateId) params.set('sysparm_update', updateId);
@@ -709,7 +1111,7 @@
                     updateId = set.id;
                     ctrl.selectedSet = set;
                     updateUrl();
-                    load();
+                    load(true);
                 };
                 function openUpdateDropdown() {
                     if (updateButton.disabled) return;
@@ -790,7 +1192,7 @@
                     section.querySelectorAll('label[for]').forEach(function (label) {
                         if (index) label.htmlFor = nodes[label.htmlFor].id;
                     });
-                    fieldScope.lineCount = '';
+                    entry.lineCount = entry.lineCount || '';
                     function node(id) {
                         return nodes[id];
                     }
@@ -812,6 +1214,7 @@
                         touchY,
                         pending = false,
                         fieldRequest = 0,
+                        fieldWorker,
                         timer,
                         disposed = false;
                     var gutter = node('cp-gutter'),
@@ -825,7 +1228,7 @@
                         });
                         ['cp-field-status', 'cp-code-status'].forEach(function (id) {
                             node(id).textContent = message;
-                            node(id).className = 'cp-field-status' + (error ? ' cp-error' : '');
+                            node(id).className = message ? 'alert ' + (error ? 'alert-danger' : 'alert-warning') : '';
                         });
                         node('cp-status-row').hidden = !message;
                         node('cp-code-status').hidden = !message;
@@ -1259,8 +1662,7 @@
                             authorCell = element('div', undefined, 'cp-cell');
                         authorCell.tabIndex = 0;
                         var authorText = element('span', snapshot ? snapshot.author : 'Unknown', 'cp-cell-text');
-                        authorText.title =
-                            authorText.textContent + (snapshot && snapshot.time ? ' · ' + snapshot.time : '');
+                        authorText.title = authorText.textContent;
                         authorCell.appendChild(authorText);
                         if (snapshot) contextCell(authorCell, 'author', snapshot);
                         author.appendChild(authorCell);
@@ -1312,20 +1714,10 @@
                             diffRequest++;
                             fail('Comparison timed out.');
                         }, requestTimeout);
-                        var ga = new GlideAjax('WidgetEditorCredit');
-                        ga.addParam('sysparm_name', 'getComparison');
-                        ga.addParam('sysparm_update', data.selected);
-                        ga.addParam('sysparm_from_update', snapshot.id);
-                        ga.getXMLAnswer(function (answer) {
+                        function receiveComparison(result) {
                             changed();
                             if (disposed || request !== diffRequest) return;
                             window.clearTimeout(diffTimer);
-                            var result;
-                            try {
-                                result = JSON.parse(answer || '{}');
-                            } catch (e) {
-                                result = {};
-                            }
                             if (!result.success) {
                                 fail(result.error || 'Comparison unavailable.');
                                 return;
@@ -1354,7 +1746,49 @@
                             disposeCredit();
                             if (section.open) renderCode();
                             if (section.open && !diffEditor) fail('Comparison unavailable.');
-                        });
+                        }
+                        if (ctrl.data.tableApi) {
+                            sharedHistory(ctrl.data)
+                                .then(function (cache) {
+                                    var left = cache.byId[snapshot.id],
+                                        right = cache.byId[data.selected];
+                                    if (
+                                        !left ||
+                                        !right ||
+                                        left.values[entry.name] === null ||
+                                        right.values[entry.name] === null
+                                    )
+                                        receiveComparison({
+                                            success: false,
+                                            error: 'Comparison snapshot is unavailable.',
+                                        });
+                                    else
+                                        receiveComparison({
+                                            success: true,
+                                            table: data.table,
+                                            record: data.record,
+                                            left: { sys_id: left.id, fields: left.values },
+                                            right: { sys_id: right.id, fields: right.values },
+                                        });
+                                })
+                                .catch(function (error) {
+                                    receiveComparison({ success: false, error: error.message });
+                                });
+                        } else {
+                            var ga = new GlideAjax('WidgetEditorCredit');
+                            ga.addParam('sysparm_name', 'getComparison');
+                            ga.addParam('sysparm_update', data.selected);
+                            ga.addParam('sysparm_from_update', snapshot.id);
+                            ga.getXMLAnswer(function (answer) {
+                                var result;
+                                try {
+                                    result = JSON.parse(answer || '{}');
+                                } catch (e) {
+                                    result = {};
+                                }
+                                receiveComparison(result);
+                            });
+                        }
                     }
                     node('cp-diff-close').addEventListener('click', function () {
                         closeDiff();
@@ -1378,7 +1812,7 @@
                         data.updates.forEach(function (snapshot) {
                             updates[snapshot.id] = snapshot;
                         });
-                        fieldScope.lineCount = data.lines.length + ' lines';
+                        entry.lineCount = data.lines.length + ' lines';
                         changed();
                         setFieldStatus(data.warnings.join(' '));
                         applyFilters();
@@ -1387,42 +1821,128 @@
                         if (data || pending || disposed) return;
                         pending = true;
                         var request = ++fieldRequest,
-                            parentRequest = sequence;
+                            parentRequest = sequence,
+                            cursor = '0',
+                            historyKey = '';
                         setFieldLoading('Loading…');
                         node('cp-field-retry').hidden = true;
+                        function active() {
+                            return !disposed && request === fieldRequest && parentRequest === sequence && pending;
+                        }
                         function fail(message) {
+                            if (!active()) return;
                             pending = false;
+                            window.clearTimeout(timer);
+                            if (fieldWorker) fieldWorker.terminate();
+                            fieldWorker = null;
                             setFieldStatus(message, true);
                             node('cp-field-retry').hidden = false;
-                        }
-                        timer = window.setTimeout(function () {
-                            if (!disposed && request === fieldRequest && parentRequest === sequence) {
-                                timer = null;
-                                fail('Request timed out.');
-                            }
-                        }, requestTimeout);
-                        var ga = new GlideAjax('WidgetEditorCredit');
-                        ga.addParam('sysparm_name', 'getCredit');
-                        ga.addParam('sysparm_update', updateId);
-                        ga.addParam('sysparm_field', entry.name);
-                        ga.getXMLAnswer(function (answer) {
                             changed();
-                            if (disposed || request !== fieldRequest || parentRequest !== sequence || !pending) return;
-                            window.clearTimeout(timer);
-                            timer = null;
-                            pending = false;
-                            var result;
-                            try {
-                                result = JSON.parse(answer || '{}');
-                            } catch (e) {
-                                result = {};
-                            }
-                            if (!result.success) {
-                                fail(result.error || 'Field unavailable.');
-                                return;
-                            }
-                            setData(result);
-                        });
+                        }
+                        function nextBatch() {
+                            timer = window.setTimeout(function () {
+                                fail('Request timed out.');
+                            }, requestTimeout);
+                            var ga = new GlideAjax('WidgetEditorCredit');
+                            ga.addParam('sysparm_name', 'getCredit');
+                            ga.addParam('sysparm_update', updateId);
+                            ga.addParam('sysparm_field', entry.name);
+                            ga.addParam('sysparm_snapshots', 'true');
+                            ga.addParam('sysparm_cursor', cursor);
+                            ga.addParam('sysparm_history_key', historyKey);
+                            ga.getXMLAnswer(function (answer) {
+                                if (!active()) return;
+                                try {
+                                    var result = JSON.parse(answer || '{}');
+                                    if (!result.success) {
+                                        fail(result.error || 'Field unavailable.');
+                                        return;
+                                    }
+                                    function accept(result) {
+                                        if (!active()) return;
+                                        window.clearTimeout(timer);
+                                        if (result.nextCursor) {
+                                            if (
+                                                !/^\d+$/.test(result.nextCursor) ||
+                                                Number(result.nextCursor) <= Number(cursor)
+                                            ) {
+                                                fail('Invalid field cursor.');
+                                                return;
+                                            }
+                                            cursor = result.nextCursor;
+                                            historyKey = result.historyKey;
+                                            nextBatch();
+                                        } else {
+                                            pending = false;
+                                            if (fieldWorker) fieldWorker.terminate();
+                                            fieldWorker = null;
+                                            setData(result);
+                                        }
+                                    }
+                                    if (result.snapshots) {
+                                        if (!fieldWorker)
+                                            fieldWorker = new Worker(
+                                                '/widget_editor_credit_worker.jsdbx?sysparm_substitute=false&v=2'
+                                            );
+                                        matchBatch(fieldWorker, 'credit', result, accept, fail);
+                                    } else accept(result);
+                                } catch (e) {
+                                    fail('Field could not be loaded or calculated.');
+                                }
+                            });
+                        }
+                        if (ctrl.data.tableApi) {
+                            var context = ctrl.data;
+                            timer = window.setTimeout(function () {
+                                fail('Request timed out.');
+                            }, requestTimeout);
+                            sharedHistory(context)
+                                .then(function (cache) {
+                                    if (!active()) return;
+                                    var selected = cache.byId[context.selected];
+                                    if (!selected || selected.values[entry.name] === null) {
+                                        fail('This field is unavailable in the selected Customer Update.');
+                                        return;
+                                    }
+                                    var cutoff = cache.snapshots.indexOf(selected);
+                                    var snapshots = cache.snapshots.slice(0, cutoff + 1).map(function (snapshot) {
+                                        var values = {};
+                                        values[entry.name] = snapshot.values[entry.name];
+                                        return Object.assign({}, snapshot, { values: values });
+                                    });
+                                    window.clearTimeout(timer);
+                                    timer = window.setTimeout(function () {
+                                        fail('Calculation timed out.');
+                                    }, requestTimeout);
+                                    fieldWorker = new Worker(
+                                        '/widget_editor_credit_worker.jsdbx?sysparm_substitute=false&v=2'
+                                    );
+                                    matchBatch(
+                                        fieldWorker,
+                                        'credit',
+                                        Object.assign({}, context, {
+                                            tableApi: undefined,
+                                            field: entry.name,
+                                            snapshots: snapshots,
+                                            limits: context.tableApi.limits,
+                                            partial: cache.partial,
+                                            nextCursor: '',
+                                        }),
+                                        function (result) {
+                                            if (!active()) return;
+                                            window.clearTimeout(timer);
+                                            pending = false;
+                                            fieldWorker.terminate();
+                                            fieldWorker = null;
+                                            setData(result);
+                                        },
+                                        fail
+                                    );
+                                })
+                                .catch(function (error) {
+                                    fail(error.message || 'Field could not be loaded.');
+                                });
+                        } else nextBatch();
                     }
                     section.addEventListener('toggle', function () {
                         changed();
@@ -1491,8 +2011,26 @@
                         section: section,
                         updateView: updateView,
                         release: disposeCredit,
+                        recalculate: function () {
+                            fieldRequest++;
+                            pending = false;
+                            if (fieldWorker) fieldWorker.terminate();
+                            fieldWorker = null;
+                            window.clearTimeout(timer);
+                            window.clearTimeout(diffTimer);
+                            diffRequest++;
+                            diffData = null;
+                            node('cp-diff-close').hidden = true;
+                            data = null;
+                            updates = {};
+                            disposeCredit();
+                            node('cp-lines').textContent = '';
+                            if (section.open) loadField();
+                        },
                         dispose: function () {
                             disposed = true;
+                            if (fieldWorker) fieldWorker.terminate();
+                            fieldWorker = null;
                             if (pendingScrollSection === section) pendingScrollSection = null;
                             window.clearTimeout(timer);
                             window.clearTimeout(diffTimer);
@@ -1532,6 +2070,17 @@
                             key: sequence + ':' + entry.name,
                         };
                     });
+                    if (data.tableApi) {
+                        var historyRequest = sequence;
+                        sharedHistory(data)
+                            .then(showLineCounts)
+                            .catch(function (error) {
+                                if (historyRequest !== sequence || $scope.$$destroyed) return;
+                                ctrl.status = error.message || 'History could not be loaded. Reload to try again.';
+                                ctrl.error = true;
+                                changed();
+                            });
+                    }
                     closeUpdateDropdown(false);
                     updateScrollOffset();
                     if (openStatisticsOnLoad) {
@@ -1552,7 +2101,8 @@
                 };
                 ctrl.mountPickers = setupPickers;
 
-                function load() {
+                function load(preserveHistory) {
+                    if (!preserveHistory) clearHistory();
                     window.clearTimeout(contextTimer);
                     resetStatistics();
                     closeMenu(false);
@@ -1626,6 +2176,7 @@
 
                 ctrl.reload = load;
                 listen(window, 'pagehide', function () {
+                    clearHistory();
                     resetStatistics();
                     closeMenu(false);
                     pickerTimers.forEach(function (timer) {
@@ -1669,6 +2220,7 @@
                     });
                 });
                 $scope.$on('$destroy', function () {
+                    clearHistory();
                     sequence++;
                     window.clearTimeout(contextTimer);
                     resetStatistics();
