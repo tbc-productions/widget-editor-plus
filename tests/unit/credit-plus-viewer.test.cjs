@@ -20,7 +20,7 @@ async function installCredit(page) {
 }
 // Jelly may discard whitespace-only text nodes between elements.
 const markup = (html.match(/<style>([\s\S]*?)<\/style>/)[0] + html.match(/<main[\s\S]*?<\/main>/)[0]).replace(/>\s+</g, '><');
-const bootstrap = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+const bootstrap = html.match(/<script>([\s\S]*?)<\/script>/i)[1];
 function initialMetadata(description, siteTitle = 'My instance') {
     const escape = text => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     return '<span id="cp-page-description" hidden>' + escape(description) + '</span><span id="cp-site-title" hidden>' + escape(siteTitle) + '</span><script>' + bootstrap + '</script>';
