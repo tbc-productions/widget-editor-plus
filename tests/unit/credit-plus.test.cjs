@@ -85,7 +85,7 @@ function harness(entries = [], admin = true, scriptFields = ['script', 'client_s
                 this.query = () => {
                     filtered = rows.filter(entry => groupMatches(entry)).sort((a, b) => String(a[order]).localeCompare(String(b[order]))).slice(start, end);
                 };
-                const groupMatches = entry => filters.every(group => group.some(([key, op, value]) => value === undefined ? entry[key] === op : op === 'CONTAINS' && String(entry[key] || '').toLowerCase().includes(value.toLowerCase())));
+                const groupMatches = entry => filters.every(group => group.some(([key, op, value]) => value === undefined ? entry[key] === op : op === 'IN' ? value.split(',').includes(String(entry[key])) : op === 'CONTAINS' && String(entry[key] || '').toLowerCase().includes(value.toLowerCase())));
                 this.next = () => { current = filtered[cursor++]; return !!current; };
                 return;
             }
@@ -757,4 +757,67 @@ test('Credit+ module opens its verified UI page below Code Search+ and stays adm
     const pageId = page.match(/\$id: '([0-9a-f]{32})'/)[1];
     assert.ok(credit.metadata.includes("query: 'ui_page.do?sys_id=" + pageId + "'"));
     assert.equal(new Set(modules.map(module => module.order)).size, modules.length);
+});
+
+test('statistics combine username casing and return only readable, valid user photos', () => {
+    const photo = '5'.repeat(32), userId = '1'.repeat(32);
+    const users = [{ sys_id: userId, user_name: 'ada', photo }];
+    const { api } = harness([update(0, 'one();')], true, undefined, [], { records: { sys_user: users } });
+    api.getParameter = key => ({ sysparm_update: ids[0], sysparm_authors: '["Ada","ADA","ada"]' })[key] || '';
+    let stats = JSON.parse(api.getStatistics());
+    assert.equal(stats.success, true, stats.error);
+    assert.deepEqual(stats.creators, [{ name: 'ada', added: 0, removed: 0, photo, userId }]);
+    users[0].photo = photo + '.iix';
+    assert.equal(JSON.parse(api.getStatistics()).creators[0].photo, photo);
+    users[0].photoReadable = false;
+    assert.equal(JSON.parse(api.getStatistics()).creators[0].photo, '');
+    users[0].photoReadable = true; users[0].photo = 'https://example.com/photo';
+    assert.equal(JSON.parse(api.getStatistics()).creators[0].photo, '');
+});
+
+test('browser activity totals match statistics and combine differently cased contributors', () => {
+    const engine = browserAnalysis({ max_lines: 50000, diff_work: 20000000 });
+    const stats = engine.process('statistics', {
+        fields: [{ name: 'script' }],
+        creators: [{ name: 'Ada', added: 0, removed: 0 }, { name: 'ADA', added: 0, removed: 0 }],
+        snapshots: ['one();\ntwo();', 'three();', null, 'unknown();', 'known();'].map((code, index) => ({
+            id: ids[index % ids.length], time: '2026-01-0' + (index + 1) + ' 00:00:00',
+            author: index % 2 ? 'ADA' : 'ada', values: { script: code },
+            updateSet: { id: '1'.repeat(32), table: 'sys_update_set', name: 'Release' },
+        })),
+        fieldTotals: [{ name: 'Script', added: 0, removed: 0 }], added: 0, removed: 0, gaps: 0,
+    });
+    assert.equal(stats.creators.length, 1);
+    assert.equal(stats.creators[0].added, stats.added);
+    assert.equal(stats.creators[0].removed, stats.removed);
+    assert.equal(stats.activity.reduce((total, point) => total + point.added, 0), stats.added);
+    assert.equal(stats.activity.reduce((total, point) => total + point.removed, 0), stats.removed);
+    assert.deepEqual(plain(stats.activity.map(point => [point.added, point.removed, point.available])),
+        [[2, 0, true], [1, 2, true], [0, 0, false], [0, 0, false], [1, 1, true]]);
+    assert.equal(stats.activity[0].updateSet.name, 'Release');
+});
+
+test('statistics use readable live-profile avatars ahead of user photos in one batch', () => {
+    const userId = '1'.repeat(32), userPhoto = '2'.repeat(32), profilePhoto = '3'.repeat(32);
+    const user = { sys_id: userId, user_name: 'ada', photo: userPhoto + '.iix' };
+    const profile = { sys_id: '4'.repeat(32), document: userId, photo: profilePhoto + '.iix' };
+    const { api, queries } = harness([update(0, 'one();')], true, undefined, [], { records: {
+        sys_user: [user], live_profile: [profile, { sys_id: '6'.repeat(32), document: '7'.repeat(32), photo: '8'.repeat(32) + '.iix' }],
+    } });
+    api.getParameter = key => ({ sysparm_update: ids[0], sysparm_authors: '["Ada","ADA"]' })[key] || '';
+    const photo = () => JSON.parse(api.getStatistics()).creators[0].photo;
+    assert.equal(photo(), profilePhoto);
+    assert.equal(queries.filter(table => table === 'live_profile').length, 1);
+    user.photo = '';
+    assert.equal(photo(), profilePhoto, 'Live-profile avatars work when the user Photo field is empty');
+    user.photo = userPhoto;
+    for (const field of ['readable', 'documentReadable', 'photoReadable']) {
+        profile[field] = false;
+        assert.equal(photo(), userPhoto, 'An unreadable live profile retains the readable user photo');
+        delete profile[field];
+    }
+    profile.photo = 'https://example.com/avatar';
+    assert.equal(photo(), userPhoto, 'External image URLs remain rejected');
+    user.readable = false;
+    assert.equal(photo(), undefined, 'An unreadable contributor is not used to query live-profile photos');
 });

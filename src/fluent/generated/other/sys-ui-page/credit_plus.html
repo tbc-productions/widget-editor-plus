@@ -29,9 +29,11 @@
             document.title = (window.WE_CREDIT_CONFIG.description ? 'Credit: ' + window.WE_CREDIT_CONFIG.description : 'Credit+') + ' - ' + window.WE_CREDIT_CONFIG.siteTitle;
         </script>
         <g:requires name="scripts/angular_1.5.11/angular.min.js" position="last" />
+        <g:requires name="scripts/thirdparty/angular-chart/chart.js" />
         <g:requires name="scripts/snc-code-editor/monaco.bundle.min.jsx" params="sysparm_substitute=false" />
         <g:requires name="monaco_plus_bootstrap.jsdbx" params="sysparm_substitute=false" />
         <g:requires name="we_history_sync.jsdbx" params="sysparm_substitute=false" />
+        <link rel="stylesheet" href="/scripts/icon-fonts/font-awesome/css/font-awesome.css" />
         <style>
         [ng-cloak], .ng-cloak, .ng-hide { display: none !important; }
         #page_timing_div {
@@ -265,6 +267,12 @@
         .dc-title { flex-wrap: wrap; white-space: normal; min-width: 0; }
         #cp-record-name { overflow-wrap: anywhere; }
         .dc-header-btns { flex-wrap: wrap; }
+        #cp-open-actions { position: relative; display: inline-flex; flex-shrink: 0; }
+        #cp-editor-link { border-top-right-radius: 0 !important; border-bottom-right-radius: 0 !important; }
+        #cp-open-toggle { margin-left: -1px; padding: 0 0.625rem; border-top-left-radius: 0 !important; border-bottom-left-radius: 0 !important; }
+        #cp-open-actions .dropdown-menu { display: block; position: absolute; top: 100%; right: 0; left: auto; z-index: 1003; min-width: 100%; margin-top: 0.125rem; padding: 0.25rem 0; list-style: none; border: 1px solid rgb(var(--now-color_border--secondary, 205 212 217)); border-radius: 4px; background: rgb(var(--now-color_background--primary, 255 255 255)); box-shadow: 0 0.375rem 1rem rgba(0, 0, 0, 0.15); }
+        #cp-open-actions .dropdown-menu a { display: block; padding: 0.5rem 0.875rem; color: inherit; white-space: nowrap; text-decoration: none; }
+        #cp-open-actions .dropdown-menu a:hover, #cp-open-actions .dropdown-menu a:focus { background: rgb(var(--now-color_background--secondary, 246 247 249)); outline: 2px solid rgb(var(--now-color_focus-ring, 1 119 142)); outline-offset: -2px; }
         .dc-version-row { align-items: center; flex-wrap: wrap; gap: 0.75rem; padding: 0.5rem 1.25rem; }
         .cp-control { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
         .form-control { min-height: 2.25rem; border: 1px solid rgb(var(--now-color_border--secondary, 205 212 217)); border-radius: var(--now-button--border-radius, 4px); background: rgb(var(--now-color_background--primary, 255 255 255)); padding: 0.375rem 0.5rem; font: inherit; max-width: 100%; }
@@ -280,33 +288,96 @@
         #cp-whitespace-popover { display: block; top: 100%; left: auto; right: 0; width: 27rem; max-width: calc(100vw - 3rem); }
         #cp-whitespace-popover .arrow { left: auto; right: 0.65rem; }
         #cp-whitespace-popover .radio label { white-space: normal; }
-        .cp-statistics-control { margin-left: auto; flex-shrink: 0; }
-        #cp-statistics { margin-bottom: 1rem; padding: 1rem; border: 1px solid rgb(var(--now-color_border--secondary, 205 212 217)); border-radius: 4px; background: rgb(var(--now-color_background--primary, 255 255 255)); }
-        #cp-statistics h2 { margin: 0 0 1rem; font-size: 1.25rem; }
+        .cp-settings-control { margin-left: auto; flex-shrink: 0; }
+        #cp-statistics { --cp-icon-accent: var(--now-color--primary-1, 0, 118, 204); padding: 16px; background: rgb(var(--now-color_background--secondary, 246 247 250)); }
+        .da-section.cp-statistics-section { overflow: visible; --cp-icon-accent: var(--now-color--primary-1, 0, 118, 204); }
+        #cp-statistics-button { position: sticky; top: var(--cp-header-height, 0px); z-index: 1000; display: list-item; cursor: pointer; padding: 0.75rem; background: rgb(var(--now-color_chrome--brand-5, var(--now-color_background--secondary, 246 247 250))); }
+        #cp-statistics-button .cp-stats-icon { margin-left: 0.375rem; }
         @keyframes we-skeleton-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
         .cp-stats-skeleton .we-skeleton-bar { display: block; height: 1rem; margin: 0.5rem 0 0.75rem; border-radius: 4px; background: rgb(var(--now-color_background--tertiary, 243 244 246)); animation: we-skeleton-pulse 1.4s ease-in-out infinite; }
         @media (prefers-reduced-motion: reduce) { .cp-stats-skeleton .we-skeleton-bar { animation: none; } }
         .cp-stats-facts, .cp-stats-boards { display: grid; gap: 1rem; }
-        .cp-stats-facts { grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); margin: 0 0 1.5rem; }
-        .cp-stats-facts dt { color: rgb(var(--now-color_text--secondary, 82 82 82)); font-size: 0.875rem; }
-        .cp-stats-facts dd { margin: 0.25rem 0 0; font-size: 1.125rem; overflow-wrap: anywhere; }
+        .cp-stats-facts { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; margin: 0 0 1.5rem; }
+        .cp-stat-card { position: relative; display: flex; flex-direction: column; justify-content: center; min-width: 0; min-height: 122px; margin: 0; padding: 20px 64px 20px 20px; border: 1px solid rgb(var(--now-color_border--secondary, 224 227 234)); border-radius: 4px; background: rgb(var(--now-color_background--primary, 255 255 255)); box-shadow: 0 2px 8px rgba(26, 30, 44, 0.035); }
+        .cp-stat-card dt { color: rgb(var(--now-color_text--secondary, 82 82 82)); font-size: 12px; font-weight: 500; line-height: 1.4; overflow-wrap: anywhere; }
+        .cp-stat-card dd { order: -1; margin: 0 0 9px; font-size: 26px; font-weight: 600; line-height: 1.25; letter-spacing: -0.4px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+        .cp-stat-card.cp-stat-text dd { font-size: 19px; letter-spacing: -0.15px; }
+        .cp-stat-card .cp-stats-icon { position: absolute; right: 20px; top: 50%; transform: translateY(-50%); width: 32px; font-size: 29px; }
+        .cp-stat-added, .cp-stat-removed { border-color: color-mix(in srgb, rgb(var(--cp-icon-accent)) 26%, rgb(var(--now-color_border--secondary, 224 227 234))); background: color-mix(in srgb, rgb(var(--cp-icon-accent)) 4%, rgb(var(--now-color_background--primary, 255 255 255))); }
+        @media (max-width: 1100px) { .cp-stats-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+        @media (max-width: 700px) {
+            .cp-stats-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+            .cp-stat-card { min-height: 125px; padding: 16px 44px 16px 13px; }
+            .cp-stat-card .cp-stats-icon { right: 13px; width: 24px; font-size: 24px; }
+            .cp-stat-card dd { font-size: 23px; }
+            .cp-stat-card.cp-stat-text dd { font-size: 17px; }
+            .cp-stat-card dt { font-size: 11px; }
+        }
+        #cp-statistics h2, .cp-stats-board-title { display: flex; align-items: baseline; gap: 0.375em; }
         .cp-stats-boards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        .cp-stats-board { min-width: 0; max-height: 75vh; overflow-y: auto; box-sizing: border-box; padding: 0 0.75rem 0.75rem; border: 1px solid rgb(var(--now-color_border--secondary, 205 212 217)); border-radius: 4px; }
-        .cp-stats-board h3 { position: sticky; top: 0; z-index: 1; background: rgb(var(--now-color_background--primary, 255 255 255)); padding: 0.75rem; margin: 0 -0.75rem 0.75rem; font-size: 1rem; font-weight: 600; }
-        .cp-stats-board-added { --cp-board-accent: 9, 134, 88; }
-        .cp-stats-board-removed { --cp-board-accent: 191, 41, 41; }
-        .cp-stats-board-added, .cp-stats-board-removed { border-color: rgba(var(--cp-board-accent), 0.35); background: linear-gradient(rgba(var(--cp-board-accent), 0.06), rgba(var(--cp-board-accent), 0.06)), rgb(var(--now-color_background--primary, 255 255 255)); }
-        .cp-stats-board-added h3, .cp-stats-board-removed h3 { background: inherit; }
-        .cp-stats-board ol { margin: 0; padding-left: 1.5rem; }
-        .cp-stats-board li { padding: 0.375rem 0; }
-        .cp-stats-entry { display: flex; gap: 1rem; align-items: baseline; }
+        .cp-activity { position: relative; margin: 0 0 18px; padding: 18px 20px 14px; border: 1px solid rgb(var(--now-color_border--secondary, 224 227 234)); border-radius: 4px; background: rgb(var(--now-color_background--primary, 255 255 255)); }
+        .cp-activity h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 7px; font-size: 16px; font-weight: 600; }
+        .cp-activity-range { margin-left: auto; font-size: 12px; font-weight: 400; color: rgb(var(--now-color_text--secondary, 82 82 82)); }
+        .cp-activity-legend { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 1rem; margin-top: 0.5rem; }
+        .cp-activity-added::before, .cp-activity-removed::before { content: ''; display: inline-block; width: 1.5rem; margin-right: 0.375rem; vertical-align: middle; border-top: 2px solid #22966b; }
+        .cp-activity-removed::before { border-color: #d25555; }
+        .cp-activity-viewport { overflow: hidden; min-width: 0; }
+        .cp-activity-plot { position: relative; height: 170px; }
+        .cp-activity canvas { display: block; touch-action: pan-y; cursor: crosshair; }
+        .cp-activity-hover { position: absolute; inset: 0; pointer-events: none; }
+        .cp-activity-guide { position: absolute; border-left: 1px dashed rgb(var(--now-color--primary-1, 0 118 204)); opacity: 0.6; }
+        .cp-activity-halo { position: absolute; width: 12px; height: 12px; border: 2px solid #22966b; border-radius: 50%; background: rgb(var(--now-color_background--primary, 255 255 255)); transform: translate(-50%, -50%); }
+        .cp-activity-halo-removed { border-color: #d25555; }
+        #credit-plus .cp-activity-avatar-active { outline: 2px solid rgb(var(--now-color--primary-1, 0 118 204)); outline-offset: 2px; }
+        .cp-activity-avatars { position: absolute; inset: 0; pointer-events: none; }
+        #credit-plus .cp-avatar { position: relative; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 24px; height: 24px; overflow: hidden; border: 1px solid rgb(var(--now-color_border--secondary, 205 212 217)); border-radius: 50%; font: inherit; font-size: 12px; font-weight: 600; line-height: 22px; vertical-align: middle; }
+        #credit-plus .cp-activity-avatar { position: absolute; padding: 0; transform: translate(-50%, -100%); pointer-events: auto; cursor: pointer; }
+        .cp-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+        .cp-activity-tooltip { position: absolute; z-index: 2; max-width: min(20rem, 100%); padding: 0.5rem 0.75rem; border: 1px solid rgb(var(--now-color_border--secondary, 205 212 217)); border-radius: 4px; background: rgb(var(--now-color_background--primary, 255 255 255)); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); white-space: pre-line; overflow-wrap: anywhere; pointer-events: none; }
+        .cp-activity-body { display: flex; align-items: flex-start; gap: 0.5rem; }
+        .cp-activity-body .cp-activity-viewport { flex: 1; }
+        .cp-activity-controls { display: flex; flex-direction: column; gap: 0.375rem; flex-shrink: 0; padding-top: 0.5rem; }
+        .cp-activity-controls .btn { padding: 0.25rem 0.5rem; border: 1px solid rgb(var(--now-color_border--secondary, 205 212 217)); border-radius: 4px; background: rgb(var(--now-color_background--primary, 255 255 255)); color: inherit; }
+        .cp-activity:is(:fullscreen, .cp-activity-expanded) { position: fixed; inset: 0; z-index: 2000; width: 100%; height: 100%; margin: 0; border: 0; border-radius: 0; display: flex; flex-direction: column; }
+        .cp-activity:is(:fullscreen, .cp-activity-expanded) .cp-activity-body { flex: 1; min-height: 0; align-items: stretch; }
+        .cp-activity:is(:fullscreen, .cp-activity-expanded) .cp-activity-viewport { display: flex; flex-direction: column; }
+        .cp-activity:is(:fullscreen, .cp-activity-expanded) .cp-activity-plot { flex: 1; height: auto; min-height: 170px; }
+        .cp-activity-controls .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .cp-activity-selection { position: absolute; top: 0; bottom: 0; border: 1px solid #0076cc; background: rgba(0, 118, 204, 0.12); pointer-events: none; }
+        .cp-stats-board { min-width: 0; max-height: 37.5vh; overflow-y: auto; box-sizing: border-box; padding: 0 16px 6px; border: 1px solid rgb(var(--now-color_border--secondary, 205 212 217)); border-radius: 4px; }
+        .cp-stats-board h3 { position: sticky; top: 0; z-index: 1; background: rgb(var(--now-color_background--primary, 255 255 255)); padding: 16px 16px 13px; margin: 0 -16px; border-bottom: 1px solid rgba(var(--cp-board-accent), 0.14); font-size: 16px; font-weight: 600; }
+        .cp-stats-board-added { --cp-board-accent: var(--now-color_alert--positive-3, 9, 134, 88); }
+        .cp-stats-board-removed { --cp-board-accent: var(--now-color_alert--critical-3, 191, 41, 41); }
+        .cp-stats-board-added, .cp-stats-board-removed { border-color: rgba(var(--cp-board-accent), 0.35); background: linear-gradient(rgba(var(--cp-board-accent), 0.02), rgba(var(--cp-board-accent), 0.02)), rgb(var(--now-color_background--primary, 255 255 255)); }
+        .cp-stats-board-added h3, .cp-stats-board-removed h3 { background: linear-gradient(rgba(var(--cp-board-accent), 0.04), rgba(var(--cp-board-accent), 0.04)), rgb(var(--now-color_background--primary, 255 255 255)); }
+        .cp-stats-board-group { display: block; margin-top: 0.25rem; font-size: 0.8125rem; font-weight: 400; color: rgb(var(--now-color_text--secondary, 82 82 82)); }
+        .cp-stats-board p { margin: 0; color: rgb(var(--now-color_text--secondary, 82 82 82)); }
+        .cp-stats-board ol { margin: 0; padding: 0; list-style: none; }
+        .cp-stats-board li { padding: 8px 0 5px; border-bottom: 1px solid rgba(var(--now-color_text--primary, 29 29 29), 0.06); }
+        .cp-stats-board li:last-child { border-bottom: 0; }
+        .cp-stats-board li:hover, .cp-stats-board li:focus-within { background: rgba(var(--cp-board-accent), 0.04); }
+        .cp-stats-entry { display: grid; grid-template-columns: 22px minmax(0, 1fr) max-content max-content; gap: 10px; align-items: center; }
+        .cp-stats-rank { text-align: center; font-size: 12px; color: rgb(var(--now-color_text--secondary, 82 82 82)); font-variant-numeric: tabular-nums; }
+        .cp-stats-set-icon { width: 24px; flex-shrink: 0; text-align: center; color: rgb(var(--cp-board-accent)); }
+        .cp-stats-contribution { display: block; height: 2px; margin: 6px 0 0 32px; overflow: hidden; border-radius: 2px; background: rgba(var(--cp-board-accent), 0.06); }
+        .cp-stats-contribution span { display: block; height: 100%; max-width: 100%; border-radius: inherit; background: rgb(var(--cp-board-accent)); opacity: 0.55; transform: scaleX(0); transform-origin: left; transition: transform 600ms ease-out; }
+        .cp-stats-contribution.cp-bar-visible span { transform: scaleX(1); }
+        @media (prefers-reduced-motion: reduce) { .cp-stats-contribution span { transition: none; transform: scaleX(1); } }
         .cp-stats-name { flex: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
         .cp-stats-identity { display: flex; align-items: center; gap: 0.375rem; flex: 1; min-width: 0; }
         .cp-stats-identity .cp-stats-name { flex: 0 1 auto; }
-        .cp-stats-medal, .cp-stats-emoji { display: inline-block; vertical-align: middle; flex-shrink: 0; font-size: 1.375rem; line-height: 1; }
+        .cp-stats-medal, .cp-stats-icon { display: inline-block; vertical-align: middle; flex-shrink: 0; line-height: 1; }
+        .cp-stats-icon { width: 1.25em; text-align: center; font-size: 1em; color: rgb(var(--now-color_text--secondary, 82 82 82)); color: color-mix(in srgb, rgb(var(--cp-icon-accent)) 45%, rgb(var(--now-color_text--primary, 29 29 29))); }
+        .cp-stat-added, .cp-stats-board-added { --cp-icon-accent: var(--now-color_alert--positive-3, 9, 134, 88); }
+        .cp-stat-removed, .cp-stats-board-removed { --cp-icon-accent: var(--now-color_alert--critical-3, 191, 41, 41); }
+        .cp-stats-medal { font-size: 1.375rem; }
+        .cp-rank-gold { color: #b98600; }
+        .cp-rank-silver { color: #7d8791; }
+        .cp-rank-bronze { color: #ae743b; }
         .cp-stats-score, .cp-stats-percentage { flex-shrink: 0; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-        .cp-stats-percentage { width: 7ch; }
-        @media (max-width: 600px) { .cp-stats-boards { grid-template-columns: minmax(0, 1fr); } }
+        .cp-stats-score { font-weight: 600; }
+        .cp-stats-percentage { width: 7ch; font-size: 12px; color: rgb(var(--now-color_text--secondary, 82 82 82)); }
+        @media (max-width: 700px) { .cp-stats-boards { grid-template-columns: minmax(0, 1fr); } .cp-activity { padding: 15px 12px; } .cp-stats-entry { gap: 7px; } .cp-stats-contribution { margin-left: 29px; } }
         /* Compare+ version dropdown, with date, update set and author columns. */
         .cp-update-control { flex: 1; }
         #credit-plus .cp-control label { margin: 0; }
@@ -664,16 +735,20 @@
                     <div class="dc-title" credit-record-pickers="" role="heading" aria-level="1"><span class="dc-title-label">Credit+&#160;</span><span id="cp-table-picker" class="dc-table-picker-wrap"><span id="cp-table-label" ng-bind="ctrl.tableLabel"></span></span><span class="dc-title-colon">:</span><span id="cp-record-picker" class="dc-picker-wrap"><strong id="cp-record-name" ng-bind="ctrl.recordName"></strong></span></div>
                     <div class="dc-header-btns">
                         <button id="cp-retry" ng-click="ctrl.reload()" ng-disabled="ctrl.loading" type="button" class="btn btn-default" title="Reload" aria-label="Reload"><i class="icon-refresh" aria-hidden="true"></i></button>
-                        <a id="cp-editor-link" class="btn btn-default" target="_blank" rel="noopener" ng-href="{{ctrl.editorHref}}" ng-show="ctrl.data.table === 'sp_widget' &amp;&amp; !ctrl.data.deleted">Open in Widget Editor+</a>
-                        <a id="cp-record-link" class="btn btn-primary" target="_blank" rel="noopener" ng-href="{{ctrl.recordHref}}" ng-show="ctrl.data &amp;&amp; !ctrl.data.deleted" ng-bind="'Open ' + ctrl.tableLabel">Open record</a>
+                        <div id="cp-open-actions" class="btn-group" role="group" aria-label="Open widget" ng-show="ctrl.data.table === 'sp_widget' &amp;&amp; !ctrl.data.deleted" ng-class="{open: ctrl.editorMenuOpen}" ng-keydown="ctrl.editorMenuKeydown($event)">
+                            <a id="cp-editor-link" class="btn btn-primary" target="_blank" rel="noopener" ng-href="{{ctrl.editorHref}}">Open in Widget Editor+</a>
+                            <button id="cp-open-toggle" class="btn btn-primary dropdown-toggle" type="button" aria-label="More widget actions" aria-haspopup="menu" ng-attr-aria-expanded="{{ctrl.editorMenuOpen}}" aria-controls="cp-open-menu" ng-click="ctrl.editorMenuOpen = !ctrl.editorMenuOpen"><span class="caret" aria-hidden="true"></span></button>
+                            <ul id="cp-open-menu" class="dropdown-menu dropdown-menu-right" role="menu" aria-label="Open widget" ng-show="ctrl.editorMenuOpen"><li role="none"><a id="cp-record-link" role="menuitem" target="_blank" rel="noopener" ng-href="{{ctrl.recordHref}}" ng-click="ctrl.closeEditorMenu(false)">Open in Widget</a></li></ul>
+                        </div>
+                        <a id="cp-record-form-link" class="btn btn-primary" target="_blank" rel="noopener" ng-href="{{ctrl.recordHref}}" ng-show="ctrl.data &amp;&amp; ctrl.data.table !== 'sp_widget' &amp;&amp; !ctrl.data.deleted" ng-bind="'Open ' + ctrl.tableLabel">Open record</a>
                     </div>
                 </div>
                 <div class="dc-version-row">
-                    <div class="cp-control cp-update-control dc-header-btns"><label for="cp-update-button">Update set</label><div class="dc-version-dd">
+                    <div class="cp-control cp-update-control dc-header-btns"><label class="cp-sr-only" for="cp-update-button">Update set</label><div class="dc-version-dd">
                         <button id="cp-update-button" type="button" class="btn btn-default dc-version-dd-btn" aria-haspopup="listbox" aria-expanded="false" aria-controls="cp-update-menu" ng-disabled="ctrl.loading || !ctrl.updateSets.length" ng-attr-data-value="{{ctrl.selectedSet.id}}"><span class="dc-version-dd-btn-label"><span ng-if="!ctrl.selectedSet">Update set</span><span class="dc-vrow" ng-if="ctrl.selectedSet"><span class="dc-vrow-date" ng-bind="ctrl.selectedSet.time || '—'" ng-attr-title="{{ctrl.selectedSet.time || '—'}}"></span><span class="dc-vrow-uset" ng-bind="ctrl.selectedSet.name || '—'" ng-attr-title="{{ctrl.selectedSet.name || '—'}}"></span><span class="dc-vrow-user" ng-bind="ctrl.selectedSet.author || '—'" ng-attr-title="{{ctrl.selectedSet.author || '—'}}"></span></span></span><span class="dc-version-dd-btn-chevron"><span class="caret"></span></span></button>
                         <div id="cp-update-menu" class="dc-version-dd-menu" role="listbox" aria-label="Update set" hidden="hidden"><div class="dc-version-dd-item" ng-repeat="set in ctrl.updateSets track by set.id" ng-attr-id="cp-update-option-{{$index}}" ng-attr-data-value="{{set.id}}" tabindex="-1" role="option" ng-attr-aria-selected="{{set.id === ctrl.selectedSet.id}}" ng-class="{'dc-version-dd-selected': set.id === ctrl.selectedSet.id}" ng-click="ctrl.chooseUpdate(set)"><span class="dc-vrow"><span class="dc-vrow-date" ng-bind="set.time || '—'" ng-attr-title="{{set.time || '—'}}"></span><span class="dc-vrow-uset" ng-bind="set.name || '—'" ng-attr-title="{{set.name || '—'}}"></span><span class="dc-vrow-user" ng-bind="set.author || '—'" ng-attr-title="{{set.author || '—'}}"></span></span></div></div>
                     </div></div>
-                    <div class="dc-header-btns cp-statistics-control"><div id="cp-whitespace-control">
+                    <div class="dc-header-btns cp-settings-control"><div id="cp-whitespace-control">
                         <button id="cp-whitespace-button" type="button" class="btn btn-default" ng-click="ctrl.toggleWhitespace()" ng-class="{active: ctrl.whitespaceOpen}" aria-label="Whitespace settings" ng-attr-aria-expanded="{{ctrl.whitespaceOpen}}" aria-controls="cp-whitespace-popover"><i class="icon-indent" aria-hidden="true"></i></button>
                         <div id="cp-whitespace-popover" class="popover bottom" ng-show="ctrl.whitespaceOpen" role="dialog" aria-label="Attribution and Statistics whitespace settings">
                             <div class="arrow"></div>
@@ -681,7 +756,7 @@
                                 <div class="radio" ng-repeat="option in ctrl.whitespaceOptions"><label><input type="radio" name="credit-whitespace" ng-model="ctrl.whitespaceMode" ng-value="option.value" ng-change="ctrl.changeWhitespace()" />{{option.label}}</label></div>
                             </div>
                         </div>
-                    </div><button id="cp-statistics-button" type="button" class="btn btn-default" ng-click="ctrl.toggleStatistics()" ng-disabled="!ctrl.data" ng-class="{active: ctrl.statistics.open}" aria-label="Statistics" ng-attr-aria-pressed="{{ctrl.statistics.open}}" ng-attr-aria-expanded="{{ctrl.statistics.open}}" aria-controls="cp-statistics"><i class="icon-chart-pi" aria-hidden="true"></i>&#160;Statistics</button></div>
+                    </div></div>
                 </div>
             </header>
             <div class="dc-body">
@@ -717,24 +792,43 @@
                     </svg><span ng-bind="ctrl.status"></span></div>
                 <div id="cp-status-wrap" ng-show="!ctrl.loading" ng-class="{'dc-no-versions-overlay': ctrl.empty}"><div id="cp-status-content" ng-class="{'dc-no-versions-content': ctrl.empty}"><p id="cp-status" ng-class="{'alert alert-danger': ctrl.error}" ng-bind="ctrl.status" role="status" aria-live="polite"></p></div></div>
                 <details class="alert alert-warning" id="cp-warnings" ng-show="ctrl.data.warnings.length"><summary>History gaps</summary><div id="cp-warning-text"><p ng-repeat="warning in ctrl.data.warnings track by $index" ng-bind="warning"></p></div></details>
-                <section id="cp-statistics" aria-labelledby="cp-statistics-heading" ng-show="ctrl.statistics.open" ng-attr-aria-busy="{{ctrl.statistics.loading}}">
-                    <h2 id="cp-statistics-heading"><span ng-bind="'Statistics '"></span><span class="cp-stats-emoji" aria-hidden="true">&#128202;</span></h2>
+                <details id="cp-statistics-container" class="da-section cp-statistics-section" ng-show="ctrl.data" credit-statistics="">
+                    <summary id="cp-statistics-button" class="da-summary" role="button" aria-label="Statistics" aria-controls="cp-statistics" ng-attr-aria-expanded="{{ctrl.statistics.open}}" ng-click="$event.preventDefault(); ctrl.toggleStatistics()"><span id="cp-statistics-heading" class="da-label">Statistics</span><i class="fa fa-bar-chart cp-stats-icon" aria-hidden="true"></i></summary>
+                <section id="cp-statistics" aria-labelledby="cp-statistics-heading" ng-attr-aria-busy="{{ctrl.statistics.loading}}">
                     <p id="cp-statistics-status" role="status" aria-live="polite" ng-class="{'cp-sr-only': ctrl.statistics.loading, 'alert alert-danger': ctrl.statistics.error}" ng-bind="ctrl.statistics.loading ? 'Loading statistics…' : ctrl.statistics.error"></p>
                     <div id="cp-statistics-content">
                         <div class="cp-stats-skeleton" aria-hidden="true" ng-if="ctrl.statistics.loading">
-                            <div class="cp-stats-facts"><div ng-repeat="item in ctrl.skeletonFacts"><span class="we-skeleton-bar" style="width:55%"></span><span class="we-skeleton-bar" style="width:85%"></span></div></div>
+                            <div class="cp-stats-facts"><div class="panel panel-default cp-stat-card" ng-repeat="item in ctrl.skeletonFacts"><span class="we-skeleton-bar" style="width:55%"></span><span class="we-skeleton-bar" style="width:85%"></span></div></div>
                             <div class="cp-stats-boards"><div class="cp-stats-board" ng-repeat="item in ctrl.skeletonBoards"><span class="we-skeleton-bar" style="width:60%"></span><span class="we-skeleton-bar" style="width:100%" ng-repeat="row in ctrl.skeletonRows"></span></div></div>
                         </div>
                         <div ng-if="ctrl.statistics.loaded">
-                            <dl class="cp-stats-facts"><div ng-repeat="fact in ctrl.statistics.facts"><dt><span ng-bind="fact.label + ' '"></span><span class="cp-stats-emoji" aria-hidden="true" ng-bind="fact.emoji"></span></dt><dd><a class="cp-stats-name dc-link" ng-if="fact.href" ng-href="{{fact.href}}" ng-bind="fact.value"></a><span ng-if="!fact.href" ng-bind="fact.value"></span></dd></div></dl>
+                            <dl class="cp-stats-facts"><div class="panel panel-default cp-stat-card" ng-class="fact.style" ng-repeat="fact in ctrl.statistics.facts"><dt><span ng-bind="fact.label"></span><i class="fa cp-stats-icon" aria-hidden="true" ng-class="fact.icon"></i></dt><dd><a class="cp-stats-name dc-link" ng-if="fact.href" ng-href="{{fact.href}}" ng-bind="fact.value"></a><span ng-if="!fact.href" ng-bind="fact.value"></span></dd></div></dl>
+                            <section class="cp-activity" ng-if="ctrl.statistics.activity.length" credit-activity="ctrl.statistics.activity" aria-label="Record activity">
+                                <h3>Activity <i class="fa fa-line-chart cp-stats-icon" aria-hidden="true"></i><span class="cp-activity-range" aria-label="Visible activity dates"></span></h3>
+                                <div class="cp-activity-body">
+                                    <div class="cp-activity-viewport" role="region" aria-label="Activity chart">
+                                        <div class="cp-activity-plot"><canvas role="img" aria-label="Lines added and removed in each Customer Update, ordered by date"></canvas><div class="cp-activity-hover" aria-hidden="true" hidden="hidden"><span class="cp-activity-guide"></span><span class="cp-activity-halo cp-activity-halo-added"></span><span class="cp-activity-halo cp-activity-halo-removed"></span></div><div class="cp-activity-avatars"></div><div class="cp-activity-selection" hidden="hidden"></div></div>
+                                    </div>
+                                    <div class="cp-activity-controls">
+                                        <button type="button" class="btn btn-default btn-sm cp-activity-fullscreen" aria-label="Enter full screen" aria-pressed="false"><i class="fa fa-expand" aria-hidden="true"></i></button>
+                                        <button type="button" class="btn btn-default btn-sm cp-activity-zoom-in" aria-label="Zoom in on activity"><i class="fa fa-search-plus" aria-hidden="true"></i></button>
+                                        <button type="button" class="btn btn-default btn-sm cp-activity-zoom-out" aria-label="Zoom out on activity"><i class="fa fa-search-minus" aria-hidden="true"></i></button>
+                                        <button type="button" class="btn btn-default btn-sm cp-activity-reset" aria-label="Reset zoom"><i class="fa fa-undo" aria-hidden="true"></i></button>
+                                    </div>
+                                </div>
+                                <div class="cp-activity-legend"><span class="cp-activity-added">Additions</span><span class="cp-activity-removed">Removals</span></div>
+                                <p class="cp-activity-error" role="status" hidden="hidden">The activity chart could not load.</p>
+                                <div id="cp-activity-tooltip" class="cp-activity-tooltip" role="tooltip" hidden="hidden"></div>
+                            </section>
                             <div class="cp-stats-boards"><section class="cp-stats-board" ng-class="'cp-stats-board-' + board.metric" ng-repeat="board in ctrl.statistics.boards" tabindex="0" ng-attr-aria-labelledby="cp-board-heading-{{$index}}">
-                                <h3 ng-attr-id="cp-board-heading-{{$index}}"><span ng-bind="board.title + ' '"></span><span class="cp-stats-emoji" aria-hidden="true" ng-bind="board.emoji"></span><span ng-bind="' - ' + board.group + ' '"></span><span class="cp-stats-emoji" aria-hidden="true" ng-bind="board.groupEmoji"></span></h3>
-                                <ol ng-if="board.entries.length"><li ng-repeat="entry in board.entries"><span class="cp-stats-entry"><span class="cp-stats-identity"><a class="cp-stats-name dc-link" ng-if="entry.href" ng-href="{{entry.href}}" ng-bind="entry.name"></a><span class="cp-stats-name" ng-if="!entry.href" ng-bind="entry.name"></span><span class="cp-stats-medal" aria-hidden="true" ng-if="$index &lt; 3" ng-bind="ctrl.medals[$index]"></span></span><span class="cp-stats-score" ng-bind="entry.score"></span><span class="cp-stats-percentage" ng-bind="entry.percentage"></span></span></li></ol>
+                                <h3 ng-attr-id="cp-board-heading-{{$index}}"><span class="cp-stats-board-title"><span ng-bind="board.title"></span><i class="fa cp-stats-icon" aria-hidden="true" ng-class="board.icon"></i></span><small class="cp-stats-board-group" ng-bind="' ' + board.group"></small></h3>
+                                <ol role="list" ng-if="board.entries.length"><li ng-repeat="entry in board.entries"><span class="cp-stats-entry"><span class="cp-stats-rank" aria-hidden="true" ng-bind="$index + 1"></span><span class="cp-stats-identity"><span ng-if="board.group === 'Created by'" credit-avatar="entry" aria-hidden="true"></span><i ng-if="board.group === 'Update sets'" class="fa fa-cube cp-stats-set-icon" aria-hidden="true"></i><a class="cp-stats-name dc-link" ng-if="entry.href" ng-href="{{entry.href}}" ng-bind="entry.name"></a><span class="cp-stats-name" ng-if="!entry.href" ng-bind="entry.name"></span><i class="fa cp-stats-medal" aria-hidden="true" ng-if="$index &lt; 3" ng-class="ctrl.rankIcons[$index]"></i></span><span class="cp-stats-score" ng-bind="entry.score"></span><span class="cp-stats-percentage" ng-bind="entry.percentage"></span></span><span class="cp-stats-contribution" credit-contribution="" aria-hidden="true"><span ng-style="{width: entry.percentage}"></span></span></li></ol>
                                 <p ng-if="!board.entries.length" ng-bind="board.empty"></p>
                             </section></div>
                         </div>
                     </div>
                 </section>
+                </details>
                 <div id="cp-results" ng-show="ctrl.data"><details class="da-section cp-field-section" ng-repeat="field in ctrl.fields track by field.key" ng-attr-data-field="{{field.name}}" ng-attr-aria-disabled="{{field.disabled ? 'true' : 'false'}}" credit-field=""></details></div>
                 <template id="cp-field-template" ng-non-bindable="">
                     <summary class="da-summary" ng-attr-aria-disabled="{{field.disabled ? 'true' : 'false'}}" ng-attr-tabindex="{{field.disabled ? -1 : 0}}"><span class="da-label" ng-bind="field.label"></span> <span class="da-field-key" ng-bind="field.name"></span><span class="da-diff-counts"><span class="label label-warning" ng-if="field.unavailable">Unavailable</span><span ng-bind="field.lineCount"></span></span></summary>

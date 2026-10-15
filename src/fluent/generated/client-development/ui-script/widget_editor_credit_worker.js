@@ -337,19 +337,36 @@ CreditAnalysis.prototype.process = function (kind, batch) {
     if (kind !== 'statistics') throw new Error('Unknown Credit+ computation.');
     var authors = Object.create(null);
     batch.creators.forEach(function (author) {
-        authors[author.name] = author;
+        var key = author.name.toLowerCase();
+        if (!authors[key]) authors[key] = Object.assign({}, author);
+    });
+    batch.creators = Object.keys(authors).map(function (key) {
+        return authors[key];
     });
     batch.creatorSets = [];
+    batch.activity = [];
     batch.snapshots.forEach(function (snapshot) {
-        var author = authors[snapshot.author],
+        var author = authors[snapshot.author.toLowerCase()],
             set = {
                 key: snapshot.updateSet ? snapshot.updateSet.table + ':' + snapshot.updateSet.id : snapshot.id,
                 name: snapshot.updateSet ? snapshot.updateSet.name : 'Unknown update set',
                 updateSet: snapshot.updateSet,
                 added: 0,
                 removed: 0,
+            },
+            activity = {
+                id: snapshot.id,
+                time: snapshot.time,
+                author: author.name,
+                userId: author.userId || '',
+                photo: author.photo || '',
+                updateSet: snapshot.updateSet,
+                added: 0,
+                removed: 0,
+                available: true,
             };
         batch.creatorSets.push(set);
+        batch.activity.push(activity);
         batch.fields.forEach(function (field, index) {
             var code = snapshot.values[field.name],
                 prior = self.previous[field.name];
@@ -357,6 +374,7 @@ CreditAnalysis.prototype.process = function (kind, batch) {
                 self.previous[field.name] = null;
                 batch.partial = true;
                 batch.gaps++;
+                activity.available = false;
                 return;
             }
             var current = lines(code);
@@ -367,6 +385,7 @@ CreditAnalysis.prototype.process = function (kind, batch) {
                 if (mapping.partial) {
                     batch.partial = true;
                     batch.gaps++;
+                    activity.available = false;
                 } else {
                     for (var i = 0; i < current.length; i++) if (mapping[i] !== undefined) matched++;
                     var added = current.length - matched,
@@ -379,8 +398,10 @@ CreditAnalysis.prototype.process = function (kind, batch) {
                     batch.fieldTotals[index].removed += removed;
                     batch.added += added;
                     batch.removed += removed;
+                    activity.added += added;
+                    activity.removed += removed;
                 }
-            }
+            } else activity.available = false;
             self.previous[field.name] = current;
         });
     });

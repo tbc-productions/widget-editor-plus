@@ -1,5 +1,24 @@
 (function () {
     'use strict';
+    function renderAvatar(element, name, photo) {
+        var colours = ['#176b5b', '#245e9b', '#6b4c9a', '#9b4163', '#8b4e27', '#526a26', '#465a73', '#4b4fa0'],
+            username = name.toLowerCase(),
+            hash = 0;
+        for (var i = 0; i < username.length; i++) hash = (hash * 31 + username.charCodeAt(i)) | 0;
+        element.classList.add('cp-avatar');
+        element.textContent = name.charAt(0).toUpperCase() || '?';
+        element.style.backgroundColor = colours[Math.abs(hash) % colours.length];
+        element.style.color = '#fff';
+        if (/^[0-9a-f]{32}$/i.test(photo || '')) {
+            var image = document.createElement('img');
+            image.alt = '';
+            image.src = '/' + photo + '.iix?t=medium';
+            image.onerror = function () {
+                image.remove();
+            };
+            element.appendChild(image);
+        }
+    }
     function initialise() {
         var page = document.getElementById('credit-plus');
         if (!page || !window.angular || angular.element(page).injector()) return;
@@ -59,13 +78,37 @@
                     if (restoreFocus) document.getElementById('cp-whitespace-button').focus();
                     changed();
                 }
+                ctrl.editorMenuOpen = false;
+                ctrl.closeEditorMenu = function (restoreFocus) {
+                    if (!ctrl.editorMenuOpen) return;
+                    ctrl.editorMenuOpen = false;
+                    if (restoreFocus) document.getElementById('cp-open-toggle').focus();
+                    changed();
+                };
+                ctrl.editorMenuKeydown = function (event) {
+                    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                    event.preventDefault();
+                    ctrl.editorMenuOpen = true;
+                    $scope.$$postDigest(function () {
+                        window.requestAnimationFrame(function () {
+                            if (ctrl.editorMenuOpen && !$scope.$$destroyed)
+                                document.getElementById('cp-record-link').focus();
+                        });
+                    });
+                };
                 listen(document, 'click', function (event) {
                     if (!event.target.closest('#cp-whitespace-control')) closeWhitespace(false);
+                    if (!event.target.closest('#cp-open-actions')) ctrl.closeEditorMenu(false);
                 });
                 listen(document, 'focusin', function (event) {
                     if (!event.target.closest('#cp-whitespace-control')) closeWhitespace(false);
+                    if (!event.target.closest('#cp-open-actions')) ctrl.closeEditorMenu(false);
                 });
                 listen(document, 'keydown', function (event) {
+                    if (event.key === 'Escape' && ctrl.editorMenuOpen) {
+                        event.preventDefault();
+                        ctrl.closeEditorMenu(true);
+                    }
                     if (event.key === 'Escape' && ctrl.whitespaceOpen) {
                         event.preventDefault();
                         closeWhitespace(true);
@@ -397,8 +440,12 @@
                     statisticsTimer,
                     statisticsWorker,
                     statisticsScrollFrame;
-                ctrl.medals = ['\uD83C\uDFC6', '\uD83E\uDD48', '\uD83E\uDD49'];
-                ctrl.skeletonFacts = [0, 1, 2, 3, 4, 5, 6, 7];
+                ctrl.rankIcons = [
+                    'fa-trophy cp-rank-gold',
+                    'fa-certificate cp-rank-silver',
+                    'fa-certificate cp-rank-bronze',
+                ];
+                ctrl.skeletonFacts = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
                 ctrl.skeletonBoards = [0, 1, 2, 3];
                 ctrl.skeletonRows = [0, 1, 2];
                 function setStatisticsOpen(open) {
@@ -410,7 +457,7 @@
                             window.cancelAnimationFrame(statisticsScrollFrame);
                             statisticsScrollFrame = window.requestAnimationFrame(function () {
                                 if ($scope.$$destroyed || !ctrl.statistics.open) return;
-                                document.getElementById('cp-statistics').scrollIntoView({
+                                document.getElementById('cp-statistics-container').scrollIntoView({
                                     block: 'start',
                                     behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
                                         ? 'auto'
@@ -439,65 +486,88 @@
                 function renderStatistics(stats) {
                     var facts = [],
                         boards = [];
-                    function fact(label, emoji, value, record) {
+                    function fact(label, icon, value, record, style) {
                         facts.push({
                             label: label,
-                            emoji: emoji,
+                            icon: icon,
                             value: value,
                             href: record ? statisticsUrl(record) : '',
+                            style: style || '',
                         });
                     }
-                    var ageIcon =
-                        stats.ageDays === null
-                            ? '\u2753'
-                            : stats.ageDays < 90
-                              ? '\uD83D\uDC76'
-                              : stats.ageDays < 365
-                                ? '\uD83E\uDDD2'
-                                : stats.ageDays < 1000
-                                  ? '\uD83E\uDDD1'
-                                  : '\uD83E\uDDD3';
+                    var ageIcon = stats.ageDays === null ? 'fa-question-circle' : 'fa-clock-o';
                     fact('Age', ageIcon, stats.ageDays === null ? 'Unknown' : stats.ageDays.toLocaleString() + ' days');
-                    fact('Founder', '\uD83C\uDF31', stats.founder || 'Unknown', { userId: stats.founderUserId });
-                    fact('Update sets', '\uD83D\uDCE6', stats.updateSetCount.toLocaleString());
-                    fact('Contributors', '\uD83D\uDC65', stats.contributorCount.toLocaleString());
-                    fact('Lines created', '\u2728', stats.added.toLocaleString());
-                    fact('Lines destroyed', '\uD83D\uDCA5', stats.removed.toLocaleString());
-                    if (stats.busiestField) fact('Busiest field', '\uD83D\uDC1D', stats.busiestField.name);
+                    fact('Update sets', 'fa-cubes', stats.updateSetCount.toLocaleString());
+                    fact('Founder', 'fa-leaf', stats.founder || 'Unknown', { userId: stats.founderUserId });
+                    fact('Contributors', 'fa-users', stats.contributorCount.toLocaleString());
+                    if (stats.activity)
+                        fact(
+                            'Longest quiet spell',
+                            'fa-moon-o',
+                            stats.longestQuietDays === null
+                                ? 'No gap yet'
+                                : stats.longestQuietDays.toLocaleString() + ' days',
+                            null,
+                            'cp-stat-text'
+                        );
+                    fact('Lines created', 'fa-plus-circle', stats.added.toLocaleString(), null, 'cp-stat-added');
+                    fact('Lines destroyed', 'fa-minus-circle', stats.removed.toLocaleString(), null, 'cp-stat-removed');
+                    if (stats.busiestField)
+                        fact('Busiest field', 'fa-bolt', stats.busiestField.name, null, 'cp-stat-text');
                     if (stats.biggestMakeover)
-                        fact('Biggest makeover', '\uD83D\uDC84', stats.biggestMakeover.name, stats.biggestMakeover);
-                    function board(title, emoji, group, groupEmoji, entries, metric) {
+                        fact(
+                            'Biggest makeover',
+                            'fa-magic',
+                            stats.biggestMakeover.name,
+                            stats.biggestMakeover,
+                            'cp-stat-text'
+                        );
+                    if (stats.activity) {
+                        fact(
+                            'Busiest month',
+                            'fa-calendar',
+                            stats.busiestMonth
+                                ? new Date(stats.busiestMonth + '-01T00:00:00Z').toLocaleDateString('en-AU', {
+                                      month: 'long',
+                                      year: 'numeric',
+                                      timeZone: 'UTC',
+                                  })
+                                : 'No activity',
+                            null,
+                            'cp-stat-text'
+                        );
+                    }
+                    function board(title, icon, group, entries, metric) {
                         boards.push({
                             title: title,
                             metric: metric,
-                            emoji: emoji,
+                            icon: icon,
                             group: group,
-                            groupEmoji: groupEmoji,
-                            empty: 'No lines ' + (metric === 'added' ? 'added.' : 'removed.'),
-                            entries: entries.map(function (entry) {
-                                return {
-                                    name: entry.name,
-                                    href: statisticsUrl(entry),
-                                    score: entry[metric].toLocaleString() + ' lines',
-                                    percentage:
-                                        (stats[metric] ? (entry[metric] / stats[metric]) * 100 : 0).toFixed(1) + '%',
-                                };
-                            }),
+                            empty: metric === 'added' ? 'No additions' : 'No removals',
+                            entries: entries
+                                .filter(function (entry) {
+                                    return entry[metric] > 0;
+                                })
+                                .map(function (entry) {
+                                    return {
+                                        name: entry.name,
+                                        photo: entry.photo || '',
+                                        href: statisticsUrl(entry),
+                                        score: entry[metric].toLocaleString() + ' lines',
+                                        percentage:
+                                            (stats[metric] ? (entry[metric] / stats[metric]) * 100 : 0).toFixed(1) +
+                                            '%',
+                                    };
+                                }),
                         });
                     }
-                    board('Builders', '\uD83D\uDC77', 'Created by', '\uD83D\uDC64', stats.creators, 'added');
-                    board('Destroyers', '\uD83D\uDCA5', 'Created by', '\uD83D\uDC64', stats.destroyers, 'removed');
-                    board(
-                        'Expansions',
-                        '\uD83C\uDFD7\uFE0F',
-                        'Update sets',
-                        '\uD83D\uDCE6',
-                        stats.creatorSets,
-                        'added'
-                    );
-                    board('Demolitions', '\uD83E\uDDE8', 'Update sets', '\uD83D\uDCE6', stats.destroyerSets, 'removed');
+                    board('Builders', 'fa-wrench', 'Created by', stats.creators, 'added');
+                    board('Destroyers', 'fa-bomb', 'Created by', stats.destroyers, 'removed');
+                    board('Expansions', 'fa-building', 'Update sets', stats.creatorSets, 'added');
+                    board('Demolitions', 'fa-gavel', 'Update sets', stats.destroyerSets, 'removed');
                     ctrl.statistics.facts = facts;
                     ctrl.statistics.boards = boards;
+                    ctrl.statistics.activity = stats.activity || [];
                 }
 
                 function loadStatistics() {
@@ -529,9 +599,11 @@
                                 fields: Object.create(null),
                                 added: 0,
                                 removed: 0,
+                                activity: [],
                             };
                         accumulated.added += stats.added;
                         accumulated.removed += stats.removed;
+                        accumulated.activity = accumulated.activity.concat(stats.activity || []);
                         function collect(entries, destination, key) {
                             (entries || []).forEach(function (entry) {
                                 var id = key(entry),
@@ -542,10 +614,11 @@
                                 previous.added += entry.added;
                                 previous.removed += entry.removed;
                                 if (entry.userId) previous.userId = entry.userId;
+                                if (entry.photo) previous.photo = entry.photo;
                             });
                         }
                         collect(stats.creators, accumulated.authors, function (entry) {
-                            return entry.name;
+                            return entry.name.toLowerCase();
                         });
                         collect(stats.creatorSets, accumulated.sets, function (entry) {
                             return (
@@ -592,6 +665,40 @@
                         stats.removed = accumulated.removed;
                         if (Object.keys(accumulated.fields).length) stats.busiestField = busiest(accumulated.fields);
                         stats.biggestMakeover = busiest(accumulated.sets);
+                        var months = Object.create(null);
+                        stats.activity = accumulated.activity
+                            .filter(function (point) {
+                                if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(point.time || '')) return false;
+                                point.timestamp = Date.parse(point.time.replace(' ', 'T') + 'Z');
+                                return (
+                                    isFinite(point.timestamp) &&
+                                    new Date(point.timestamp).toISOString().slice(0, 19).replace('T', ' ') ===
+                                        point.time
+                                );
+                            })
+                            .sort(function (a, b) {
+                                return a.timestamp - b.timestamp || a.id.localeCompare(b.id);
+                            });
+                        stats.longestQuietDays = null;
+                        stats.busiestMonth = '';
+                        var busiestTotal = 0;
+                        stats.activity.forEach(function (point, index) {
+                            var month = point.time.slice(0, 7);
+                            months[month] = (months[month] || 0) + point.added + point.removed;
+                            if (index)
+                                stats.longestQuietDays = Math.max(
+                                    stats.longestQuietDays || 0,
+                                    Math.floor((point.timestamp - stats.activity[index - 1].timestamp) / 86400000)
+                                );
+                        });
+                        Object.keys(months)
+                            .sort()
+                            .forEach(function (month) {
+                                if (months[month] > busiestTotal) {
+                                    stats.busiestMonth = month;
+                                    busiestTotal = months[month];
+                                }
+                            });
                         renderStatistics(stats);
                         ctrl.statistics.loaded = true;
                         ctrl.statistics.loading = false;
@@ -644,7 +751,7 @@
                                     if (stats.snapshots) {
                                         if (!statisticsWorker)
                                             statisticsWorker = new Worker(
-                                                '/widget_editor_credit_worker.jsdbx?sysparm_substitute=false&v=2'
+                                                '/widget_editor_credit_worker.jsdbx?sysparm_substitute=false&v=3'
                                             );
                                         statisticsTimer = window.setTimeout(function () {
                                             if (request !== statisticsRequest) return;
@@ -708,7 +815,7 @@
                                         failed('Calculation timed out. Reload to try again.');
                                     }, requestTimeout);
                                     statisticsWorker = new Worker(
-                                        '/widget_editor_credit_worker.jsdbx?sysparm_substitute=false&v=2'
+                                        '/widget_editor_credit_worker.jsdbx?sysparm_substitute=false&v=3'
                                     );
                                     matchBatch(
                                         statisticsWorker,
@@ -1933,7 +2040,7 @@
                                     if (result.snapshots) {
                                         if (!fieldWorker)
                                             fieldWorker = new Worker(
-                                                '/widget_editor_credit_worker.jsdbx?sysparm_substitute=false&v=2'
+                                                '/widget_editor_credit_worker.jsdbx?sysparm_substitute=false&v=3'
                                             );
                                         matchBatch(fieldWorker, 'credit', result, accept, fail);
                                     } else accept(result);
@@ -1968,7 +2075,7 @@
                                         fail('Calculation timed out.');
                                     }, requestTimeout);
                                     fieldWorker = new Worker(
-                                        '/widget_editor_credit_worker.jsdbx?sysparm_substitute=false&v=2'
+                                        '/widget_editor_credit_worker.jsdbx?sysparm_substitute=false&v=3'
                                     );
                                     matchBatch(
                                         fieldWorker,
@@ -2160,6 +2267,7 @@
                 ctrl.mountPickers = setupPickers;
 
                 function load(preserveHistory) {
+                    ctrl.closeEditorMenu(false);
                     if (!preserveHistory) clearHistory();
                     window.clearTimeout(contextTimer);
                     resetStatistics();
@@ -2257,8 +2365,9 @@
                     window.clearTimeout(titleTimer);
                 });
                 function updateScrollOffset() {
-                    var height = document.querySelector('.dc-header').getBoundingClientRect().height + 12;
-                    document.documentElement.style.scrollPaddingTop = height + 'px';
+                    var height = document.querySelector('.dc-header').getBoundingClientRect().height;
+                    document.documentElement.style.scrollPaddingTop = height + 12 + 'px';
+                    document.documentElement.style.setProperty('--cp-header-height', height + 'px');
                 }
                 var headerObserver;
                 if (window.ResizeObserver) {
@@ -2309,6 +2418,469 @@
                 });
             },
         ]);
+        app.directive('creditStatistics', function () {
+            return {
+                restrict: 'A',
+                link: function (scope, element) {
+                    scope.$watch('ctrl.statistics.open', function (open) {
+                        element[0].open = !!open;
+                    });
+                },
+            };
+        });
+        app.directive('creditContribution', function () {
+            var observer = window.IntersectionObserver
+                ? new IntersectionObserver(
+                      function (entries) {
+                          entries.forEach(function (entry) {
+                              if (!entry.isIntersecting) return;
+                              entry.target.classList.add('cp-bar-visible');
+                              observer.unobserve(entry.target);
+                          });
+                      },
+                      { threshold: 0.1 }
+                  )
+                : null;
+            return {
+                restrict: 'A',
+                link: function (scope, element) {
+                    if (!observer) element[0].classList.add('cp-bar-visible');
+                    else {
+                        observer.observe(element[0]);
+                        scope.$on('$destroy', function () {
+                            observer.unobserve(element[0]);
+                        });
+                    }
+                },
+            };
+        });
+        app.directive('creditAvatar', function () {
+            return {
+                restrict: 'A',
+                link: function (scope, element, attrs) {
+                    scope.$watch(attrs.creditAvatar, function (author) {
+                        if (author) renderAvatar(element[0], author.name, author.photo);
+                    });
+                },
+            };
+        });
+        app.directive('creditActivity', function () {
+            return {
+                restrict: 'A',
+                link: function (scope, element, attrs) {
+                    var root = element[0],
+                        viewport = root.querySelector('.cp-activity-viewport'),
+                        plot = root.querySelector('.cp-activity-plot'),
+                        canvas = root.querySelector('canvas'),
+                        avatars = root.querySelector('.cp-activity-avatars'),
+                        tooltip = root.querySelector('.cp-activity-tooltip'),
+                        error = root.querySelector('.cp-activity-error'),
+                        dateRange = root.querySelector('.cp-activity-range'),
+                        selection = root.querySelector('.cp-activity-selection'),
+                        hoverLayer = root.querySelector('.cp-activity-hover'),
+                        guide = root.querySelector('.cp-activity-guide'),
+                        halos = root.querySelectorAll('.cp-activity-halo'),
+                        activeAvatar,
+                        fullscreen = root.querySelector('.cp-activity-fullscreen'),
+                        zoomIn = root.querySelector('.cp-activity-zoom-in'),
+                        zoomOut = root.querySelector('.cp-activity-zoom-out'),
+                        reset = root.querySelector('.cp-activity-reset'),
+                        chart,
+                        frame,
+                        history,
+                        points,
+                        spacing,
+                        dragStart,
+                        pointPadding = 16,
+                        start = 0,
+                        end = 0;
+                    function hideTooltip() {
+                        tooltip.hidden = true;
+                        hoverLayer.hidden = true;
+                        if (activeAvatar) activeAvatar.classList.remove('cp-activity-avatar-active');
+                        activeAvatar = null;
+                    }
+                    function hasTotals(point) {
+                        return point.available !== false || point.added > 0 || point.removed > 0;
+                    }
+                    function highlight(index) {
+                        hoverLayer.hidden = false;
+                        guide.style.left = chart.scale.calculateX(index) + 'px';
+                        guide.style.top = chart.scale.startPoint + 'px';
+                        guide.style.height = chart.scale.endPoint - chart.scale.startPoint + 'px';
+                        halos.forEach(function (halo, dataset) {
+                            var dot = chart.datasets[dataset].points[index];
+                            halo.hidden = !hasTotals(points[index]) || !dot || !isFinite(dot.y);
+                            if (halo.hidden) return;
+                            halo.style.left = dot.x + 'px';
+                            halo.style.top = dot.y + 'px';
+                        });
+                        if (activeAvatar) activeAvatar.classList.remove('cp-activity-avatar-active');
+                        activeAvatar = avatars.querySelector('[data-point-index="' + index + '"]');
+                        if (activeAvatar) activeAvatar.classList.add('cp-activity-avatar-active');
+                    }
+                    function showTooltip(text, x, y) {
+                        tooltip.textContent = text;
+                        tooltip.hidden = false;
+                        tooltip.style.left = '0px';
+                        tooltip.style.left =
+                            Math.max(0, Math.min(root.clientWidth - tooltip.offsetWidth, x + 12)) + 'px';
+                        tooltip.style.top = y + 12 + 'px';
+                    }
+                    function details(point) {
+                        return (
+                            (point.updateSet ? point.updateSet.name : 'Unknown update set') +
+                            '\n' +
+                            point.time +
+                            '\n' +
+                            point.added.toLocaleString() +
+                            ' additions, ' +
+                            point.removed.toLocaleString() +
+                            ' removals' +
+                            '\n' +
+                            point.author
+                        );
+                    }
+                    function destroy() {
+                        if (chart) chart.destroy();
+                        chart = null;
+                        avatars.textContent = '';
+                        cancelSelection();
+                        hideTooltip();
+                    }
+                    function render() {
+                        frame = null;
+                        destroy();
+                        var activity = scope.$eval(attrs.creditActivity) || [];
+                        if (history !== activity) {
+                            history = activity;
+                            start = 0;
+                            end = history.length - 1;
+                        }
+                        points = history.slice(start, end + 1);
+                        if (!scope.ctrl.statistics.open || !points.length || !viewport.clientWidth) return;
+                        var count = points.length,
+                            labelStep = Math.max(1, Math.ceil(count / Math.max(2, viewport.clientWidth / 110))),
+                            timeLabels =
+                                history.length > 1 &&
+                                points[0].time.slice(0, 10) === points[count - 1].time.slice(0, 10),
+                            seconds = points[count - 1].timestamp - points[0].timestamp < 60000,
+                            lastLabel = '';
+                        var dates = [points[0], points[count - 1]].map(function (point) {
+                            return new Date(point.timestamp).toLocaleDateString('en-AU', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric',
+                                timeZone: 'UTC',
+                            });
+                        });
+                        dateRange.textContent = dates[0] === dates[1] ? dates[0] : dates.join(' – ');
+                        zoomIn.disabled = count <= 1;
+                        zoomOut.disabled = reset.disabled = count === history.length;
+                        error.hidden = true;
+                        try {
+                            canvas.width = viewport.clientWidth;
+                            canvas.height = plot.clientHeight;
+                            canvas.style.width = viewport.clientWidth + 'px';
+                            canvas.style.height = plot.clientHeight + 'px';
+                            var style = getComputedStyle(root),
+                                axisColour = 'rgba(' + style.color.match(/\d+/g).slice(0, 3).join(',') + ',0.25)',
+                                colours = ['#22966b', '#d25555'];
+                            chart = new window.Chart(canvas.getContext('2d')).Line(
+                                {
+                                    labels: points.map(function (point, index) {
+                                        if (
+                                            !(
+                                                (index % labelStep === 0 && index < count - 1 - labelStep / 2) ||
+                                                index === count - 1
+                                            )
+                                        )
+                                            return '';
+                                        var label = timeLabels
+                                            ? point.time.slice(11, seconds ? 19 : 16)
+                                            : new Date(point.timestamp).toLocaleDateString('en-AU', {
+                                                  day: 'numeric',
+                                                  month: 'short',
+                                                  year: '2-digit',
+                                                  timeZone: 'UTC',
+                                              });
+                                        if (label === lastLabel) return '';
+                                        lastLabel = label;
+                                        return label;
+                                    }),
+                                    datasets: ['added', 'removed'].map(function (metric, index) {
+                                        return {
+                                            label: index ? 'Removals' : 'Additions',
+                                            strokeColor: colours[index],
+                                            pointColor: colours[index],
+                                            pointStrokeColor: colours[index],
+                                            data: points.map(function (point) {
+                                                return hasTotals(point) ? point[metric] : null;
+                                            }),
+                                        };
+                                    }),
+                                },
+                                {
+                                    animation: false,
+                                    responsive: false,
+                                    showTooltips: false,
+                                    datasetFill: false,
+                                    bezierCurve: false,
+                                    pointDotRadius: 3,
+                                    scaleBeginAtZero: true,
+                                    scaleFontColor: style.color,
+                                    scaleFontFamily: style.fontFamily,
+                                    scaleLineColor: 'rgba(0,0,0,0)',
+                                    scaleGridLineColor:
+                                        'rgba(' + style.color.match(/\d+/g).slice(0, 3).join(',') + ',0.08)',
+                                    scaleShowVerticalLines: false,
+                                }
+                            );
+                            chart.scale.xScalePaddingLeft = Math.max(40, chart.scale.xScalePaddingLeft);
+                            chart.scale.xScalePaddingRight = Math.max(40, chart.scale.xScalePaddingRight);
+                            spacing =
+                                (viewport.clientWidth -
+                                    chart.scale.xScalePaddingLeft -
+                                    chart.scale.xScalePaddingRight -
+                                    2 * pointPadding) /
+                                Math.max(1, points.length - 1);
+                            chart.scale.calculateX = function (index) {
+                                return this.xScalePaddingLeft + pointPadding + index * spacing;
+                            };
+                            chart.scale.xLabelRotation = 0;
+                            chart.scale.startPoint = 40;
+                            chart.scale.endPoint = chart.chart.height - 30;
+                            chart.draw();
+                            // The bundled chart otherwise draws its vertical axis through the first point.
+                            var context = chart.chart.ctx;
+                            context.beginPath();
+                            context.strokeStyle = axisColour;
+                            context.lineWidth = 1;
+                            context.moveTo(chart.scale.xScalePaddingLeft, chart.scale.startPoint);
+                            context.lineTo(chart.scale.xScalePaddingLeft, chart.scale.endPoint);
+                            context.lineTo(viewport.clientWidth - chart.scale.xScalePaddingRight, chart.scale.endPoint);
+                            context.stroke();
+                            points.forEach(function (point, index) {
+                                // Thin crowded avatars; zooming restores individual updates.
+                                if (index % Math.max(1, Math.ceil(28 / spacing)) !== 0) return;
+                                var button = document.createElement('button'),
+                                    added = chart.datasets[0].points[index],
+                                    removed = chart.datasets[1].points[index];
+                                button.type = 'button';
+                                button.className = 'cp-activity-avatar';
+                                button.dataset.pointIndex = index;
+                                renderAvatar(button, point.author, point.photo);
+                                button.setAttribute('aria-label', point.author + '; show update details');
+                                button.setAttribute('aria-describedby', 'cp-activity-tooltip');
+                                button.style.left = chart.scale.calculateX(index) + 'px';
+                                button.style.top =
+                                    (!hasTotals(point) ? chart.scale.endPoint : Math.min(added.y, removed.y)) -
+                                    8 +
+                                    'px';
+                                function show(text) {
+                                    highlight(index);
+                                    var rect = button.getBoundingClientRect(),
+                                        parent = root.getBoundingClientRect();
+                                    showTooltip(text, rect.left - parent.left, rect.bottom - parent.top);
+                                }
+                                function showSet() {
+                                    show(point.updateSet ? point.updateSet.name : 'Unknown update set');
+                                }
+                                button.addEventListener('mouseenter', showSet);
+                                button.addEventListener('focus', showSet);
+                                button.addEventListener('click', function () {
+                                    show(details(point));
+                                });
+                                button.addEventListener('mouseleave', hideTooltip);
+                                button.addEventListener('blur', hideTooltip);
+                                avatars.appendChild(button);
+                            });
+                        } catch (e) {
+                            destroy();
+                            error.hidden = false;
+                        }
+                    }
+                    function schedule() {
+                        window.cancelAnimationFrame(frame);
+                        frame = window.requestAnimationFrame(render);
+                    }
+                    function isFullscreen() {
+                        return document.fullscreenElement === root || root.classList.contains('cp-activity-expanded');
+                    }
+                    function fullscreenChanged() {
+                        fullscreen.setAttribute(
+                            'aria-label',
+                            isFullscreen() ? 'Exit full screen' : 'Enter full screen'
+                        );
+                        fullscreen.setAttribute('aria-pressed', String(isFullscreen()));
+                        fullscreen.querySelector('i').className =
+                            'fa ' + (isFullscreen() ? 'fa-compress' : 'fa-expand');
+                        schedule();
+                    }
+                    function exitFullscreen() {
+                        root.classList.remove('cp-activity-expanded');
+                        if (document.fullscreenElement === root) document.exitFullscreen().catch(function () {});
+                    }
+                    function expandFallback() {
+                        if (scope.$$destroyed || !scope.ctrl.statistics.open) return;
+                        root.classList.add('cp-activity-expanded');
+                        fullscreenChanged();
+                    }
+                    function toggleFullscreen() {
+                        if (isFullscreen()) {
+                            exitFullscreen();
+                            fullscreenChanged();
+                        } else if (root.requestFullscreen) root.requestFullscreen().catch(expandFallback);
+                        else expandFallback();
+                    }
+                    function setRange(from, to) {
+                        start = Math.max(0, Math.min(history.length - 1, from));
+                        end = Math.max(start, Math.min(history.length - 1, to));
+                        schedule();
+                    }
+                    function zoom(factor) {
+                        var count = Math.min(history.length, Math.max(1, Math.round(points.length * factor))),
+                            from = Math.max(
+                                0,
+                                Math.min(history.length - count, Math.round((start + end + 1 - count) / 2))
+                            );
+                        setRange(from, from + count - 1);
+                    }
+                    function magnify() {
+                        zoom(0.5);
+                    }
+                    function reduce() {
+                        zoom(2);
+                    }
+                    function resetZoom() {
+                        setRange(0, history.length - 1);
+                    }
+                    function pointIndex(x) {
+                        return points.length === 1
+                            ? 0
+                            : Math.max(
+                                  0,
+                                  Math.min(
+                                      points.length - 1,
+                                      Math.round((x - chart.scale.xScalePaddingLeft - pointPadding) / spacing)
+                                  )
+                              );
+                    }
+                    function beginSelection(event) {
+                        if (!chart || event.button !== 0) return;
+                        hideTooltip();
+                        dragStart = Math.max(
+                            0,
+                            Math.min(canvas.clientWidth, event.clientX - canvas.getBoundingClientRect().left)
+                        );
+                        canvas.setPointerCapture(event.pointerId);
+                    }
+                    function endSelection(event) {
+                        if (dragStart === undefined) return;
+                        var x = Math.max(
+                                0,
+                                Math.min(canvas.clientWidth, event.clientX - canvas.getBoundingClientRect().left)
+                            ),
+                            first = pointIndex(Math.min(dragStart, x)),
+                            last = pointIndex(Math.max(dragStart, x)),
+                            distance = Math.abs(x - dragStart);
+                        dragStart = undefined;
+                        selection.hidden = true;
+                        if (distance >= 8) setRange(start + first, start + last);
+                        else hover(event);
+                    }
+                    function cancelSelection() {
+                        dragStart = undefined;
+                        selection.hidden = true;
+                    }
+                    function hover(event) {
+                        if (!chart) return;
+                        if (dragStart !== undefined) {
+                            var cursor = Math.max(
+                                0,
+                                Math.min(canvas.clientWidth, event.clientX - canvas.getBoundingClientRect().left)
+                            );
+                            selection.hidden = false;
+                            selection.style.left = Math.min(dragStart, cursor) + 'px';
+                            selection.style.width = Math.abs(cursor - dragStart) + 'px';
+                            return;
+                        }
+                        var rect = canvas.getBoundingClientRect(),
+                            parent = root.getBoundingClientRect(),
+                            x = event.clientX - rect.left,
+                            y = event.clientY - rect.top,
+                            index = pointIndex(x),
+                            point = points.length === 1 ? points[0] : points[index];
+                        if (points.length === 1) index = 0;
+                        if (
+                            !point ||
+                            !hasTotals(point) ||
+                            !chart.datasets.some(function (dataset) {
+                                var dot = dataset.points[index];
+                                return Math.abs(dot.x - x) < 12 && Math.abs(dot.y - y) < 12;
+                            })
+                        ) {
+                            hideTooltip();
+                            return;
+                        }
+                        showTooltip(details(point), event.clientX - parent.left, event.clientY - parent.top);
+                        highlight(index);
+                    }
+                    function keyboard(event) {
+                        if (event.key === 'Escape') {
+                            if (root.classList.contains('cp-activity-expanded')) {
+                                exitFullscreen();
+                                fullscreenChanged();
+                            }
+                            hideTooltip();
+                            cancelSelection();
+                        }
+                    }
+                    fullscreen.addEventListener('click', toggleFullscreen);
+                    document.addEventListener('fullscreenchange', fullscreenChanged);
+                    zoomIn.addEventListener('click', magnify);
+                    zoomOut.addEventListener('click', reduce);
+                    reset.addEventListener('click', resetZoom);
+                    canvas.addEventListener('pointerdown', beginSelection);
+                    canvas.addEventListener('pointermove', hover);
+                    canvas.addEventListener('pointerup', endSelection);
+                    canvas.addEventListener('pointercancel', cancelSelection);
+                    canvas.addEventListener('mouseleave', hideTooltip);
+                    root.addEventListener('keydown', keyboard);
+                    window.addEventListener('resize', schedule);
+                    var observer = window.ResizeObserver ? new ResizeObserver(schedule) : null,
+                        themeObserver = new MutationObserver(schedule);
+                    if (observer) observer.observe(viewport);
+                    themeObserver.observe(document.documentElement, {
+                        attributes: true,
+                        attributeFilter: ['class', 'style'],
+                    });
+                    scope.$watchGroup([attrs.creditActivity, 'ctrl.statistics.open'], function () {
+                        if (!scope.ctrl.statistics.open) exitFullscreen();
+                        schedule();
+                    });
+                    scope.$on('$destroy', function () {
+                        window.cancelAnimationFrame(frame);
+                        if (observer) observer.disconnect();
+                        themeObserver.disconnect();
+                        window.removeEventListener('resize', schedule);
+                        fullscreen.removeEventListener('click', toggleFullscreen);
+                        document.removeEventListener('fullscreenchange', fullscreenChanged);
+                        exitFullscreen();
+                        zoomIn.removeEventListener('click', magnify);
+                        zoomOut.removeEventListener('click', reduce);
+                        reset.removeEventListener('click', resetZoom);
+                        canvas.removeEventListener('pointerdown', beginSelection);
+                        canvas.removeEventListener('pointermove', hover);
+                        canvas.removeEventListener('pointerup', endSelection);
+                        canvas.removeEventListener('pointercancel', cancelSelection);
+                        canvas.removeEventListener('mouseleave', hideTooltip);
+                        root.removeEventListener('keydown', keyboard);
+                        destroy();
+                    });
+                },
+            };
+        });
         app.directive('creditField', function () {
             return {
                 restrict: 'A',
