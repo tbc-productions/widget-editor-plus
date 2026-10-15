@@ -9159,6 +9159,20 @@
                     });
                 };
 
+                $scope.openCredit = function () {
+                    $scope.openDropdown = null;
+                    if ($scope.isNewWidget || !/^[0-9a-f]{32}$/i.test(SYS_ID || '')) return;
+                    window.open(
+                        '/nav_to.do?uri=' +
+                            encodeURIComponent(
+                                'ui_page.do?sys_id=9c5bf170283e4d6394aa639c79936587&sysparm_table=sp_widget&sysparm_record=' +
+                                    SYS_ID
+                            ),
+                        '_blank',
+                        'noopener,noreferrer'
+                    );
+                };
+
                 $scope.openCodeSearch = function () {
                     window.open(
                         '/nav_to.do?uri=ui_page.do%3Fsys_id%3D27a85cdf06a14eba97d2ffc3b57c4a46',

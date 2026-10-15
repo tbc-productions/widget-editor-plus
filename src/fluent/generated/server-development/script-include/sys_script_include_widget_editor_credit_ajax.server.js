@@ -120,7 +120,7 @@ WidgetEditorCreditAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 throw new Error('Invalid contributor list.');
             requestedAuthors.forEach(function (name) {
                 if (typeof name !== 'string' || name.length > 256) throw new Error('Invalid contributor.');
-                authors[name] = { name: name, added: 0, removed: 0 };
+                if (!authors[name.toLowerCase()]) authors[name.toLowerCase()] = { name: name, added: 0, removed: 0 };
             });
             var knownSets = Object.create(null),
                 unknownSets = 0;
@@ -150,7 +150,7 @@ WidgetEditorCreditAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             }
             var userNames = Object.keys(authors),
                 userIds = Object.create(null);
-            if (founder && userNames.indexOf(founder) === -1) userNames.push(founder);
+            if (founder && userNames.indexOf(founder.toLowerCase()) === -1) userNames.push(founder.toLowerCase());
             if (userNames.length) {
                 var users = new GlideRecord('sys_user'),
                     userQuery = users.addQuery('user_name', userNames[0]);
@@ -158,13 +158,42 @@ WidgetEditorCreditAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 users.query();
                 while (users.next()) {
                     if (!users.canRead() || !users.getElement('user_name').canRead()) continue;
-                    userIds[String(users.getValue('user_name'))] = String(users.getUniqueValue());
+                    var username = String(users.getValue('user_name')),
+                        photo = users.getElement('photo').canRead()
+                            ? String(users.getValue('photo') || '').replace(/\.iix$/i, '')
+                            : '';
+                    userIds[username.toLowerCase()] = String(users.getUniqueValue());
+                    if (authors[username.toLowerCase()]) {
+                        authors[username.toLowerCase()].name = username;
+                        authors[username.toLowerCase()].photo = /^[0-9a-f]{32}$/i.test(photo) ? photo : '';
+                    }
                 }
             }
             var creators = Object.keys(authors).map(function (name) {
                 authors[name].userId = userIds[name] || '';
                 return authors[name];
             });
+            var contributorsById = Object.create(null);
+            creators.forEach(function (author) {
+                if (author.userId) contributorsById[author.userId] = author;
+            });
+            var profileIds = Object.keys(contributorsById);
+            if (profileIds.length) {
+                var profiles = new GlideRecord('live_profile');
+                profiles.addQuery('document', 'IN', profileIds.join(','));
+                profiles.query();
+                while (profiles.next()) {
+                    if (
+                        !profiles.canRead() ||
+                        !profiles.getElement('document').canRead() ||
+                        !profiles.getElement('photo').canRead()
+                    )
+                        continue;
+                    var author = contributorsById[String(profiles.getValue('document'))],
+                        profilePhoto = String(profiles.getValue('photo') || '').replace(/\.iix$/i, '');
+                    if (author && /^[0-9a-f]{32}$/i.test(profilePhoto)) author.photo = profilePhoto;
+                }
+            }
             var ageDays = null;
             if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(created)) {
                 var birth = new GlideDateTime(created),
@@ -175,7 +204,7 @@ WidgetEditorCreditAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             return JSON.stringify({
                 success: true,
                 founder: founder,
-                founderUserId: userIds[founder] || '',
+                founderUserId: userIds[founder.toLowerCase()] || '',
                 created: created,
                 creationSource: creationSource,
                 ageDays: ageDays,
