@@ -121,6 +121,7 @@ test('admin guards deny every public entry before querying records', () => {
     assert.equal(JSON.parse(api.getCredit()).success, false);
     assert.equal(JSON.parse(api.getComparison()).success, false);
     assert.equal(JSON.parse(api.getStatistics()).success, false);
+    assert.equal(JSON.parse(api.getContributors()).success, false);
     assert.equal(JSON.parse(api.getTables()).success, false);
     assert.equal(JSON.parse(api.getRecords()).success, false);
     assert.equal(api.buildUpdate, undefined);
@@ -824,4 +825,30 @@ test('statistics use readable live-profile avatars ahead of user photos in one b
     assert.equal(photo(), userPhoto, 'External image URLs remain rejected');
     user.readable = false;
     assert.equal(photo(), undefined, 'An unreadable contributor is not used to query live-profile photos');
+});
+
+
+test('attribution contributors reuse permission-checked photos without loading history and reject invalid input', () => {
+    const userId = '1'.repeat(32), photo = '2'.repeat(32);
+    const user = { sys_id: userId, user_name: 'ada', photo: '3'.repeat(32) };
+    const profile = { sys_id: '4'.repeat(32), document: userId, photo };
+    const { api, queries } = harness([], true, undefined, [], { records: { sys_user: [user], live_profile: [profile] } });
+    let names = ['ada', 'ADA', 'missing'];
+    api.getParameter = () => JSON.stringify(names);
+    let result = JSON.parse(api.getContributors());
+    assert.equal(result.success, true);
+    assert.deepEqual(result.contributors.ada, { name: 'ada', userId, photo });
+    assert.deepEqual(result.contributors.missing, { name: 'missing', userId: '' });
+    assert.deepEqual(queries, ['sys_user', 'live_profile']);
+    user.readable = false;
+    result = JSON.parse(api.getContributors());
+    assert.equal(result.contributors.ada.photo, undefined);
+    assert.equal(queries.filter(table => table === 'live_profile').length, 1);
+    for (names of [{}, [null], ['x'.repeat(257)], Array(5002).fill('ada')]) {
+        const count = queries.length;
+        assert.equal(JSON.parse(api.getContributors()).success, false);
+        assert.equal(queries.length, count);
+    }
+    api.getParameter = () => 'not JSON';
+    assert.equal(JSON.parse(api.getContributors()).success, false);
 });

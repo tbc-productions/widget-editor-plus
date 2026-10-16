@@ -104,6 +104,70 @@ WidgetEditorCreditAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         }
     },
 
+    getContributors: function () {
+        if (!gs.hasRole('admin')) return JSON.stringify({ success: false, error: 'Administrator access is required.' });
+        try {
+            var names = JSON.parse(String(this.getParameter('sysparm_authors') || '[]'));
+            if (!Array.isArray(names) || names.length > this._limits().max_updates + 1)
+                throw new Error('Invalid contributor list.');
+            names.forEach(function (name) {
+                if (typeof name !== 'string' || name.length > 256) throw new Error('Invalid contributor.');
+            });
+            return JSON.stringify({ success: true, contributors: this._contributors(names) });
+        } catch (e) {
+            return JSON.stringify({ success: false, error: e.message });
+        }
+    },
+
+    _contributors: function (names) {
+        var authors = Object.create(null);
+        names.forEach(function (name) {
+            if (!authors[name.toLowerCase()]) authors[name.toLowerCase()] = { name: name, userId: '' };
+        });
+        var userNames = Object.keys(authors);
+        if (userNames.length) {
+            var users = new GlideRecord('sys_user'),
+                userQuery = users.addQuery('user_name', userNames[0]);
+            for (var u = 1; u < userNames.length; u++) userQuery.addOrCondition('user_name', userNames[u]);
+            users.query();
+            while (users.next()) {
+                if (!users.canRead() || !users.getElement('user_name').canRead()) continue;
+                var username = String(users.getValue('user_name')),
+                    photo = users.getElement('photo').canRead()
+                        ? String(users.getValue('photo') || '').replace(/\.iix$/i, '')
+                        : '';
+                if (authors[username.toLowerCase()]) {
+                    authors[username.toLowerCase()].name = username;
+                    authors[username.toLowerCase()].userId = String(users.getUniqueValue());
+                    authors[username.toLowerCase()].photo = /^[0-9a-f]{32}$/i.test(photo) ? photo : '';
+                }
+            }
+        }
+        var contributorsById = Object.create(null);
+        Object.keys(authors).forEach(function (name) {
+            var author = authors[name];
+            if (author.userId) contributorsById[author.userId] = author;
+        });
+        var profileIds = Object.keys(contributorsById);
+        if (profileIds.length) {
+            var profiles = new GlideRecord('live_profile');
+            profiles.addQuery('document', 'IN', profileIds.join(','));
+            profiles.query();
+            while (profiles.next()) {
+                if (
+                    !profiles.canRead() ||
+                    !profiles.getElement('document').canRead() ||
+                    !profiles.getElement('photo').canRead()
+                )
+                    continue;
+                var author = contributorsById[String(profiles.getValue('document'))],
+                    profilePhoto = String(profiles.getValue('photo') || '').replace(/\.iix$/i, '');
+                if (author && /^[0-9a-f]{32}$/i.test(profilePhoto)) author.photo = profilePhoto;
+            }
+        }
+        return authors;
+    },
+
     getStatistics: function () {
         if (!gs.hasRole('admin')) return JSON.stringify({ success: false, error: 'Administrator access is required.' });
         try {
@@ -148,52 +212,12 @@ WidgetEditorCreditAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 founder = String(first.sys_created_by || '');
                 created = String(first.sys_created_on || '');
             }
-            var userNames = Object.keys(authors),
-                userIds = Object.create(null);
+            var userNames = Object.keys(authors);
             if (founder && userNames.indexOf(founder.toLowerCase()) === -1) userNames.push(founder.toLowerCase());
-            if (userNames.length) {
-                var users = new GlideRecord('sys_user'),
-                    userQuery = users.addQuery('user_name', userNames[0]);
-                for (var u = 1; u < userNames.length; u++) userQuery.addOrCondition('user_name', userNames[u]);
-                users.query();
-                while (users.next()) {
-                    if (!users.canRead() || !users.getElement('user_name').canRead()) continue;
-                    var username = String(users.getValue('user_name')),
-                        photo = users.getElement('photo').canRead()
-                            ? String(users.getValue('photo') || '').replace(/\.iix$/i, '')
-                            : '';
-                    userIds[username.toLowerCase()] = String(users.getUniqueValue());
-                    if (authors[username.toLowerCase()]) {
-                        authors[username.toLowerCase()].name = username;
-                        authors[username.toLowerCase()].photo = /^[0-9a-f]{32}$/i.test(photo) ? photo : '';
-                    }
-                }
-            }
+            var contributors = this._contributors(userNames);
             var creators = Object.keys(authors).map(function (name) {
-                authors[name].userId = userIds[name] || '';
-                return authors[name];
+                return Object.assign(authors[name], contributors[name]);
             });
-            var contributorsById = Object.create(null);
-            creators.forEach(function (author) {
-                if (author.userId) contributorsById[author.userId] = author;
-            });
-            var profileIds = Object.keys(contributorsById);
-            if (profileIds.length) {
-                var profiles = new GlideRecord('live_profile');
-                profiles.addQuery('document', 'IN', profileIds.join(','));
-                profiles.query();
-                while (profiles.next()) {
-                    if (
-                        !profiles.canRead() ||
-                        !profiles.getElement('document').canRead() ||
-                        !profiles.getElement('photo').canRead()
-                    )
-                        continue;
-                    var author = contributorsById[String(profiles.getValue('document'))],
-                        profilePhoto = String(profiles.getValue('photo') || '').replace(/\.iix$/i, '');
-                    if (author && /^[0-9a-f]{32}$/i.test(profilePhoto)) author.photo = profilePhoto;
-                }
-            }
             var ageDays = null;
             if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(created)) {
                 var birth = new GlideDateTime(created),
@@ -204,7 +228,7 @@ WidgetEditorCreditAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             return JSON.stringify({
                 success: true,
                 founder: founder,
-                founderUserId: userIds[founder.toLowerCase()] || '',
+                founderUserId: (contributors[founder.toLowerCase()] || {}).userId || '',
                 created: created,
                 creationSource: creationSource,
                 ageDays: ageDays,
