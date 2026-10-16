@@ -2,9 +2,9 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { chromium } = require('@playwright/test');
-const html = fs.readFileSync('src/fluent/generated/other/sys-ui-page/credit_plus.html', 'utf8');
+const html = fs.readFileSync('src/fluent/generated/other/sys-ui-page/widget_editor_credit.html', 'utf8');
 assert.match(fs.readFileSync('src/fluent/generated/other/sys-ui-page/widget_editor_compare.html', 'utf8'), /credit_update:\s*_weDiffConfigParams.get\('credit_update'\)/);
-const client = fs.readFileSync('src/fluent/generated/other/sys-ui-page/credit_plus.client.js', 'utf8');
+const client = fs.readFileSync('src/fluent/generated/other/sys-ui-page/widget_editor_credit.client.js', 'utf8');
 assert.doesNotMatch(client, /[\uD800-\uDBFF][\uDC00-\uDFFF]/, 'Use JavaScript Unicode escapes so emoji survive update-set transport');
 const angularSource = fs.readFileSync(require.resolve('angular/angular.min.js'), 'utf8');
 async function settle(page) {

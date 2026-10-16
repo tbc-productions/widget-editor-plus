@@ -3,6 +3,7 @@
 ## Working conventions
 
 - Do not commit or push unless the user explicitly asks. Leave edits uncommitted until they are ready.
+- Never create new ServiceNow records, including Fluent record definitions and fix scripts, without asking the user and receiving explicit approval first.
 - Use Australian English. Keep README feature summaries brief; configuration details belong in `CONFIGURATION.md`.
 - Keep this guide project-specific and platform-neutral. Do not document personal hosting arrangements, remote mappings, or repository visibility settings.
 

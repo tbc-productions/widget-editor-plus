@@ -294,7 +294,7 @@ test('random duplicate-line diffs never reuse origins or match unequal text', ()
 });
 
 test('context-menu selection validates a single selection server-side before opening the page', () => {
-    const action = fs.readFileSync('src/fluent/generated/server-development/ui-action/credit_plus.client.js', 'utf8');
+    const action = fs.readFileSync('src/fluent/generated/server-development/ui-action/widget_editor_credit.client.js', 'utf8');
     for (const selection of ['', ids[0] + ',' + ids[1], ids[0]]) {
         let calls = 0, opened = '', alert = '';
         const context = { g_list: { getChecked: () => selection }, alert: value => alert = value, g_navigation: { open: value => opened = value },
@@ -312,7 +312,7 @@ test('context-menu selection validates a single selection server-side before ope
 });
 
 test('context launch uses the clicked row even when other records are checked', () => {
-    const action = fs.readFileSync('src/fluent/generated/server-development/ui-action/credit_plus.client.js', 'utf8');
+    const action = fs.readFileSync('src/fluent/generated/server-development/ui-action/widget_editor_credit.client.js', 'utf8');
     let requested;
     const context = { rowSysId: ids[0], g_list: { getChecked: () => ids[1] + ',' + ids[2] }, alert: () => assert.fail('Unexpected selection error'),
         g_navigation: { open: url => { assert.ok(url.startsWith('/nav_to.do?uri=')); assert.equal(decodeURIComponent(url.split('uri=')[1]), 'ui_page.do?sys_id=9c5bf170283e4d6394aa639c79936587&sysparm_update=' + ids[0]); } },
@@ -342,7 +342,7 @@ test('metadata limits retain the selected update and pass browser limits through
 });
 
 test('Credit+ is declared only as an admin list context action', () => {
-    const metadata = fs.readFileSync('src/fluent/generated/server-development/ui-action/sys_ui_action_credit_plus.now.ts', 'utf8');
+    const metadata = fs.readFileSync('src/fluent/generated/server-development/ui-action/sys_ui_action_widget_editor_credit.now.ts', 'utf8');
     assert.match(metadata, /list: \{ showContextMenu: true \}/);
     assert.doesNotMatch(metadata, /showBannerButton|showListChoice|form:|openCreditPlusForm/);
     assert.match(metadata, /condition: "gs.hasRole\('admin'\)"/);
@@ -534,7 +534,7 @@ test('metadata does not parse historical XML and set counts use IDs instead of d
 
 test('Credit Script Include name, ACL and caller metadata stay consistent', () => {
     const metadata = fs.readFileSync('src/fluent/generated/server-development/script-include/sys_script_include_widget_editor_credit_ajax.now.ts','utf8');
-    const acl = fs.readFileSync('src/fluent/generated/security/access-control/sys_security_acl_credit_plus.now.ts','utf8');
+    const acl = fs.readFileSync('src/fluent/generated/security/access-control/sys_security_acl_widget_editor_credit.now.ts','utf8');
     assert.match(metadata, /name: 'WidgetEditorCreditAjax'/); assert.match(metadata, /global.WidgetEditorCreditAjax/);
     assert.match(acl, /name: 'WidgetEditorCreditAjax'/);
     const properties = fs.readFileSync('src/fluent/generated/properties/system-property/sys_properties_widget_editor_credit.now.ts','utf8');
@@ -753,8 +753,12 @@ test('Credit+ module opens its verified UI page below Code Search+ and stays adm
     assert.equal(credit.title, 'Credit+');
     assert.match(credit.metadata, /roles: \['admin'\]/);
     assert.match(credit.metadata, /override_menu_roles: true/);
-    const page = fs.readFileSync('src/fluent/generated/other/sys-ui-page/sys_ui_page_credit_plus.now.ts', 'utf8');
+    const page = fs.readFileSync('src/fluent/generated/other/sys-ui-page/sys_ui_page_widget_editor_credit.now.ts', 'utf8');
+    assert.match(page, /endpoint: 'widget_editor_credit\.do'/);
+    const acl = fs.readFileSync('src/fluent/generated/security/access-control/sys_security_acl_widget_editor_credit.now.ts', 'utf8');
+    assert.match(acl, /name: 'widget_editor_credit'/);
     const pageId = page.match(/\$id: '([0-9a-f]{32})'/)[1];
+    assert.equal(pageId, '9c5bf170283e4d6394aa639c79936587');
     assert.ok(credit.metadata.includes("query: 'ui_page.do?sys_id=" + pageId + "'"));
     assert.equal(new Set(modules.map(module => module.order)).size, modules.length);
 });

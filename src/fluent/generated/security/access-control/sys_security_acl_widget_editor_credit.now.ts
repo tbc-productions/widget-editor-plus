@@ -6,7 +6,7 @@ Acl({
     type: 'ui_page',
     operation: 'read',
     roles: ['admin'],
-    name: 'credit_plus',
+    name: 'widget_editor_credit',
 })
 
 Acl({

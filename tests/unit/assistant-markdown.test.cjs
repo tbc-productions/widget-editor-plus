@@ -1468,41 +1468,6 @@ test('previewing combined JSON resolves fields without saving', () => {
     assert.deepEqual(saved, {});
 });
 
-
-test('legacy migration preserves configured nesting, omits leaves, retains existing values and is repeatable', () => {
-    const source = fs.readFileSync('src/fluent/generated/server-development/fix-script/widget_editor_markdown_groups_migrate.server.js', 'utf8');
-    const legacy = 'monaco.plus.update_sets.markdown_groups';
-    const values = {
-        [legacy]: JSON.stringify({
-            version: 1, groups: [
-                { table: 'a', children: [{ table: 'b', children: [{ table: 'c', children: [] }] }] },
-                { table: 'sp_widget', children: [{ table: 'sp_ng_template', children: [] }] },
-            ]
-        }), [legacy + '.sp_widget']: '["existing_widget_child"]'
-    };
-    const context = {
-        gs: { getProperty: name => values[name] || '', setProperty: (name, value) => { values[name] = value; } },
-        GlideRecord: function () {
-            let data = {};
-            this.get = (_field, name) => Object.hasOwn(values, name);
-            this.initialize = () => { };
-            this.setValue = (field, value) => { data[field] = value; };
-            this.insert = () => { values[data.name] = data.value; return 'id'; };
-        }
-    };
-    vm.createContext(context);
-    vm.runInContext(source, context);
-    assert.deepEqual(JSON.parse(values[legacy + '.a']), ['b']);
-    assert.deepEqual(JSON.parse(values[legacy + '.b']), ['c']);
-    assert.equal(Object.hasOwn(values, legacy + '.c'), false);
-    assert.equal(values[legacy + '.sys_security_acl'], '');
-    assert.equal(values[legacy + '.sp_widget'], '["existing_widget_child"]');
-    assert.equal(values[legacy], '');
-    const snapshot = JSON.stringify(values);
-    vm.runInContext(source, context);
-    assert.equal(JSON.stringify(values), snapshot);
-});
-
 test('table property rows validate before writes, save individually and delete properties', () => {
     const values = {}, writes = [];
     const fields = { widget: ['name', 'script', 'sys_id'], child: ['name', 'parent', 'sys_id'] };
@@ -1822,20 +1787,6 @@ test('Knowledge, page and UI policy defaults form one consistent hierarchy', () 
     assert.deepEqual(JSON.parse(source.match(/value: `([\s\S]*?)`,/)[1]), { display_value: 'display_number', additional_fields: 'short_description' });
 });
 
-test('page default migration moves only the unchanged old Widget defaults', () => {
-    const source = fs.readFileSync('src/fluent/generated/server-development/fix-script/widget_editor_markdown_page_defaults_migrate.server.js', 'utf8');
-    const old = ['sp_ng_template', 'm2m_sp_ng_pro_sp_widget', 'sp_instance', 'm2m_sp_public_widget_allow_table', 'm2m_sp_widget_dependency'];
-    for (const custom of [false, true]) {
-        const values = { sp_widget: JSON.stringify(custom ? old.concat('custom_child') : old), sp_column: '["sp_instance"]' }, writes = [];
-        const gs = { getProperty: name => values[name.split('.').at(-1)], setProperty: (name, value) => { writes.push(name); values[name.split('.').at(-1)] = value; } };
-        vm.runInNewContext(source, { gs });
-        assert.equal(writes.length, custom ? 0 : 1);
-        assert.equal(JSON.parse(values.sp_widget).includes('sp_instance'), custom);
-        vm.runInNewContext(source, { gs });
-        assert.equal(writes.length, custom ? 0 : 1);
-    }
-});
-
 test('property category links reference Widget Editor+ and are not duplicated on repeated saves', () => {
     const { api, categoryLinks } = server();
     api._ensurePropertyCategory({ getUniqueValue: () => 'property-one' });
@@ -2018,30 +1969,6 @@ test('multiple sets have a stable linked legend and deduplicated records retain 
     assert.equal(context._weMarkdownKeycap(10), '🔟');
     assert.equal(context._weMarkdownKeycap(11), '1️⃣1️⃣');
     assert.equal(context._weMarkdownText([{ rows: [], set: first }]), '');
-});
-
-test('options cleanup removes only the retired page, its ACL and linked roles and is repeatable', () => {
-    const source = fs.readFileSync('src/fluent/generated/server-development/fix-script/widget_editor_markdown_options_remove.server.js', 'utf8');
-    const records = {
-        sys_ui_page: [{ sys_id: 'ab5f85327c2c4140989f03c3c99a47f4', name: 'widget_editor_assistant_markdown_options' }, { sys_id: 'other', name: 'keep' }],
-        sys_security_acl: [{ sys_id: '47f134b02be946949f3bd14433c39135', name: 'widget_editor_assistant_markdown_options', type: 'ui_page' }, { sys_id: 'properties', name: 'widget_editor_plus_properties' }],
-        sys_security_acl_role: [{ sys_id: 'old-role', sys_security_acl: '47f134b02be946949f3bd14433c39135' }, { sys_id: 'admin-role', sys_security_acl: 'properties' }]
-    };
-    const context = {
-        GlideRecord: function (table) {
-            let current, rows, index = -1, field, value;
-            this.get = id => !!(current = records[table].find(row => row.sys_id === id));
-            this.getValue = key => current[key]; this.getUniqueValue = () => current.sys_id;
-            this.addQuery = (key, match) => { field = key; value = match; };
-            this.query = () => { rows = records[table].filter(row => row[field] === value); };
-            this.next = () => !!(current = rows[++index]);
-            this.deleteRecord = () => { records[table] = records[table].filter(row => row !== current); };
-        }
-    };
-    vm.createContext(context); vm.runInContext(source, context); vm.runInContext(source, context);
-    assert.deepEqual(records.sys_ui_page.map(row => row.sys_id), ['other']);
-    assert.deepEqual(records.sys_security_acl.map(row => row.sys_id), ['properties']);
-    assert.deepEqual(records.sys_security_acl_role.map(row => row.sys_id), ['admin-role']);
 });
 
 test('GlideAjax JSON responses preserve emoji and Unicode without raw non-ASCII code units', () => {
