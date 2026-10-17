@@ -90,6 +90,75 @@ test('maintenance is the final Properties section, with shared navigation, searc
     } finally { await page.close(); }
 });
 
+test('Debug Menu has navigation, searchable accordions and an exact copyable embed snippet', async () => {
+    for(const width of [1280,390]){
+        const {page,errors}=await mount(harness(),width,true,{dark:width===390});
+        try {
+            const jump=page.getByRole('link',{name:'Debug Menu',exact:true});
+            const heading=page.getByRole('heading',{name:'Debug Menu',exact:true});
+            await expect(jump).toBeVisible();
+            await expect(page.locator('#wep-debug-menu details')).toHaveCount(1);
+            await expect(page.locator('#wep-debug-menu details[open]')).toHaveCount(0);
+            assert.equal(await page.locator('#wep-debug-menu').evaluate(el=>el.nextElementSibling.id),'wep-maintenance');
+            await page.getByRole('searchbox').fill('record_limit');
+            await expect(heading).toBeHidden();
+            await jump.click();
+            await expect(heading).toBeFocused();
+            await expect(page.getByRole('searchbox')).toHaveValue('');
+            await page.locator('#wep-debug-menu summary').filter({hasText:'Embed widget'}).click();
+            const snippet='<sp-widget id="widget_editor_debug_menu"></sp-widget>';
+            await expect(page.locator('#wep-debug-menu-code')).toHaveText(snippet);
+            await expect(page.locator('#wep-debug-menu sp-widget')).toHaveCount(0);
+            await page.evaluate(()=>{
+                Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{
+                    if(window.clipboardDenied) throw new Error('Denied');
+                    window.copiedSnippet=text;
+                }}});
+            });
+            await page.getByRole('button',{name:'Copy code',exact:true}).click();
+            await expect(page.getByRole('button',{name:'Copied',exact:true})).toBeVisible();
+            assert.equal(await page.evaluate(()=>window.copiedSnippet),snippet);
+            await page.screenshot({path:'/tmp/widget-editor-debug-menu-'+width+'.png'});
+            await page.evaluate(()=>{window.clipboardDenied=true;});
+            await page.locator('#wep-copy-debug-menu').click();
+            await expect(page.locator('#wep-copy-debug-menu-error')).toBeVisible();
+            await page.getByRole('searchbox').fill('widget_editor_debug_menu');
+            await expect(heading).toBeVisible();
+            await expect(page.locator('#wep-copy-debug-menu')).toBeVisible();
+            assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+            assert.deepEqual(errors,[]);
+        }finally{await page.close();}
+    }
+});
+
+test('back to top is a round floating retina icon button with keyboard and reduced-motion support', async () => {
+    for(const width of [1280,390]){
+        const {page,errors}=await mount(harness(),width,true);
+        try {
+            await page.emulateMedia({reducedMotion:width===390?'reduce':'no-preference'});
+            const back=page.getByRole('button',{name:'Back to top',exact:true});
+            await expect(back).toBeHidden();
+            await page.getByRole('link',{name:'Backup and uninstall',exact:true}).click();
+            await expect(back).toBeVisible();
+            await expect(back.locator('.icon-chevron-up[aria-hidden="true"]')).toHaveCount(1);
+            await expect(back).toHaveText('');
+            const geometry=await back.evaluate(el=>({position:getComputedStyle(el).position,radius:getComputedStyle(el).borderRadius,width:el.getBoundingClientRect().width,height:el.getBoundingClientRect().height,right:innerWidth-el.getBoundingClientRect().right,bottom:innerHeight-el.getBoundingClientRect().bottom}));
+            assert.deepEqual(geometry,{position:'fixed',radius:'50%',width:44,height:44,right:20,bottom:20});
+            await page.evaluate(()=>{
+                const scroll=window.scrollTo;
+                window.scrollTo=function(options){window.backToTopBehaviour=options.behavior;scroll.call(window,options);};
+            });
+            await back.focus();
+            await page.keyboard.press('Enter');
+            await expect.poll(()=>page.evaluate(()=>scrollY)).toBe(0);
+            await expect(page.getByRole('heading',{name:'Widget Editor+ Properties',exact:true})).toBeFocused();
+            await expect(back).toBeHidden();
+            assert.equal(await page.evaluate(()=>window.backToTopBehaviour),width===390?'auto':'smooth');
+            assert.deepEqual(errors,[]);
+        }finally{await page.close();}
+    }
+});
+
 test('the first jump aligns the collapsed final section below the sticky header', async () => {
     for (const width of [1280, 390]) {
         const { page } = await mount(harness(), width, true);
@@ -274,7 +343,7 @@ test('preference export can be cancelled while its preview is still loading', as
 
 test('uninstall displays progress while pending and clears it after success or failure', async () => {
     for(const fail of [false,true]){
-        const {page,h,errors}=await mount();
+        const {page,h,errors}=await mount(harness(),1280,true);
         if(fail) h.faults.deleteId=id(1);
         let release;
         const held=new Promise(resolve=>{release=resolve;});
@@ -299,6 +368,7 @@ test('uninstall displays progress while pending and clears it after success or f
             await expect(page.locator('#wep-uninstall-status')).toContainText(fail?'Could not delete':'Uninstall complete');
             await expect(page.locator('#wep-uninstall-status')).toHaveClass(fail?'alert alert-danger':'alert alert-info');
             await expect(progress).toBeHidden();
+            await expect(page.locator('#wep-back-to-top')).toBeEnabled();
             assert.deepEqual(errors,[]);
         } finally {release();await page.close();}
     }

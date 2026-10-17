@@ -438,6 +438,7 @@ UiPage({
     .wep-maintenance-feedback { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-top: 0.875rem; }
     .wep-maintenance-feedback p { margin: 0; font-size: 0.8125rem; }
     .wep-maintenance-feedback .alert { width: 100%; }
+    .wep-embed-code { display: block; white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 1rem; padding: 0.75rem; border: 1px solid rgb(var(--now-color_border--secondary, 205, 212, 217)); border-radius: var(--now-form-field--border-radius, 4px); background: rgb(var(--now-color_background--secondary, 246, 248, 249)); color: inherit; }
     .wep-maintenance-warning { font-size: 0.8125rem; margin: 1rem 0; }
     .wep-maintenance-warning p { margin: 0.5rem 0; }
     .wep-maintenance .form-control { max-width: 24rem; }
@@ -454,6 +455,21 @@ UiPage({
     .wep-maintenance .btn, .wep-maintenance summary { min-height: 44px; }
     .wep-maintenance :focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
     .wep-maintenance [hidden] { display: none !important; }
+    .wep-back-to-top.btn {
+      position: fixed;
+      right: calc(1.25rem + env(safe-area-inset-right, 0px));
+      bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      border-radius: 50%;
+      font-size: 18px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+    }
 
     @media (max-width: 767px) {
       .dc-header-row.wep-header-row {
@@ -476,7 +492,7 @@ UiPage({
       <div class="dc-header-row wep-header-row">
         <div class="we-app-drawer-heading">
           <we-app-drawer current-app="properties" credit-available="\${gs.hasRole('admin')}"></we-app-drawer>
-          <h1 class="dc-title">Widget Editor+ Properties</h1>
+          <h1 class="dc-title" tabindex="-1">Widget Editor+ Properties</h1>
         </div>
         <div class="wep-header-right">
           <div class="wep-search-group">
@@ -503,6 +519,20 @@ UiPage({
         <p>Try adjusting your search query.</p>
       </div>
       <div id="wep-sections"></div>
+      <section id="wep-debug-menu" class="wep-section wep-maintenance" data-feature="Debug Menu" aria-labelledby="wep-debug-menu-title">
+        <h2 id="wep-debug-menu-title" class="wep-feature-heading">Debug Menu</h2>
+        <details class="panel panel-default wep-card" data-search="debug menu embed widget header footer widget_editor_debug_menu code">
+          <summary class="panel-heading"><span class="glyphicon glyphicon-chevron-right wep-accordion-chevron" aria-hidden="true"></span><span class="panel-title">Embed widget</span></summary>
+          <div class="panel-body">
+            <p class="wep-description">Add to a Service Portal header or footer widget.</p>
+            <code id="wep-debug-menu-code" class="wep-embed-code" tabindex="0" aria-label="Debug Menu embed code">&lt;sp-widget id="widget_editor_debug_menu"&gt;&lt;/sp-widget&gt;</code>
+            <div class="wep-maintenance-actions">
+              <button id="wep-copy-debug-menu" type="button" class="btn btn-default">Copy code</button>
+              <p id="wep-copy-debug-menu-error" class="alert alert-danger" role="alert" hidden="hidden">Unable to copy.</p>
+            </div>
+          </div>
+        </details>
+      </section>
       <section id="wep-maintenance" class="wep-section wep-maintenance" data-feature="Backup and uninstall" aria-labelledby="wep-maintenance-title">
         <h2 id="wep-maintenance-title" class="wep-feature-heading">Backup and uninstall</h2>
         <details id="wep-export-details" class="panel panel-default wep-card" data-search="backup and uninstall export preferences all users shared defaults clone upgrade xml">
@@ -578,6 +608,7 @@ UiPage({
       </section>
       </div>
     </main>
+    <button id="wep-back-to-top" type="button" class="btn btn-default wep-back-to-top" aria-label="Back to top" title="Back to top" hidden="hidden"><span class="icon-chevron-up" aria-hidden="true"></span></button>
   </div>
 </j:jelly>`,
     clientScript: `${Now.include('./widget_editor_app_drawer.js')}

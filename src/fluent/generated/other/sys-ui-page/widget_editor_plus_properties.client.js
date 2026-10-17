@@ -13,12 +13,27 @@
             window.WE_HISTORY_SYNC.set({ title: pageTitle });
         }
         var sections = document.getElementById('wep-sections');
+        var debugMenu = document.getElementById('wep-debug-menu');
         var maintenance = document.getElementById('wep-maintenance');
         var loading = document.getElementById('wep-loading');
         var content = document.getElementById('wep-content');
         var nav = document.getElementById('wep-nav');
         var message = document.getElementById('wep-message');
         var search = document.getElementById('wep-search');
+        var backToTop = document.getElementById('wep-back-to-top');
+        function updateBackToTop() {
+            if (backToTop) backToTop.hidden = window.scrollY < 200;
+        }
+        if (backToTop) {
+            backToTop.onclick = function () {
+                var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+                var heading = document.querySelector('#wep-header h1');
+                if (heading) heading.focus({ preventScroll: true });
+            };
+            window.addEventListener('scroll', updateBackToTop, { passive: true });
+            updateBackToTop();
+        }
         if (search) search.disabled = true;
         function finishLoading() {
             if (loading) loading.hidden = true;
@@ -46,6 +61,20 @@
         var jsonEditors = [];
         var initialLoads = [];
         var counterSequence = 0;
+        var copyDebugMenu = document.getElementById('wep-copy-debug-menu');
+        if (copyDebugMenu) {
+            copyDebugMenu.onclick = async function () {
+                var error = document.getElementById('wep-copy-debug-menu-error');
+                error.hidden = true;
+                copyDebugMenu.textContent = 'Copy code';
+                try {
+                    await navigator.clipboard.writeText(document.getElementById('wep-debug-menu-code').textContent);
+                    copyDebugMenu.textContent = 'Copied';
+                } catch (e) {
+                    error.hidden = false;
+                }
+            };
+        }
 
         function ajax(method, params) {
             return new Promise(function (resolve, reject) {
@@ -1514,14 +1543,15 @@
                 refreshCount();
                 sectionNavigation(section, heading, name, pillCount);
             });
-            if (maintenance && sections) {
-                sections.appendChild(maintenance);
+            [debugMenu, maintenance].forEach(function (section) {
+                if (!section || !sections) return;
+                sections.appendChild(section);
                 sectionNavigation(
-                    maintenance,
-                    document.getElementById('wep-maintenance-title'),
-                    'Backup and uninstall'
+                    section,
+                    section.querySelector('.wep-feature-heading'),
+                    section.getAttribute('data-feature')
                 );
-            }
+            });
             return Promise.all(initialLoads);
         }
         function escapeRegex(s) {

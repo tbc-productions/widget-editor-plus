@@ -32,6 +32,16 @@ Recent history identifies records by table and sys_id, retaining existing widget
 
 Existing widget links using `widget_id` continue to work. Links to another record use the same UI Page with `record_table=<supported table>&record_sys_id=<record sys_id>`; for example, `ui_page.do?sys_id=8b2e70458373fe1070b8b5dfeeaad35e&record_table=sys_ui_page&record_sys_id=<record sys_id>`. These links open records for editing and do not execute the target UI Page or script.
 
+## Debug Menu
+
+Properties includes a **Debug Menu** section with a copyable embed snippet for a Service Portal header or footer widget:
+
+```html
+<sp-widget id="widget_editor_debug_menu"></sp-widget>
+```
+
+No instance options or dedicated system properties are required. Default editor, timing indicators and console variables are per-user Debug Menu preferences; context-menu mode and Assistant visibility use Widget Editor+ user preferences.
+
 ## Backup and uninstall
 
 Administrators can use **Backup and uninstall** at the bottom of Properties. Uninstall requires active elevation to **security_admin**; use the profile menu to elevate before reviewing records.
@@ -148,7 +158,7 @@ Assistant loads readable source and configured relationships in batches of up to
 Each page shares identical pending analysis jobs and retains up to 32 analysis results, capped at two million characters of cache keys. The cache stays in memory and clears when leaving the page. Worker errors or a 30-second timeout clear pending jobs so later scans can retry; Assistant falls back to server discovery and Widget Editor+ to its existing local scanner. Editor name lookups retain their batches of 50 and now share pending checks, with failed checks remaining retryable. Assistant also shares overlapping XML fetches; completed exports still fetch current XML rather than reuse a previous snapshot.
 
 ## User Preferences
-User preferences (including editor themes, Assistant visibility, and Debug Menu settings) persist in `localStorage` and synchronise to the ServiceNow instance as `sys_user_preference` records under `monaco_plus.user_prefs`.
+User preferences (including editor themes and Assistant visibility) persist in `localStorage` and synchronise to the ServiceNow instance as `sys_user_preference` records under `monaco_plus.user_prefs`. Debug Menu editor, timing and console preferences synchronise separately under `we_debug_menu_prefs`.
 
 
 ### Local draft autosave

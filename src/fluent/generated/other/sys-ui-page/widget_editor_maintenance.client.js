@@ -444,9 +444,11 @@
                             ' Reload ServiceNow navigation.',
                         'info'
                     );
-                    document.querySelectorAll('button, input, select, textarea').forEach(function (control) {
-                        control.disabled = true;
-                    });
+                    document
+                        .querySelectorAll('button:not(#wep-back-to-top), input, select, textarea')
+                        .forEach(function (control) {
+                            control.disabled = true;
+                        });
                     node('uninstall-status').focus();
                 } catch (error) {
                     invalidate();
