@@ -89,13 +89,18 @@
             position: relative; display: flex; align-items: center; padding-right: 8px;
             border: 1px solid transparent; border-radius: 8px;
         }
+        we-app-drawer [data-app="widget-editor"] { --we-app-accent: var(--now-color_grouped--blue-4, 38, 122, 180); }
+        we-app-drawer [data-app="compare"] { --we-app-accent: var(--now-color_grouped--teal-4, 7, 132, 139); }
+        we-app-drawer [data-app="assistant"] { --we-app-accent: var(--now-color_grouped--purple-4, 146, 98, 188); }
+        we-app-drawer [data-app="credit"] { --we-app-accent: var(--now-color_grouped--orange-4, 168, 119, 25); }
+        we-app-drawer [data-app="code-search"] { --we-app-accent: var(--now-color_grouped--green-4, 54, 134, 73); }
         we-app-drawer .we-app-drawer-option + .we-app-drawer-option::before {
             content: ''; position: absolute; top: -1px; left: 12px; right: 12px; height: 1px;
             background: rgba(var(--now-color_text--primary, 38, 50, 56), .08); pointer-events: none;
         }
-        we-app-drawer .we-app-drawer-option.is-current { background: rgba(var(--now-color--primary-1, 0, 118, 204), .05); }
+        we-app-drawer .we-app-drawer-option.is-current { background: rgba(var(--we-app-accent), .05); }
         we-app-drawer .we-app-drawer-option:hover,
-        we-app-drawer .we-app-drawer-option:focus-within { background: rgba(var(--now-color--primary-1, 0, 118, 204), .08); }
+        we-app-drawer .we-app-drawer-option:focus-within { background: rgba(var(--we-app-accent), .08); }
         we-app-drawer .we-app-drawer-option.is-current::before,
         we-app-drawer .we-app-drawer-option.is-current + .we-app-drawer-option::before,
         we-app-drawer .we-app-drawer-option:hover::before,
@@ -109,14 +114,16 @@
         we-app-drawer .we-app-drawer-icon {
             display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
             width: 30px; height: 30px; border-radius: 6px;
-            background: rgba(var(--now-color_text--primary, 38, 50, 56), .06);
-            color: rgba(var(--now-color_text--primary, 38, 50, 56), .6);
+            background: rgba(var(--we-app-accent), .1);
+        }
+        we-app-drawer .we-app-drawer-icon,
+        we-app-drawer .we-app-drawer-new-tab {
+            color: color-mix(in srgb, rgb(var(--we-app-accent)) 85%, rgb(var(--now-color_text--primary, 38, 50, 56)));
         }
         we-app-drawer .we-app-drawer-icon i { font-size: 16px; line-height: 1; }
         we-app-drawer .we-app-drawer-option:hover .we-app-drawer-icon,
         we-app-drawer .we-app-drawer-option:focus-within .we-app-drawer-icon {
-            background: rgba(var(--now-color--primary-1, 0, 118, 204), .15);
-            color: rgb(var(--now-color--primary-2, 0, 118, 204));
+            background: rgba(var(--we-app-accent), .15);
         }
         we-app-drawer .we-app-drawer-copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 2px; }
         we-app-drawer .we-app-drawer-name { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-weight: 500; }
@@ -124,14 +131,14 @@
         we-app-drawer .we-app-drawer-new-tab {
             display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
             width: 26px; height: 26px; border-radius: 4px; opacity: 0; visibility: hidden;
-            color: rgba(var(--now-color_text--primary, 38, 50, 56), .6); text-decoration: none;
+            text-decoration: none;
         }
         we-app-drawer a[aria-disabled="true"] { opacity: .5; cursor: progress; }
         we-app-drawer .we-app-drawer-new-tab i { font-size: 14px; line-height: 1; }
         we-app-drawer .we-app-drawer-option:hover .we-app-drawer-new-tab,
         we-app-drawer .we-app-drawer-option:focus-within .we-app-drawer-new-tab { opacity: 1; visibility: visible; }
         we-app-drawer .we-app-drawer-new-tab:hover {
-            background: rgba(var(--now-color_text--primary, 38, 50, 56), .12); color: inherit;
+            background: rgba(var(--we-app-accent), .12);
         }
         we-app-drawer :is(button, a):focus-visible {
             outline: 2px solid rgb(var(--now-color_focus--primary, 30, 133, 203)); outline-offset: 1px;
@@ -214,6 +221,18 @@
             var drawer = this;
             var trigger = this.querySelector('button');
             var popover = this.querySelector('nav');
+            if (global.jQuery) {
+                global.jQuery(this).on('show.bs.tooltip.weAppDrawer inserted.bs.tooltip.weAppDrawer', function (event) {
+                    var tip = global.jQuery(event.target).data('bs.tooltip');
+                    if (!tip || !popover.contains(event.target)) return;
+                    // Keep tooltips in the popover's top layer, including inside the editor's Open dialog.
+                    event.stopPropagation();
+                    tip.options.container = popover;
+                    tip.options.placement = 'left';
+                    if (tip.$tip && tip.$tip[0] && tip.$tip[0].parentElement !== popover)
+                        popover.appendChild(tip.$tip[0]);
+                });
+            }
             function position() {
                 var rect = trigger.getBoundingClientRect();
                 var width = parseFloat(global.getComputedStyle(popover).width);
@@ -252,7 +271,7 @@
                     cancelable: true,
                     detail: {
                         href: link.getAttribute('href'),
-                        name: link.title || link.querySelector('.we-app-drawer-name').firstChild.textContent,
+                        name: link.getAttribute('aria-label').replace(', current app', ''),
                     },
                 });
                 if (!drawer.dispatchEvent(navigation)) event.preventDefault();
@@ -350,6 +369,7 @@
         }
 
         disconnectedCallback() {
+            if (global.jQuery) global.jQuery(this).off('.weAppDrawer');
             this.removeEventListener('click', this._click);
             global.removeEventListener('keydown', this._escape, true);
             global.clearTimeout(this._contextTimer);

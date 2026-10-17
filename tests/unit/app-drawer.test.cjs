@@ -432,6 +432,57 @@ test('the drawer uses the modal surface and keeps separators clear of highlighte
     }
 });
 
+test('each app has a distinct theme-aware tint with subtle highlights and readable icons', async () => {
+    const ids = ['widget-editor', 'compare', 'assistant', 'credit', 'code-search'];
+    const tokens = ['blue', 'teal', 'purple', 'orange', 'green'];
+    function composite(foreground, background) {
+        const alpha = foreground[3] ?? 1;
+        return foreground.slice(0, 3).map((value, index) => value * alpha + background[index] * (1 - alpha));
+    }
+    function luminance(colour) {
+        const values = colour.map(value => { const channel = value / 255; return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4; });
+        return values[0] * .2126 + values[1] * .7152 + values[2] * .0722;
+    }
+    for (const dark of [false, true]) for (const native of [false, true]) {
+        const page = await mount({ current: 'compare' });
+        try {
+            const background = dark ? '29,34,37' : '255,255,255', text = dark ? '227,233,231' : '23,43,49';
+            const palette = dark ? ['119,181,224', '101,199,201', '190,151,220', '222,176,100', '125,194,142'] : ['18,98,145', '0,101,109', '114,65,160', '139,92,10', '27,110,57'];
+            await page.addStyleTag({ content: ':root { --now-color_background--primary:' + background + '; --now-color_background--secondary:' + (dark ? '39,45,48' : '242,247,248') + '; --now-color_text--primary:' + text + '; ' + (native ? tokens.map((token, index) => '--now-color_grouped--' + token + '-4:' + palette[index] + ';').join('') : '') + '}' });
+            await page.getByRole('button', { name: 'Apps', exact: true }).click();
+            const colours = [];
+            for (const [index, id] of ids.entries()) {
+                const row = page.locator('[data-app="' + id + '"]');
+                for (const state of ['normal', 'hover', 'keyboard']) {
+                    await page.mouse.move(700, 700);
+                    await page.evaluate(() => document.activeElement.blur());
+                    if (state === 'hover') await row.hover();
+                    if (state === 'keyboard') await row.locator('.we-app-drawer-link').focus();
+                    const styles = await row.evaluate(node => {
+                        const context = document.createElement('canvas').getContext('2d');
+                        context.canvas.width = context.canvas.height = 1;
+                        const colour = (element, property) => {
+                            context.clearRect(0, 0, 1, 1); context.fillStyle = getComputedStyle(element)[property]; context.fillRect(0, 0, 1, 1);
+                            const [r, g, b, a] = context.getImageData(0, 0, 1, 1).data; return [r, g, b, a / 255];
+                        };
+                        return { icon: colour(node.querySelector('.we-app-drawer-icon'), 'color'), accent: getComputedStyle(node).getPropertyValue('--we-app-accent').replace(/\s/g, ''), iconBackground: colour(node.querySelector('.we-app-drawer-icon'), 'backgroundColor'), rowBackground: colour(node, 'backgroundColor'), surface: colour(node.closest('nav'), 'backgroundColor'), label: getComputedStyle(node.querySelector('.we-app-drawer-name')).color, neutral: getComputedStyle(node.closest('nav')).color };
+                    });
+                    assert.equal(styles.label, styles.neutral, 'App names retain neutral text');
+                    assert.ok((styles.rowBackground[3] ?? 1) <= .08, 'Highlights remain subtle');
+                    const backgroundColour = composite(styles.iconBackground, composite(styles.rowBackground, styles.surface));
+                    const a = luminance(styles.icon.slice(0, 3)), b = luminance(backgroundColour), contrast = (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
+                    assert.ok(contrast >= 3, id + ', dark=' + dark + ', native=' + native + ', ' + state + ': icon contrast ' + contrast.toFixed(2));
+                    if (state === 'normal') colours.push(styles.icon.join(','));
+                    if (native) assert.equal(styles.accent, palette[index], 'Use ServiceNow grouped colours when supplied by the theme');
+                }
+            }
+            assert.equal(new Set(colours).size, 5, 'Each app keeps a distinct identity');
+            await page.mouse.move(700, 700); await page.evaluate(() => document.activeElement.blur());
+            await page.screenshot({ path: '/tmp/app-drawer-tints-' + (dark ? 'dark' : 'light') + '-' + (native ? 'native' : 'fallback') + '.png' });
+        } finally { await page.close(); }
+    }
+});
+
 test('the header Properties cog uses the existing page and allows unsaved navigation to be cancelled', async () => {
     const page = await mount();
     try {
@@ -455,6 +506,60 @@ test('the header Properties cog uses the existing page and allows unsaved naviga
         await properties.click();
         await expect(page).toHaveURL(destination);
         assert.equal(page.context().pages().length, 1);
+    } finally { await page.close(); }
+});
+
+test('drawer tooltips stay in the top layer above an Open dialog and Properties navigation survives title conversion', async () => {
+    const page = await mount();
+    try {
+        await page.evaluate(() => {
+            window.jQuery = element => ({
+                data: () => element.testTooltip,
+                on(events, handler) {
+                    element.tooltipHooks = events.split(' ').map(name => ({ name: name.replace('.weAppDrawer', ''), handler }));
+                    element.tooltipHooks.forEach(({ name, handler }) => element.addEventListener(name, handler));
+                    return this;
+                },
+                off() { element.tooltipHooks.forEach(({ name, handler }) => element.removeEventListener(name, handler)); element.tooltipHooks = []; },
+            });
+            const drawer = document.querySelector('we-app-drawer'), dialog = document.createElement('dialog');
+            dialog.style.cssText = 'position:fixed;inset:0;margin:0;max-width:none;max-height:none;width:100%;height:100%';
+            document.body.appendChild(dialog); dialog.appendChild(drawer); dialog.showModal();
+            // The editor's document handler would otherwise move the tooltip into the older dialog layer.
+            document.addEventListener('inserted.bs.tooltip', event => {
+                const tip = event.target.testTooltip;
+                if (tip) dialog.appendChild(tip.$tip[0]);
+            });
+        });
+        await page.getByRole('button', { name: 'Apps', exact: true }).click();
+        await page.evaluate(() => {
+            const properties = document.querySelector('.we-app-drawer-properties'), rect = properties.getBoundingClientRect();
+            // Bootstrap moves title to data-original-title when it initialises a tooltip.
+            properties.dataset.originalTitle = properties.title; properties.removeAttribute('title');
+            const tip = document.createElement('div'); tip.setAttribute('role', 'tooltip'); tip.textContent = 'Properties';
+            tip.style.cssText = 'position:fixed;z-index:1070;background:#222;color:white;padding:6px;left:' + (rect.left - 80) + 'px;top:' + rect.top + 'px';
+            properties.testTooltip = { options: { container: document.body, placement: 'top' }, $tip: [tip] };
+            properties.dispatchEvent(new Event('show.bs.tooltip', { bubbles: true }));
+            window.tooltipContainer = properties.testTooltip.options.container;
+            window.tooltipPlacement = properties.testTooltip.options.placement;
+            document.body.appendChild(tip);
+            properties.dispatchEvent(new Event('inserted.bs.tooltip', { bubbles: true }));
+        });
+        const tooltip = page.getByRole('tooltip', { name: 'Properties', exact: true });
+        await expect(tooltip).toBeVisible();
+        assert.equal(await tooltip.evaluate(node => {
+            const rect = node.getBoundingClientRect();
+            return node.parentElement === document.querySelector('nav') && window.tooltipContainer === node.parentElement && node.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2));
+        }), true, 'The tooltip paints above the drawer, rather than behind it or inside the dialog');
+        assert.equal(await page.evaluate(() => window.tooltipPlacement), 'left', 'The tooltip fits within the popover instead of being clipped above its heading');
+        await page.evaluate(() => document.addEventListener('we-app-navigate', event => { window.tooltipNavigation = event.detail; event.preventDefault(); }));
+        await page.getByRole('link', { name: 'Properties', exact: true }).click();
+        assert.equal(await page.evaluate(() => window.tooltipNavigation.name), 'Properties');
+        await expect(tooltip).toBeHidden();
+        await page.evaluate(() => {
+            const drawer = document.querySelector('we-app-drawer'); drawer.remove(); window.remainingTooltipHooks = drawer.tooltipHooks.length;
+        });
+        assert.equal(await page.evaluate(() => window.remainingTooltipHooks), 0, 'Removing the drawer cleans up its tooltip hooks');
     } finally { await page.close(); }
 });
 
