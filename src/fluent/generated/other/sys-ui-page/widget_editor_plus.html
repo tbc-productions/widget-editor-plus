@@ -3892,7 +3892,7 @@
                 <div class="we-modal-footer">
                     <div style="display:flex;align-items:center;gap:0.5rem;margin-right:auto">
                         <button class="btn btn-default" ng-click="resetUserPrefsModal()" we-tooltip-title="Restore all preferences to their default values.">Reset</button>
-                        <button class="btn btn-default" ng-click="exportUserPrefs()" we-tooltip-title="Download your current preferences, including debug menu preferences and Assistant favourite groups, as a JSON file.">Export</button>
+                        <button class="btn btn-default" ng-click="exportUserPrefs()" we-tooltip-title="Download your current preferences, including Credit view and whitespace settings, debug menu preferences and Assistant favourite groups, as a JSON file.">Export</button>
                         <button class="btn btn-default" ng-click="triggerImportUserPrefs()" we-tooltip-title="Load preferences, including debug menu preferences and Assistant favourite groups, from a JSON file.">Import</button>
                         <input type="file" id="we-import-prefs-input" accept="application/json" style="display:none" we-file-change="importUserPrefsFile($file)" />
                         <span ng-if="importPrefsStatus.text" ng-style="{color: importPrefsStatus.type === 'error' ? 'rgb(var(--now-color_alert--critical-2))' : 'rgb(var(--now-color_text--secondary))'}" style="font-size:var(--now-font-size--sm)" ng-bind="importPrefsStatus.text"></span>

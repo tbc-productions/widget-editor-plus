@@ -23,9 +23,13 @@ function update(index, code, extras = {}) {
     return entry;
 }
 function harness(entries = [], admin = true, scriptFields = ['script', 'client_script'], updateSets = [], catalog = {}) {
-    const queries = [];
+    const queries = [], preferences = catalog.preferences || {};
     const context = { Class: { create: () => function () {} }, AbstractAjaxProcessor: {},
         Object: Object.assign(Object.create(Object), { extendsObject: (_base, methods) => methods }),
+        WidgetEditorAjax: function () {
+            this.getMergedUserPref = (name, key, fallback) => { assert.equal(name, 'monaco_plus.user_prefs'); return preferences[key] ?? fallback; };
+            this.saveMergedUserPref = (name, key, value) => { assert.equal(name, 'monaco_plus.user_prefs'); preferences[key] = value; };
+        },
         gs: { hasRole: role => role === 'admin' && admin, getProperty: (name, fallback) => catalog.properties?.[name] ?? fallback },
         GlideDateTime: function (value) {
             const time = Date.parse((value || '2026-10-14 12:00:00').replace(' ', 'T') + 'Z');
@@ -110,7 +114,7 @@ function harness(entries = [], admin = true, scriptFields = ['script', 'client_s
     vm.runInNewContext(source, context);
     const api = context.WidgetEditorCreditAjax.prototype;
     api.getParameter = name => name === 'sysparm_update' ? entries.at(-1)?.sys_id : '';
-    return { api, queries };
+    return { api, queries, preferences };
 }
 const plain = result => JSON.parse(JSON.stringify(result));
 
@@ -851,4 +855,23 @@ test('attribution contributors reuse permission-checked photos without loading h
     }
     api.getParameter = () => 'not JSON';
     assert.equal(JSON.parse(api.getContributors()).success, false);
+});
+
+
+test('Credit preferences validate values, require admin and merge into the existing shared blob', () => {
+    const stored = { fontSize: 18, assistantViewMode: 'graph', credit: { view: 'columns', whitespace: 'eol' } };
+    const { api, preferences } = harness([], true, [], [], { preferences: stored });
+    assert.deepEqual(JSON.parse(api.getPreferences()), { success: true, view: 'columns', whitespace: 'eol' });
+    api.getParameter = () => JSON.stringify({ view: 'grouped', whitespace: 'none', unrelated: 'ignored' });
+    assert.equal(JSON.parse(api.savePreferences()).success, true);
+    assert.deepEqual(plain(preferences), { fontSize: 18, assistantViewMode: 'graph', credit: { view: 'grouped', whitespace: 'none' } });
+    for (const value of ['null', '{', '[]', '{"view":"unknown","whitespace":"all"}', '{"view":"grouped","whitespace":"unknown"}']) {
+        api.getParameter = () => value;
+        assert.equal(JSON.parse(api.savePreferences()).success, false);
+        assert.deepEqual(plain(preferences.credit), { view: 'grouped', whitespace: 'none' });
+    }
+    const denied = harness([], false).api;
+    assert.equal(JSON.parse(denied.getPreferences()).success, false);
+    assert.equal(JSON.parse(denied.savePreferences()).success, false);
+    assert.deepEqual(JSON.parse(harness().api.getPreferences()), { success: true, view: 'grouped', whitespace: 'all' });
 });

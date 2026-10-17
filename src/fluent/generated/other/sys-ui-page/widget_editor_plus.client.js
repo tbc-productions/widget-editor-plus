@@ -8574,7 +8574,8 @@
                     // Editor layout is only committed as the new default here, since this
                     // is the one place the user explicitly chose to change it.
                     _snapshotEditorPrefs();
-                    saveUserPrefs();
+                    // Only an import overrides Credit choices saved from its own page.
+                    saveUserPrefs($scope.userPrefsEdit.credit ? { credit: $scope.userPrefsEdit.credit } : undefined);
                     if ($scope.userPrefsEdit.debugMenu) {
                         var debugMenuPrefs = $scope.userPrefsEdit.debugMenu;
                         ajax('saveDebugMenuPrefs', {
@@ -8788,22 +8789,30 @@
                 }
 
                 $scope.exportUserPrefs = function () {
-                    $q.all([ajax('getDebugMenuPrefs', {}), _assistantAjax('getFavouriteGroups', {})]).then(
-                        function (results) {
-                            var d = results[0];
-                            var f = results[1];
-                            var prefs = _buildUserPrefsBlob();
-                            if (d && d.success && d.value) {
-                                try {
-                                    prefs.debugMenu = JSON.parse(d.value);
-                                } catch (e) {}
-                            }
-                            if (f && f.success && Array.isArray(f.groups)) {
-                                prefs.favouriteGroups = f.groups;
-                            }
-                            _downloadUserPrefsBlob(prefs);
+                    $q.all([
+                        ajax('getDebugMenuPrefs', {}),
+                        _assistantAjax('getFavouriteGroups', {}),
+                        ajax('getUserPrefs', {}),
+                    ]).then(function (results) {
+                        var d = results[0];
+                        var f = results[1];
+                        var prefs = _buildUserPrefsBlob();
+                        if (results[2] && results[2].success && results[2].value) {
+                            try {
+                                var credit = JSON.parse(results[2].value).credit;
+                                if (credit) prefs.credit = credit;
+                            } catch (e) {}
                         }
-                    );
+                        if (d && d.success && d.value) {
+                            try {
+                                prefs.debugMenu = JSON.parse(d.value);
+                            } catch (e) {}
+                        }
+                        if (f && f.success && Array.isArray(f.groups)) {
+                            prefs.favouriteGroups = f.groups;
+                        }
+                        _downloadUserPrefsBlob(prefs);
+                    });
                 };
 
                 $scope.triggerImportUserPrefs = function () {
@@ -8912,6 +8921,13 @@
                         $scope.userPrefs.recentWidgets = p.recentWidgets;
                         _refreshRecentWidgetsResolved();
                     }
+                    if (
+                        p.credit &&
+                        ['grouped', 'columns'].indexOf(p.credit.view) !== -1 &&
+                        ['none', 'all', 'changes', 'eol'].indexOf(p.credit.whitespace) !== -1
+                    ) {
+                        $scope.userPrefsEdit.credit = { view: p.credit.view, whitespace: p.credit.whitespace };
+                    }
                     // Staged for saveUserPrefsModal() to push to sys_user_preference on Save;
                     // not part of the widget editor's own preference blob.
                     if (p.hasOwnProperty('debugMenu') && p.debugMenu && typeof p.debugMenu === 'object') {
@@ -8936,6 +8952,7 @@
                                 }
                                 _applyPrefsBlobToEdit(parsed);
                                 var importedExtras = [];
+                                if ($scope.userPrefsEdit.credit) importedExtras.push('Credit preferences');
                                 if ($scope.userPrefsEdit.debugMenu) importedExtras.push('debug menu preferences');
                                 if ($scope.userPrefsEdit.favouriteGroups)
                                     importedExtras.push('Assistant favourite groups');

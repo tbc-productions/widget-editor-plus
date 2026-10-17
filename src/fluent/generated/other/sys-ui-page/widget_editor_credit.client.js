@@ -51,13 +51,28 @@
                     isFinite(Number(config.requestTimeout)) && Number(config.requestTimeout) > 0
                         ? Math.min(Number(config.requestTimeout), 2147483000)
                         : 180000;
+                var preferences = config.preferences || {};
+                ctrl.attributionView = params.get('sysparm_view') || preferences.view;
+                if (['grouped', 'columns'].indexOf(ctrl.attributionView) === -1) ctrl.attributionView = 'grouped';
+                page.classList.toggle('cp-columns-view', ctrl.attributionView === 'columns');
+                ctrl.changeAttributionView = function (view) {
+                    if (ctrl.attributionView === view) return;
+                    ctrl.attributionView = view;
+                    closeMenu(false);
+                    page.classList.toggle('cp-columns-view', view === 'columns');
+                    fieldViews.forEach(function (fieldView) {
+                        fieldView.changeAttributionView();
+                    });
+                    updateUrl();
+                    savePreferences();
+                };
                 ctrl.whitespaceOptions = [
                     { value: 'none', label: 'Show all changes' },
                     { value: 'all', label: 'Ignore whitespace when comparing lines' },
                     { value: 'changes', label: 'Ignore changes in amount of whitespace' },
                     { value: 'eol', label: 'Ignore changes in whitespace at EOL' },
                 ];
-                ctrl.whitespaceMode = params.get('sysparm_whitespace') || 'all';
+                ctrl.whitespaceMode = params.get('sysparm_whitespace') || preferences.whitespace || 'all';
                 if (
                     !ctrl.whitespaceOptions.some(function (option) {
                         return option.value === ctrl.whitespaceMode;
@@ -125,7 +140,50 @@
                     if (statisticsOpen) loadStatistics();
                     updateUrl();
                     updateTitle();
+                    savePreferences();
                 };
+                var pendingPreferences,
+                    savingPreferences = false,
+                    preferenceTimer;
+                function savePreferences() {
+                    pendingPreferences = { view: ctrl.attributionView, whitespace: ctrl.whitespaceMode };
+                    writePreferences();
+                }
+                function writePreferences() {
+                    if (savingPreferences || !pendingPreferences || $scope.$$destroyed) return;
+                    var value = pendingPreferences;
+                    pendingPreferences = null;
+                    savingPreferences = true;
+                    var finished = false;
+                    function done(success) {
+                        if (finished || $scope.$$destroyed) return;
+                        finished = true;
+                        window.clearTimeout(preferenceTimer);
+                        savingPreferences = false;
+                        ctrl.preferenceError = success
+                            ? ''
+                            : 'Could not save Credit preferences. Change an option to try again.';
+                        changed();
+                        writePreferences();
+                    }
+                    preferenceTimer = window.setTimeout(function () {
+                        done(false);
+                    }, requestTimeout);
+                    try {
+                        var ga = new GlideAjax('WidgetEditorCreditAjax');
+                        ga.addParam('sysparm_name', 'savePreferences');
+                        ga.addParam('sysparm_preferences', JSON.stringify(value));
+                        ga.getXMLAnswer(function (answer) {
+                            try {
+                                done(JSON.parse(answer).success === true);
+                            } catch (e) {
+                                done(false);
+                            }
+                        });
+                    } catch (e) {
+                        done(false);
+                    }
+                }
                 var openStatisticsOnLoad = params.get('sysparm_statistics') === 'true';
                 var launchUrl = window.location.pathname.substring(1) + window.location.search,
                     notifiedTitle = '',
@@ -899,7 +957,11 @@
                 }
 
                 function updateUrl() {
-                    if (ctrl.whitespaceMode === 'all') params.delete('sysparm_whitespace');
+                    if (
+                        ctrl.whitespaceMode === 'all' &&
+                        ['none', 'changes', 'eol'].indexOf(preferences.whitespace) === -1
+                    )
+                        params.delete('sysparm_whitespace');
                     else params.set('sysparm_whitespace', ctrl.whitespaceMode);
                     if (openStatisticsOnLoad || ctrl.statistics.open) params.set('sysparm_statistics', 'true');
                     else params.delete('sysparm_statistics');
@@ -911,7 +973,9 @@
                     else params.delete('sysparm_record');
                     if (requestedField) params.set('sysparm_field', requestedField);
                     else params.delete('sysparm_field');
-                    params.delete('sysparm_view');
+                    if (ctrl.attributionView === 'columns' || preferences.view === 'columns')
+                        params.set('sysparm_view', ctrl.attributionView);
+                    else params.delete('sysparm_view');
                     var uri = window.location.pathname + '?' + params.toString() + window.location.hash;
                     window.history.replaceState(window.history.state, '', uri);
                     try {
@@ -1502,6 +1566,7 @@
                         var groups = attributionGroups();
                         annotationRows.forEach(function (row) {
                             row.textContent = '';
+                            row.className = '';
                             row.setAttribute('aria-hidden', 'true');
                             delete row.dataset.groupEnd;
                         });
@@ -1509,11 +1574,25 @@
                             var first = group.lines[0],
                                 last = group.lines[group.lines.length - 1],
                                 row = annotationRows[first.number - 1];
-                            var cell = attribution(first).firstChild;
-                            if (index < groups.length - 1) cell.classList.add('cp-group-end');
-                            row.appendChild(cell);
-                            row.removeAttribute('aria-hidden');
-                            row.dataset.groupEnd = last.number;
+                            if (ctrl.attributionView === 'columns') {
+                                group.lines.forEach(function (line) {
+                                    var target = annotationRows[line.number - 1],
+                                        source = attribution(line);
+                                    while (source.children.length > 2) target.appendChild(source.firstChild);
+                                    target.removeAttribute('aria-hidden');
+                                });
+                                if (index < groups.length - 1) {
+                                    var snapshot = updates[last.update];
+                                    annotationRows[last.number - 1].className =
+                                        'cp-column-group-end ' + updateSetBorder(snapshot && snapshot.updateSet);
+                                }
+                            } else {
+                                var cell = attribution(first).firstChild;
+                                if (index < groups.length - 1) cell.classList.add('cp-group-end');
+                                row.appendChild(cell);
+                                row.removeAttribute('aria-hidden');
+                                row.dataset.groupEnd = last.number;
+                            }
                         });
                         if (creditEditor.changeViewZones)
                             creditEditor.changeViewZones(function (accessor) {
@@ -1524,8 +1603,11 @@
                                 var lineHeight = creditEditor.getOption(monaco.editor.EditorOption.fontInfo).lineHeight;
                                 groups.forEach(function (group, index) {
                                     var height =
-                                        Math.max(0, 48 - group.lines.length * lineHeight) +
-                                        (index < groups.length - 1 ? 6 : 0);
+                                        Math.max(
+                                            0,
+                                            (ctrl.attributionView === 'columns' ? 0 : 48) -
+                                                group.lines.length * lineHeight
+                                        ) + (index < groups.length - 1 ? 6 : 0);
                                     var snapshot = updates[group.lines[0].update],
                                         separator =
                                             index < groups.length - 1
@@ -1848,7 +1930,7 @@
                                           : 'No code in this update set.',
                                     'cp-empty'
                                 );
-                            cell.colSpan = 3;
+                            cell.colSpan = ctrl.attributionView === 'columns' ? 5 : 3;
                             row.appendChild(cell);
                             tbody.appendChild(row);
                             scrollWhenReady();
@@ -1862,13 +1944,13 @@
                                 var row = attribution(line),
                                     cell = row.querySelector('.cp-origin');
                                 if (index === 0) {
-                                    cell.rowSpan = group.lines.length;
+                                    if (cell) cell.rowSpan = group.lines.length;
                                     if (groupIndex) {
                                         var previous = updates[groups[groupIndex - 1].lines[0].update];
                                         row.className =
                                             'cp-block-start ' + updateSetBorder(previous && previous.updateSet);
                                     }
-                                } else cell.remove();
+                                } else if (cell) cell.remove();
                                 fragment.appendChild(row);
                             });
                         });
@@ -1879,35 +1961,46 @@
                     function attribution(line) {
                         var row = element('tr'),
                             snapshot = updates[line.update],
-                            cell = element(
-                                'td',
-                                undefined,
-                                'cp-origin ' + updateSetBorder(snapshot && snapshot.updateSet)
-                            ),
-                            block = element('div', undefined, 'cp-attribution-block'),
-                            identity = element('div', undefined, 'cp-attribution-identity');
-                        block.appendChild(attributionAvatar(snapshot ? snapshot.author : ''));
-                        var author = element('div', undefined, 'cp-cell cp-author'),
+                            columns = ctrl.attributionView === 'columns';
+                        var author = element(columns ? 'td' : 'div', undefined, 'cp-cell cp-author'),
                             authorText = element('span', snapshot ? snapshot.author : 'Unknown', 'cp-cell-text');
                         authorText.title = authorText.textContent;
                         author.appendChild(authorText);
                         if (snapshot) contextCell(author, 'author', snapshot);
-                        identity.appendChild(author);
-                        var meta = element('div', undefined, 'cp-attribution-meta'),
-                            set = element('div', undefined, 'cp-cell cp-update-set'),
+                        var set = element(columns ? 'td' : 'div', undefined, 'cp-cell cp-update-set'),
                             name = snapshot && snapshot.updateSet ? snapshot.updateSet.name : '—',
                             text = element('span', name, 'cp-cell-text');
                         text.title = name;
                         set.appendChild(text);
                         if (snapshot) contextCell(set, 'update set', snapshot);
-                        meta.appendChild(set);
-                        var time = element('span', snapshot ? snapshot.time : '', 'cp-time');
+                        var time = element(columns ? 'td' : 'span', snapshot ? snapshot.time : '', 'cp-time');
                         time.title = time.textContent;
-                        meta.appendChild(time);
-                        identity.appendChild(meta);
-                        block.appendChild(identity);
-                        cell.appendChild(block);
-                        row.appendChild(cell);
+                        if (columns) {
+                            var border = updateSetBorder(snapshot && snapshot.updateSet);
+                            time.className += ' ' + border;
+                            author.className += ' ' + border;
+                            author.title = snapshot ? snapshot.author + ' — ' + snapshot.time : 'Unknown';
+                            row.appendChild(time);
+                            row.appendChild(author);
+                            row.appendChild(set);
+                        } else {
+                            var cell = element(
+                                    'td',
+                                    undefined,
+                                    'cp-origin ' + updateSetBorder(snapshot && snapshot.updateSet)
+                                ),
+                                block = element('div', undefined, 'cp-attribution-block'),
+                                identity = element('div', undefined, 'cp-attribution-identity'),
+                                meta = element('div', undefined, 'cp-attribution-meta');
+                            block.appendChild(attributionAvatar(snapshot ? snapshot.author : ''));
+                            identity.appendChild(author);
+                            meta.appendChild(set);
+                            meta.appendChild(time);
+                            identity.appendChild(meta);
+                            block.appendChild(identity);
+                            cell.appendChild(block);
+                            row.appendChild(cell);
+                        }
                         row.appendChild(element('td', String(line.number), 'cp-number'));
                         row.appendChild(element('td', line.text, 'cp-code'));
                         return row;
@@ -2261,6 +2354,16 @@
                         section: section,
                         updateView: updateView,
                         release: disposeCredit,
+                        changeAttributionView: function () {
+                            var scrollTop = creditEditor
+                                ? creditEditor.getScrollTop()
+                                : node('cp-table-fallback').scrollTop;
+                            if (data && section.open) {
+                                renderCode();
+                                if (creditEditor) creditEditor.setScrollTop(scrollTop);
+                                else node('cp-table-fallback').scrollTop = scrollTop;
+                            }
+                        },
                         recalculate: function () {
                             fieldRequest++;
                             pending = false;
@@ -2474,6 +2577,7 @@
                     });
                 });
                 $scope.$on('$destroy', function () {
+                    window.clearTimeout(preferenceTimer);
                     clearHistory();
                     sequence++;
                     window.clearTimeout(contextTimer);

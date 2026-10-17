@@ -104,6 +104,39 @@ WidgetEditorCreditAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         }
     },
 
+    getPreferences: function () {
+        if (!gs.hasRole('admin')) return JSON.stringify({ success: false, error: 'Administrator access is required.' });
+        var preferences = new WidgetEditorAjax().getMergedUserPref('monaco_plus.user_prefs', 'credit', {}) || {};
+        return JSON.stringify({
+            success: true,
+            view: preferences.view === 'columns' ? 'columns' : 'grouped',
+            whitespace:
+                ['none', 'all', 'changes', 'eol'].indexOf(preferences.whitespace) !== -1
+                    ? preferences.whitespace
+                    : 'all',
+        });
+    },
+
+    savePreferences: function () {
+        if (!gs.hasRole('admin')) return JSON.stringify({ success: false, error: 'Administrator access is required.' });
+        try {
+            var preferences = JSON.parse(String(this.getParameter('sysparm_preferences') || '{}'));
+            if (
+                !preferences ||
+                ['grouped', 'columns'].indexOf(preferences.view) === -1 ||
+                ['none', 'all', 'changes', 'eol'].indexOf(preferences.whitespace) === -1
+            )
+                throw new Error('Invalid Credit preferences.');
+            new WidgetEditorAjax().saveMergedUserPref('monaco_plus.user_prefs', 'credit', {
+                view: preferences.view,
+                whitespace: preferences.whitespace,
+            });
+            return JSON.stringify({ success: true });
+        } catch (e) {
+            return JSON.stringify({ success: false, error: e.message });
+        }
+    },
+
     getContributors: function () {
         if (!gs.hasRole('admin')) return JSON.stringify({ success: false, error: 'Administrator access is required.' });
         try {

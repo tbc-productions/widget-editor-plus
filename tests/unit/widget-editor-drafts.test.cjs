@@ -1047,3 +1047,51 @@ test('Compare+ accepts a new related record snapshot with an empty, read-only sa
     assert.equal(localStorage.getItem('_weDiffSnap_test'), null);
     assert.ok(compareSource.includes('if (!recordId && !daToken)'), 'snapshot-only comparisons reach the existing viewer');
 });
+
+
+test('Credit preferences export fresh shared values, import on Save and stay out of unrelated saves', async () => {
+    const h = harness();
+    const saves = [], downloads = [];
+    let shared = { credit: { view: 'columns', whitespace: 'eol' }, fontSize: 20 };
+    h.context.$q = { all: values => Promise.all(values) };
+    h.context.ajax = async (action, params) => {
+        if (action === 'getUserPrefs') return { success: true, value: JSON.stringify(shared) };
+        if (action === 'saveUserPrefs') saves.push(JSON.parse(params.value));
+        return { success: true };
+    };
+    h.context._assistantAjax = async () => ({ success: false });
+    h.context._downloadUserPrefsBlob = prefs => downloads.push(JSON.parse(JSON.stringify(prefs)));
+    const blobStart = source.indexOf('                function _buildUserPrefsBlob(');
+    vm.runInContext(source.slice(blobStart, source.indexOf('                // Angular Templates', blobStart)), h.context);
+    const exportStart = source.indexOf('                $scope.exportUserPrefs =');
+    vm.runInContext(source.slice(exportStart, source.indexOf('                $scope.triggerImportUserPrefs', exportStart)), h.context);
+    const importStart = source.indexOf('                function _applyPrefsBlobToEdit(');
+    vm.runInContext(source.slice(importStart, source.indexOf('                $scope.importUserPrefsFile', importStart)), h.context);
+    h.$scope.userPrefs.fontSize = 12;
+    await h.$scope.exportUserPrefs();
+    await new Promise(setImmediate);
+    assert.deepEqual(downloads[0].credit, shared.credit);
+    assert.equal(downloads[0].fontSize, 12, 'Editor settings still come from the editor');
+    shared = { credit: { view: 'grouped', whitespace: 'none' } };
+    await h.$scope.exportUserPrefs();
+    await new Promise(setImmediate);
+    assert.deepEqual(downloads[1].credit, shared.credit, 'Export refreshes choices changed in the Credit page');
+    await h.run('saveUserPrefs()');
+    assert.equal(Object.hasOwn(saves.at(-1), 'credit'), false, 'Unrelated saves cannot overwrite current Credit choices');
+    h.$scope.userPrefsEdit = { editors: [], autosaveInterval: 30, draftRetentionDays: 7 };
+    h.context.imported = downloads[0];
+    h.run('_applyPrefsBlobToEdit(imported)');
+    assert.deepEqual(JSON.parse(JSON.stringify(h.$scope.userPrefsEdit.credit)), downloads[0].credit);
+    assert.equal(saves.length, 1, 'Import stays staged until Save');
+    h.run('_applyPrefsBlobToEdit({credit:{view:"invalid",whitespace:"all"}})');
+    assert.deepEqual(JSON.parse(JSON.stringify(h.$scope.userPrefsEdit.credit)), downloads[0].credit);
+    Object.assign(h.context, {
+        _buildFontFamily: value => value, _applyJsFormatOptions() {}, _snapshotEditorPrefs() {},
+        _findLocalDrafts() {}, _closeModal: fn => fn(), monacoEditors: {},
+    });
+    h.$scope.onEditorVisibilityChange = () => {};
+    const saveStart = source.indexOf('                $scope.saveUserPrefsModal =');
+    vm.runInContext(source.slice(saveStart, source.indexOf('                $scope.cancelUserPrefsModal', saveStart)), h.context);
+    h.$scope.saveUserPrefsModal();
+    assert.deepEqual(saves.at(-1).credit, downloads[0].credit, 'Save includes the imported choices');
+});
