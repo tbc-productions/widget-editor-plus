@@ -4,9 +4,9 @@
 
 ## App drawer
 
-Click the current app’s icon in the header to switch between Widget Editor+, Compare+, AI Assistant, Code Search+ and, for administrators, Credit+. Selecting a row uses the current tab; the hover action opens a new tab. Widget Editor+ asks you to save or discard unsaved changes before leaving. Its header remains available in the Open modal and shows **Widget Editor+** until a record is open.
+Click the current app’s icon in the header to switch between Widget Editor+, Compare+, AI Assistant, Code Search+ and, for administrators, Credit+. Selecting a row uses the current tab; the hover action opens a new tab. Widget Editor+ asks you to save or discard unsaved changes before leaving. Its header remains available in the Open modal and shows **Widget Editor+** until a record is open. Properties also has the drawer, with a settings icon.
 
-Switching between Widget Editor+, Compare+, Credit+ and AI Assistant carries the saved record when supported. AI Assistant adds it as the primary record and uses that primary record when switching away. Unsupported, unavailable or unreadable records open the destination fresh. Credit+ requires code fields and readable Customer Updates. Unsaved edits and historical version selections do not carry between apps.
+Switching between Widget Editor+, Compare+, Credit+ and AI Assistant carries the saved record when supported. AI Assistant adds it as the primary record and uses that primary record when switching away. Unsupported, unavailable or unreadable records open the destination fresh. Credit+ requires code fields; records without Customer Updates remain selected with an empty history. Unsaved edits and historical version selections do not carry between apps.
 
 ## Supported editor records
 

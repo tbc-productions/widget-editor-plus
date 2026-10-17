@@ -51,7 +51,9 @@ test('drawer compatibility reuses editor profiles, Compare layouts and Credit co
     }
     assert.deepEqual(harness('incident', { code: false }).result.apps, { assistant: true, 'widget-editor': false, compare: true, credit: false });
     assert.deepEqual(harness('sys_script', { layout: false }).result.apps, { assistant: true, 'widget-editor': false, compare: false, credit: true });
-    assert.equal(harness('sys_script_include', { history: false }).result.apps.credit, false);
+    const noHistory = harness('sp_widget', { history: false });
+    assert.equal(noHistory.result.apps.credit, true, 'a supported record remains available even without Customer Updates');
+    assert.equal(noHistory.queries.includes('sys_update_xml'), false, 'history availability must not determine record compatibility');
     const h = harness('sys_script_include', { admin: false });
     assert.deepEqual(h.result.apps, { assistant: true, 'widget-editor': true, compare: true });
     assert.deepEqual(h.creditChecks, []);

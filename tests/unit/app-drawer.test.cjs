@@ -12,6 +12,7 @@ const pages = [
     ['widget_editor_assistant', 'assistant', 'AI Assistant', 'icon-ai-sparkle-fill'],
     ['widget_editor_code_search', 'code-search', 'Code Search+', 'icon-search'],
     ['widget_editor_credit', 'credit', 'Credit+', 'icon-history'],
+    ['widget_editor_plus_properties', 'properties', 'Widget Editor+ Properties', 'icon-cog'],
 ];
 let browser;
 before(async () => { browser = await chromium.launch({ headless: true }); });
@@ -65,7 +66,7 @@ test('ServiceNow normalisation cannot expose the closed drawer or cover the app 
     } finally { await page.close(); }
 });
 
-test('launcher contrast stays visible on all five real header styles in light and dark themes', async () => {
+test('launcher contrast stays visible on all six real header styles in light and dark themes', async () => {
     const themes = [
         { name: 'light page with dark brand header', header: '3,45,66', title: '255,255,255', page: '255,255,255', text: '23,43,49' },
         { name: 'light page with light brand header', header: '221,237,233', title: '38,50,56', page: '255,255,255', text: '38,50,56' },
@@ -113,7 +114,7 @@ test('launcher contrast stays visible on all five real header styles in light an
     }
 });
 
-test('all five existing pages bundle the drawer and select their approved Retina icon', async () => {
+test('all six existing pages bundle the drawer and select their approved Retina icon', async () => {
     for (const [record, current, name, icon] of pages) {
         const file = directory + 'sys_ui_page_' + record + '.now.ts';
         const html = readFluentField(file, 'html');
@@ -132,10 +133,14 @@ test('all five existing pages bundle the drawer and select their approved Retina
             assert.equal((await nav.boundingBox()).width, 352);
             assert.equal(await nav.locator('.we-app-drawer-description').first().evaluate(el => getComputedStyle(el).fontSize), '11px');
             assert.equal(await nav.locator('.we-app-drawer-option').count(), 5);
+            assert.deepEqual(await nav.locator('.we-app-drawer-option').evaluateAll(rows => rows.map(row => row.dataset.app)), ['widget-editor', 'compare', 'assistant', 'credit', 'code-search']);
             const selected = nav.locator('a[aria-current="page"]');
-            assert.equal(await selected.count(), 1);
-            assert.ok((await selected.getAttribute('aria-label')).startsWith(name + ', current app'));
-            assert.equal(await selected.locator('i.' + icon).count(), 1);
+            assert.equal(await selected.count(), current === 'properties' ? 0 : 1);
+            if (current !== 'properties') {
+                assert.ok((await selected.getAttribute('aria-label')).startsWith(name + ', current app'));
+                assert.equal(await selected.locator('i.' + icon).count(), 1);
+            }
+            assert.equal(await nav.locator('[data-app="properties"]').count(), 0);
             assert.equal(await nav.locator('.icon-open-document-new-tab').count(), 5);
             assert.equal(await page.locator('button .' + icon).count(), 1);
             for (const link of await nav.locator('a').all()) {
@@ -387,4 +392,79 @@ test('failed compatibility checks restore usable fresh links', async () => {
         assert.equal(await page.locator('a[aria-disabled="true"]').count(), 0);
         for (const link of await page.locator('nav a').all()) assert.match(await link.getAttribute('href'), /^\/ui_page\.do\?sys_id=[a-f0-9]{32}$/);
     } finally { await page.close(); }
+});
+
+
+test('tagline colour matches the real Open modal list subtext in light and dark themes', async () => {
+    const html = readFluentField(directory + 'sys_ui_page_8b2e70458373fe1070b8b5dfeeaad35e.now.ts', 'html');
+    const css = html.match(/<style>([\s\S]*?)<\/style>/)[1];
+    for (const colour of ['23,43,49', '227,233,231']) {
+        const page = await mount();
+        try {
+            await page.addStyleTag({ content: css + ':root { --now-color_text--primary: ' + colour + '; --now-color_text--secondary: 160,20,40; }' });
+            await page.evaluate(() => {
+                const reference = document.createElement('span');
+                reference.className = 'we-picker-item-id';
+                reference.textContent = 'Open modal subtext';
+                document.body.appendChild(reference);
+            });
+            const colours = await page.evaluate(() => [
+                getComputedStyle(document.querySelector('.we-picker-item-id')).color,
+                getComputedStyle(document.querySelector('.we-app-drawer-description')).color,
+            ]);
+            assert.equal(colours[0], colours[1]);
+        } finally { await page.close(); }
+    }
+});
+
+test('Properties keeps its heading and search, uses a cog drawer button and stays out of the app list', async () => {
+    const file = directory + 'sys_ui_page_widget_editor_plus_properties.now.ts';
+    const html = readFluentField(file, 'html');
+    const client = readFluentField(file, 'clientScript');
+    const css = html.match(/<style>([\s\S]*?)<\/style>/)[0];
+    const shell = html.slice(html.indexOf('<div class="wep-shell">'), html.lastIndexOf('</j:jelly>'));
+    for (const [width, admin] of [[1280, true], [320, false]]) {
+        const page = await browser.newPage({ viewport: { width, height: 768 } });
+        const errors = [];
+        page.on('pageerror', error => errors.push(error.message));
+        try {
+            await page.context().route('http://properties.test/**', route => route.fulfill({
+                contentType: 'text/html',
+                body: css + '<style>:root { --now-color_chrome--brand-5: 3,45,66; --now-color--neutral-0: 255,255,255; --now-color_text--primary: 23,43,49; --now-color_background--primary: 255,255,255; }</style>' + shell.replace(/\$\{gs\.hasRole\('admin'\)\}/g, String(admin)),
+            }));
+            await page.goto('http://properties.test/ui_page.do?sys_id=47cb4ac08e0d4437b5c0a482d8411e30');
+            await page.evaluate(() => {
+                window.propertyRequests = [];
+                window.GlideAjax = function () {
+                    const params = {};
+                    this.addParam = (name, value) => { params[name] = value; };
+                    this.getXMLAnswer = callback => {
+                        window.propertyRequests.push(params);
+                        callback(JSON.stringify({ success: true, properties: [] }));
+                    };
+                };
+            });
+            await page.addScriptTag({ content: client });
+            const heading = page.getByRole('heading', { name: 'Widget Editor+ Properties', exact: true });
+            const trigger = page.getByRole('button', { name: 'Apps', exact: true });
+            await expect(heading).toBeVisible();
+            await expect(page.getByRole('searchbox', { name: 'Search properties' })).toBeVisible();
+            assert.equal(await trigger.locator('.icon-cog').count(), 1);
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+            assert.equal(await page.locator('#wep-header').evaluate(el => getComputedStyle(el).borderBottomWidth), '0px');
+            assert.equal(await page.evaluate(() => window.propertyRequests[0].sysparm_name), 'getProperties');
+            await trigger.click();
+            const nav = page.getByRole('navigation', { name: 'Apps', exact: true });
+            await expect(nav).toBeVisible();
+            assert.equal(await nav.locator('.we-app-drawer-option').count(), admin ? 5 : 4);
+            assert.equal(await nav.locator('[aria-current="page"]').count(), 0);
+            assert.equal(await nav.getByText('Properties', { exact: true }).count(), 0);
+            const bounds = await nav.boundingBox();
+            assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width);
+            await nav.getByRole('link', { name: 'Compare+', exact: true }).click();
+            await expect(page).toHaveURL('http://properties.test/ui_page.do?sys_id=51ec3d258363b61070b8b5dfeeaad36b');
+            assert.equal(page.context().pages().length, 1);
+            assert.deepEqual(errors, []);
+        } finally { await page.context().close(); }
+    }
 });

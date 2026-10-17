@@ -7,37 +7,37 @@
         {
             id: 'widget-editor',
             name: 'Widget Editor+',
-            description: 'Edit widgets and platform records',
+            description: 'Edit code',
             icon: 'icon-code',
             page: '8b2e70458373fe1070b8b5dfeeaad35e',
         },
         {
             id: 'compare',
             name: 'Compare+',
-            description: 'Compare records and versions',
+            description: 'Compare versions',
             icon: 'icon-split-vertical',
             page: '51ec3d258363b61070b8b5dfeeaad36b',
         },
         {
             id: 'assistant',
             name: 'AI Assistant',
-            description: 'Prepare context for your AI tools',
+            description: 'Export AI context',
             icon: 'icon-ai-sparkle-fill',
             page: '584ed242cd934914bffa4b0bb3fb2974',
         },
         {
-            id: 'code-search',
-            name: 'Code Search+',
-            description: 'Find code across the platform',
-            icon: 'icon-search',
-            page: '27a85cdf06a14eba97d2ffc3b57c4a46',
-        },
-        {
             id: 'credit',
             name: 'Credit+',
-            description: 'Trace script changes and authors',
+            description: 'Line-by-line statistics',
             icon: 'icon-history',
             page: '9c5bf170283e4d6394aa639c79936587',
+        },
+        {
+            id: 'code-search',
+            name: 'Code Search+',
+            description: 'Search for code',
+            icon: 'icon-search',
+            page: '27a85cdf06a14eba97d2ffc3b57c4a46',
         },
     ];
     var nextId = 0;
@@ -108,8 +108,8 @@
         }
         we-app-drawer .we-app-drawer-copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 2px; }
         we-app-drawer .we-app-drawer-name { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-weight: 500; }
-        we-app-drawer .we-app-drawer-current,
-        we-app-drawer .we-app-drawer-description { font-size: 11px; color: rgb(var(--now-color_text--secondary, 82, 96, 100)); }
+        we-app-drawer .we-app-drawer-current { font-size: 11px; color: rgb(var(--now-color_text--secondary, 82, 96, 100)); }
+        we-app-drawer .we-app-drawer-description { font-size: 11px; color: rgba(var(--now-color_text--primary, 38, 50, 56), .5); }
         we-app-drawer .we-app-drawer-new-tab {
             display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
             width: 26px; height: 26px; border-radius: 4px; opacity: 0; visibility: hidden;
@@ -188,7 +188,7 @@
                         '" popovertarget="' +
                         id +
                         '"><i class="' +
-                        currentApp.icon +
+                        (current === 'properties' ? 'icon-cog' : currentApp.icon) +
                         '" aria-hidden="true"></i></button>',
                     '<nav class="we-app-drawer-popover" id="' +
                         id +

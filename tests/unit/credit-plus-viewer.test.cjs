@@ -2435,3 +2435,41 @@ test('Columns keeps empty filter results clearable and renders unknown origins s
         }
     } finally { await browser.close(); }
 });
+
+test('Compare+ drawer opens Credit+ with the same record even when its Customer Update history is empty', async () => {
+    const browser = await chromium.launch({ headless: true });
+    const record = 'a'.repeat(32);
+    try {
+        const page = await browser.newPage();
+        await page.route('https://credit.test/**', route => route.fulfill({
+            contentType: 'text/html',
+            body: new URL(route.request().url()).searchParams.get('sys_id') === '9c5bf170283e4d6394aa639c79936587'
+                ? markup : '<we-app-drawer current-app="compare" credit-available="true"></we-app-drawer>',
+        }));
+        await page.addInitScript(() => {
+            window.calls = [];
+            window.GlideAjax = function (processor) {
+                const params = { processor };
+                this.addParam = (key, value) => { params[key] = value; };
+                this.getXMLAnswer = callback => {
+                    window.calls.push(params);
+                    callback(JSON.stringify(params.sysparm_name === 'getAppDrawerContext'
+                        ? { success: true, apps: { credit: true } }
+                        : { success: false, error: 'No Customer Updates for this record.', errorCode: 'no_customer_updates' }));
+                };
+            };
+        });
+        await page.goto('https://credit.test/ui_page.do?sys_id=51ec3d258363b61070b8b5dfeeaad36b&table=sp_widget&record_id=' + record);
+        await page.addScriptTag({ path: 'src/fluent/generated/other/sys-ui-page/widget_editor_app_drawer.js' });
+        await page.getByRole('button', { name: 'Apps', exact: true }).click();
+        await page.getByRole('link', { name: 'Credit+', exact: true }).click();
+        await page.waitForURL('https://credit.test/ui_page.do?sys_id=9c5bf170283e4d6394aa639c79936587&sysparm_table=sp_widget&sysparm_record=' + record);
+        await installCredit(page);
+        const request = await page.evaluate(() => window.calls.find(call => call.sysparm_name === 'getCredit'));
+        assert.equal(request.processor, 'WidgetEditorCreditAjax');
+        assert.equal(request.sysparm_table, 'sp_widget');
+        assert.equal(request.sysparm_record, record);
+        assert.match(await page.locator('#cp-status').textContent(), /No Customer Updates/);
+        assert.equal(page.context().pages().length, 1);
+    } finally { await browser.close(); }
+});

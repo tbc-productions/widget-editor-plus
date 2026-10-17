@@ -132,14 +132,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 } catch (error) {}
                 if (gs.hasRole('admin')) {
                     try {
-                        apps.credit = false;
-                        if (new global.WidgetEditorCreditAjax()._fields(table).length > 0) {
-                            var updates = new GlideRecordSecure('sys_update_xml');
-                            updates.addQuery('name', table + '_' + recordId.toLowerCase());
-                            updates.setLimit(1);
-                            updates.query();
-                            apps.credit = updates.next();
-                        }
+                        apps.credit = new global.WidgetEditorCreditAjax()._fields(table).length > 0;
                     } catch (error) {}
                 }
             }

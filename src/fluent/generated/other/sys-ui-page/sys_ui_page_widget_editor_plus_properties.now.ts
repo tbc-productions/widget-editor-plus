@@ -10,6 +10,7 @@ UiPage({
   <g:requires name="scripts/snc-code-editor/monaco.bundle.min.jsx" params="sysparm_substitute=false" />
   <g:requires name="monaco_plus_bootstrap.jsdbx" params="sysparm_substitute=false" />
   <g:requires name="we_history_sync.jsdbx" params="sysparm_substitute=false" />
+  <link rel="stylesheet" href="/styles/retina_icons/retina_icons.css" />
   <style>
     *, *::before, *::after {
       box-sizing: border-box;
@@ -41,7 +42,6 @@ UiPage({
         position: sticky;
         top: 0;
         background: rgb(var(--now-color_chrome--brand-5,var(--now-color--primary-0,221,237,233)));
-        border-bottom: 1px solid rgb(var(--now-color_border--secondary, var(--now-color_divider--secondary, 228, 230, 235)));
         flex-shrink: 0;
         z-index: 10;
         margin: 0;
@@ -409,7 +409,10 @@ UiPage({
   <div class="wep-shell">
     <header id="wep-header" class="dc-header wep-header">
       <div class="dc-header-row wep-header-row">
-        <h1 class="dc-title">Widget Editor+ Properties</h1>
+        <div class="we-app-drawer-heading">
+          <we-app-drawer current-app="properties" credit-available="\${gs.hasRole('admin')}"></we-app-drawer>
+          <h1 class="dc-title">Widget Editor+ Properties</h1>
+        </div>
         <div class="wep-header-right">
           <div class="wep-search-group">
             <input id="wep-search" class="form-control wep-search" type="search" placeholder="Search properties..." aria-label="Search properties" />
@@ -436,5 +439,6 @@ UiPage({
     </main>
   </div>
 </j:jelly>`,
-    clientScript: Now.include('./widget_editor_plus_properties.client.js'),
+    clientScript: `${Now.include('./widget_editor_app_drawer.js')}
+${Now.include('./widget_editor_plus_properties.client.js')}`,
 })
