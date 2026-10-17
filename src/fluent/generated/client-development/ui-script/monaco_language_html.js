@@ -1882,7 +1882,7 @@
 
             // ---- Comments ---------------------------------------------------
             comment: [
-                [/-->/, 'comment', '@pop'],
+                [/--!?>/, 'comment', '@pop'],
                 [/[^-]+/, 'comment.content'],
                 [/./, 'comment.content'],
             ],

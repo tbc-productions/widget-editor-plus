@@ -21,6 +21,17 @@ before(async () => {
 });
 after(async () => { await browser?.close(); });
 
+test('HTML comment highlighting ends at both standard and bang terminators', async () => {
+    const endings = await page.evaluate(() => {
+        const [pattern, token, next] = MONACO_LANGUAGE_HTML.tokenizer.tokenizer.comment[0];
+        return ['-->', '--!>'].map(ending => ({ match: pattern.exec(ending)?.[0], token, next }));
+    });
+    assert.deepEqual(endings, [
+        { match: '-->', token: 'comment', next: '@pop' },
+        { match: '--!>', token: 'comment', next: '@pop' }
+    ]);
+});
+
 async function expressions(text) {
     return page.evaluate(text => validation.extract(text).map(item => ({
         expression: item.expr,

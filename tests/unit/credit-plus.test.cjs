@@ -238,7 +238,7 @@ test('XML parser preserves CDATA, decodes entities and ignores companion records
 
 test('malformed, DTD, ambiguous and invalid target payloads fail closed', () => {
     const { api } = harness();
-    for (const raw of ['<record_update>', '<!DOCTYPE record_update><record_update/>', payload('x').replace(recordId, 'invalid'), payload('x').replace('</record_update>', `<sp_widget><sys_id>${recordId}</sys_id></sp_widget></record_update>`), payload('x').replace('<script>', '<script>').replace('</sp_widget>', '<script>duplicate</script></sp_widget>')]) {
+    for (const raw of ['<record_update>', '<!DOCTYPE record_update><record_update/>', payload('x').replace(recordId, 'invalid'), payload('x').replace('</record_update>', `<sp_widget><sys_id>${recordId}</sys_id></sp_widget></record_update>`), payload('x').replace('</sp_widget>', '<script>duplicate</script></sp_widget>')]) {
         assert.throws(() => api._payload({ getValue: key => key === 'payload' ? raw : '' }));
     }
     api.getParameter = () => 'bad';
@@ -462,7 +462,7 @@ test('Compare+ rejects missing, unreadable, malformed, ambiguous and mismatched 
 });
 
 test('Compare+ keeps historical reference display values and does not recover deleted code', () => {
-    const entries = [update(0, '', { payload: payload('old();').replace('<script>', '<script>') .replace('</sp_widget>', '<owner display_value="Earlier owner">' + 'f'.repeat(32) + '</owner></sp_widget>') }), update(1, '', { payload: `<record_update table="sp_widget"><sp_widget action="DELETE"><sys_id>${recordId}</sys_id></sp_widget></record_update>` })];
+    const entries = [update(0, '', { payload: payload('old();').replace('</sp_widget>', '<owner display_value="Earlier owner">' + 'f'.repeat(32) + '</owner></sp_widget>') }), update(1, '', { payload: `<record_update table="sp_widget"><sp_widget action="DELETE"><sys_id>${recordId}</sys_id></sp_widget></record_update>` })];
     const { api } = harness(entries); api.getParameter = name => name === 'sysparm_update' ? ids[1] : '';
     const result = JSON.parse(api.getComparison());
     assert.equal(result.success, true); assert.equal(result.left.display_values.owner, 'Earlier owner');
