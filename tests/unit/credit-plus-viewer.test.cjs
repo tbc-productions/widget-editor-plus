@@ -2211,7 +2211,7 @@ test('attribution blocks show cached avatars and aligned update-set gaps, with s
             }, width);
             const field = await openField(page);
             const table = part(field, monaco ? 'cp-attribution' : 'cp-lines');
-            assert.equal(await part(field, monaco ? 'cp-code-view' : 'cp-table-fallback').locator(monaco ? '.cp-gutter-head' : 'thead th:first-child').textContent(), 'Code attribution');
+            assert.equal(await part(field, monaco ? 'cp-code-view' : 'cp-table-fallback').locator(monaco ? '.cp-gutter-head' : 'thead th:first-child').textContent(), 'Contributor');
             const avatars = table.locator('.cp-origin .cp-avatar');
             assert.equal(await avatars.count(), 3, 'Only the beginning of each attribution block has an avatar');
             await page.waitForFunction(() => [...document.querySelectorAll('.cp-origin .cp-avatar img')].filter(img => img.naturalWidth > 0).length === 2 && !document.querySelector('.cp-avatar[data-author="developer"] img'));
