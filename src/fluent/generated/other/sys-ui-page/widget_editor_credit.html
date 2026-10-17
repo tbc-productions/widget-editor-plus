@@ -184,6 +184,7 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
+            gap: 0.375rem;
             text-decoration: none;
             transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
             box-shadow: none;
@@ -766,7 +767,7 @@
                         <div class="dc-title" credit-record-pickers="" role="heading" aria-level="1"><span class="dc-title-label">Credit+&#160;</span><span id="cp-table-picker" class="dc-table-picker-wrap"><span id="cp-table-label" ng-bind="ctrl.tableLabel"></span></span><span class="dc-title-colon">:</span><span id="cp-record-picker" class="dc-picker-wrap"><strong id="cp-record-name" ng-bind="ctrl.recordName"></strong></span></div>
                     </div>
                     <div class="dc-header-btns">
-                        <button id="cp-retry" ng-click="ctrl.reload()" ng-disabled="ctrl.loading" type="button" class="btn btn-default" title="Reload" aria-label="Reload"><i class="icon-refresh" aria-hidden="true"></i></button>
+                        <button id="cp-retry" ng-click="ctrl.reload()" ng-disabled="ctrl.loading" type="button" class="btn btn-default" title="Reload" aria-label="Reload"><i class="icon-refresh" aria-hidden="true"></i><span>Reload</span></button>
                         <div id="cp-open-actions" class="btn-group" role="group" aria-label="Open widget" ng-show="ctrl.data.table === 'sp_widget' &amp;&amp; !ctrl.data.deleted" ng-class="{open: ctrl.editorMenuOpen}" ng-keydown="ctrl.editorMenuKeydown($event)">
                             <a id="cp-editor-link" class="btn btn-primary" target="_blank" rel="noopener" ng-href="{{ctrl.editorHref}}">Open in Widget Editor+</a>
                             <button id="cp-open-toggle" class="btn btn-primary dropdown-toggle" type="button" aria-label="More widget actions" aria-haspopup="menu" ng-attr-aria-expanded="{{ctrl.editorMenuOpen}}" aria-controls="cp-open-menu" ng-click="ctrl.editorMenuOpen = !ctrl.editorMenuOpen"><span class="caret" aria-hidden="true"></span></button>
@@ -781,10 +782,10 @@
                         <div id="cp-update-menu" class="dc-version-dd-menu" role="listbox" aria-label="Update set" hidden="hidden"><div class="dc-version-dd-item" ng-repeat="set in ctrl.updateSets track by set.id" ng-attr-id="cp-update-option-{{$index}}" ng-attr-data-value="{{set.id}}" tabindex="-1" role="option" ng-attr-aria-selected="{{set.id === ctrl.selectedSet.id}}" ng-class="{'dc-version-dd-selected': set.id === ctrl.selectedSet.id}" ng-click="ctrl.chooseUpdate(set)"><span class="dc-vrow"><span class="dc-vrow-date" ng-bind="set.time || '—'" ng-attr-title="{{set.time || '—'}}"></span><span class="dc-vrow-uset" ng-bind="set.name || '—'" ng-attr-title="{{set.name || '—'}}"></span><span class="dc-vrow-user" ng-bind="set.author || '—'" ng-attr-title="{{set.author || '—'}}"></span></span></div></div>
                     </div></div>
                     <div class="dc-header-btns cp-settings-control">
-                        <button id="cp-grouped-button" type="button" class="btn btn-default" ng-click="ctrl.changeAttributionView('grouped')" ng-class="{active: ctrl.attributionView === 'grouped'}" aria-label="Grouped view" title="Grouped view" ng-attr-aria-pressed="{{ctrl.attributionView === 'grouped'}}"><i class="fa fa-id-card-o" aria-hidden="true"></i></button>
-                        <button id="cp-columns-button" type="button" class="btn btn-default" ng-click="ctrl.changeAttributionView('columns')" ng-class="{active: ctrl.attributionView === 'columns'}" aria-label="Column view" title="Column view" ng-attr-aria-pressed="{{ctrl.attributionView === 'columns'}}"><i class="fa fa-columns" aria-hidden="true"></i></button>
+                        <button id="cp-grouped-button" type="button" class="btn btn-default" ng-click="ctrl.changeAttributionView('grouped')" ng-class="{active: ctrl.attributionView === 'grouped'}" aria-label="Grouped view" title="Grouped view" ng-attr-aria-pressed="{{ctrl.attributionView === 'grouped'}}"><i class="fa fa-id-card-o" aria-hidden="true"></i><span>Grouped</span></button>
+                        <button id="cp-columns-button" type="button" class="btn btn-default" ng-click="ctrl.changeAttributionView('columns')" ng-class="{active: ctrl.attributionView === 'columns'}" aria-label="Column view" title="Column view" ng-attr-aria-pressed="{{ctrl.attributionView === 'columns'}}"><i class="fa fa-columns" aria-hidden="true"></i><span>Columns</span></button>
                     <div id="cp-whitespace-control">
-                        <button id="cp-whitespace-button" type="button" class="btn btn-default" ng-click="ctrl.toggleWhitespace()" ng-class="{active: ctrl.whitespaceOpen}" aria-label="Whitespace settings" ng-attr-aria-expanded="{{ctrl.whitespaceOpen}}" aria-controls="cp-whitespace-popover"><i class="icon-indent" aria-hidden="true"></i></button>
+                        <button id="cp-whitespace-button" type="button" class="btn btn-default" ng-click="ctrl.toggleWhitespace()" ng-class="{active: ctrl.whitespaceOpen}" aria-label="Whitespace settings" ng-attr-aria-expanded="{{ctrl.whitespaceOpen}}" aria-controls="cp-whitespace-popover"><i class="icon-indent" aria-hidden="true"></i><span>Whitespace</span></button>
                         <div id="cp-whitespace-popover" class="popover bottom" ng-show="ctrl.whitespaceOpen" role="dialog" aria-label="Attribution and Statistics whitespace settings">
                             <div class="arrow"></div>
                             <div class="popover-content" role="radiogroup" aria-label="Whitespace comparison mode">

@@ -2342,8 +2342,8 @@ test('attribution buttons switch cached fields between Grouped and Columns and m
                 assert.equal(await columns.evaluate(node => node.classList.contains('active')), view === 'columns');
                 assert.equal(await page.locator('.cp-settings-control .btn.active').count(), 1);
             }
-            assert.equal(await grouped.textContent(), '');
-            assert.equal(await columns.textContent(), '');
+            assert.equal(await grouped.textContent(), 'Grouped');
+            assert.equal(await columns.textContent(), 'Columns');
             assert.equal(await grouped.locator('.fa.fa-id-card-o[aria-hidden="true"]').count(), 1);
             assert.equal(await columns.locator('.fa.fa-columns[aria-hidden="true"]').count(), 1);
             assert.equal(await columns.evaluate(node => node.nextElementSibling.id), 'cp-whitespace-control');
