@@ -232,6 +232,7 @@ test('draft picker keyboard navigation reaches the selected radio and Escape clo
     const h = harness();
     const start = source.indexOf('                $scope.onAlertPillFocus =');
     h.context.alertHoverTimer = null;
+    h.context.alertPopoverOpenedAt = 0;
     vm.runInContext(source.slice(start, source.indexOf('                // Dropdown management', start)), h.context);
     const focused = [];
     const radio = { focus: () => focused.push('radio') };
@@ -252,6 +253,41 @@ test('draft picker keyboard navigation reaches the selected radio and Escape clo
     h.flush();
     assert.equal(h.$scope.openDropdown, null);
     assert.deepEqual(focused, ['radio', 'radio', 'pill']);
+});
+
+test('pill clicks preserve newly opened popovers while later clicks and keyboard actions still close them', () => {
+    const h = harness();
+    const start = source.indexOf('                var alertHoverTimer = null;');
+    vm.runInContext(source.slice(start, source.indexOf('                $scope.toggleCompactSubmenu =', start)), h.context);
+    h.$scope.onAlertPillEnter('alert-draft');
+    const hover = h.timers.at(-1);
+    h.advance(280);
+    hover.fn();
+    assert.equal(h.$scope.openDropdown, 'alert-draft');
+    h.$scope.toggleDropdown('alert-draft');
+    assert.equal(h.$scope.openDropdown, 'alert-draft');
+    h.advance(501);
+    h.$scope.onAlertPillFocus('alert-draft');
+    h.$scope.toggleDropdown('alert-draft');
+    assert.equal(h.$scope.openDropdown, null);
+    h.$scope.onAlertPillFocus('alert-draft');
+    h.$scope.toggleDropdown('alert-draft');
+    assert.equal(h.$scope.openDropdown, 'alert-draft');
+    h.$scope.onAlertPillKeydown({ keyCode: 13, preventDefault() {}, stopPropagation() {} }, 'alert-draft');
+    assert.equal(h.$scope.openDropdown, null);
+    h.$scope.onAlertPillEnter('alert-draft');
+    const pending = h.timers.at(-1);
+    h.$scope.toggleDropdown('alert-draft');
+    assert.equal(pending.cancelled, true);
+    assert.equal(h.$scope.openDropdown, 'alert-draft');
+    h.$scope.toggleDropdown('alert-draft');
+    assert.equal(h.$scope.openDropdown, 'alert-draft');
+    h.advance(501);
+    h.$scope.toggleDropdown('alert-draft');
+    assert.equal(h.$scope.openDropdown, null);
+    h.$scope.toggleDropdown('editors');
+    h.$scope.toggleDropdown('editors');
+    assert.equal(h.$scope.openDropdown, null);
 });
 
 test('autosave label reuses relative times and keeps the actual successful write time', () => {
@@ -632,6 +668,41 @@ test('restore changes only draft fields, remains unsaved and transfers the recov
     assert.equal(h.draft().entries.length, 2);
 });
 
+test('other record drafts stay table-specific and recovery rechecks current field permissions', async () => {
+    for (const denied of [false, true]) {
+        const h = harness();
+        Object.assign(h.$scope, {
+            isWidgetRecord: false, recordTable: 'sys_ui_page',
+            additionalWidgetFields: [{ name: 'name', type: 'string', canWrite: true }],
+        });
+        h.$scope.coreEditorDefs[1].readOnly = true;
+        h.$scope.widget.template = 'page draft';
+        h.$scope.widget.css = 'read-only content';
+        h.run('_writeLocalDraft()');
+        assert.ok(h.ownKey().includes(':sys_ui_page:'));
+        assert.deepEqual(h.draft().entries.map(entry => entry.field), ['template']);
+        const previousKey = h.ownKey().replace(/[^:]+$/, 'previous-page');
+        h.localStorage.setItem(previousKey, h.localStorage.getItem(h.ownKey()));
+        h.$scope.widget.template = 'saved';
+        h.run('_findLocalDrafts()');
+        const draft = h.$scope.localDrafts.find(entry => entry.key === previousKey);
+        assert.ok(draft);
+        h.context.ajax = async () => ({ success: true,
+            widget: { ...h.$scope.widget, template: 'saved' },
+            core_editor_defs: [{ field: 'template', readOnly: denied }],
+            additional_widget_fields: h.$scope.additionalWidgetFields,
+        });
+        await h.$scope.restoreLocalDraft(draft, true);
+        h.flush();
+        assert.equal(h.$scope.widget.template, denied ? 'saved' : 'page draft');
+        assert.equal(h.context.originalValues.template, 'saved');
+        if (denied) {
+            assert.ok(h.localStorage.getItem(previousKey));
+            assert.match(h.$scope.localDraftError, /no longer editable/);
+        }
+    }
+});
+
 test('server conflicts and existing local edits require comparison before restore', async () => {
     const h = harness();
     const draft = recovered(h);
@@ -805,6 +876,51 @@ test('explicit discard is not recreated when navigating away', () => {
     h.listeners.pagehide();
     assert.equal(h.localStorage.length, 0);
     assert.equal(h.$scope.lastDraftSaveTime, null);
+});
+
+test('Revert confirms before discarding this tab’s draft and bypasses the unload warning', () => {
+    for (const isNewWidget of [false, true]) {
+        const h = harness();
+        let reloads = 0;
+        h.context.window.location = { reload: () => reloads++ };
+        h.context._bypassUnloadWarning = false;
+        const start = source.indexOf('                $scope.requestRevert =');
+        vm.runInContext(source.slice(start, source.indexOf('                // Editor visibility', start)), h.context);
+        const other = recovered(h);
+        h.$scope.widget.template = 'unsaved';
+        h.run('_writeLocalDraft()');
+        h.$scope.isNewWidget = isNewWidget;
+        h.$scope.openDropdown = 'alert-unsaved';
+        h.$scope.requestRevert();
+        assert.equal(h.$scope.showRevertConfirm, true);
+        assert.equal(h.$scope.openDropdown, null);
+        assert.equal(reloads, 0);
+        h.$scope.cancelRevert();
+        assert.equal(h.$scope.showRevertConfirm, false);
+        assert.equal(h.$scope.widget.template, 'unsaved');
+        assert.ok(h.localStorage.getItem(h.ownKey()));
+        h.$scope.requestRevert();
+        h.$scope.creatingRecord = true;
+        h.$scope.confirmRevert();
+        assert.equal(reloads, 0);
+        h.$scope.creatingRecord = false;
+        const remove = h.localStorage.removeItem;
+        h.localStorage.removeItem = () => { throw new Error('Storage unavailable'); };
+        h.$scope.confirmRevert();
+        assert.equal(reloads, 0);
+        assert.equal(h.context._bypassUnloadWarning, false);
+        assert.equal(h.$scope.showRevertConfirm, true);
+        assert.match(h.$scope.localDraftError, /could not be discarded/);
+        assert.equal(h.run('_draftCaptureStopped'), false);
+        h.localStorage.removeItem = remove;
+        h.$scope.confirmRevert();
+        assert.equal(reloads, 1);
+        assert.equal(h.context._bypassUnloadWarning, true);
+        assert.equal(h.localStorage.getItem(h.ownKey()), null);
+        assert.ok(h.localStorage.getItem(other.key));
+        h.listeners.pagehide();
+        assert.equal(h.localStorage.getItem(h.ownKey()), null);
+    }
 });
 
 test('preference import accepts zero and custom intervals without disturbing other preferences', () => {

@@ -42,6 +42,7 @@ Widget Editor+ is a development and diagnostics suite for ServiceNow Service Por
 A Monaco-based editor for Service Portal widgets.
 
 - Edit widget templates, styles, scripts and JSON, with per-field saving.
+- Open Script Includes, CSS, UI Scripts, Angular Providers, UI Pages and Angular HTML templates in the same editor.
 - Recover unsaved changes from automatic local drafts.
 - ServiceNow and AngularJS IntelliSense, including table fields, Script Includes and providers.
 - AngularJS expression validation and syntax highlighting.

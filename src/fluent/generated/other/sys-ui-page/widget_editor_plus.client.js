@@ -204,7 +204,7 @@
                     link: function (scope, el, attrs, ngModel) {
                         function resize() {
                             el[0].style.height = 'auto';
-                            el[0].style.height = el[0].scrollHeight + 'px';
+                            el[0].style.height = el[0].scrollHeight + el[0].offsetHeight - el[0].clientHeight + 'px';
                         }
                         el.on('input', resize);
                         if (ngModel) {
@@ -847,7 +847,22 @@
                 // Reads window.WE_CONFIG (set before Angular bootstraps) instead of re-parsing location.search, since ServiceNow can rewrite the URL first.
                 var _params = new URLSearchParams(window.location.search);
                 var _weConfig = window.WE_CONFIG || {};
-                var SYS_ID = _weConfig.sys_id || _params.get('widget_id') || '';
+                var RECORD_TABLE = _weConfig.record_table || _params.get('record_table') || 'sp_widget';
+                var SYS_ID = _weConfig.sys_id || _params.get('record_sys_id') || _params.get('widget_id') || '';
+                $scope.recordTable = RECORD_TABLE;
+                $scope.isWidgetRecord = RECORD_TABLE === 'sp_widget';
+                $scope.recordLabel =
+                    {
+                        sp_widget: 'Widget',
+                        sys_script_include: 'Script Include',
+                        sp_css: 'Style Sheet',
+                        sys_ui_script: 'UI Script',
+                        sp_angular_provider: 'Angular Provider',
+                        sys_ui_page: 'UI Page',
+                        sp_ng_template: 'Angular HTML Template',
+                    }[RECORD_TABLE] || 'Record';
+                $scope.recordPrimaryField = 'name';
+                $scope.recordTypes = [{ table: 'sp_widget', label: 'Widgets', singular: 'Widget' }];
                 var VERSION_ID = _weConfig.version_id || _params.get('version_id') || '';
                 var IS_NEW = _weConfig.is_new !== undefined ? !!_weConfig.is_new : _params.get('new') === '1';
                 var APP_TITLE = 'Widget Editor+';
@@ -877,6 +892,7 @@
                 });
                 $scope.$watch('widget.id', function (v) {
                     $scope.headerDirty.id = (v || '') !== originalHeader.id;
+                    if ($scope.isWidgetRecord === false && $scope.recordPrimaryField === 'id') $scope.widget.name = v;
                 });
                 $scope.$watch('widget.description', function (v) {
                     $scope.headerDirty.description = (v || '') !== originalHeader.description;
@@ -917,7 +933,7 @@
                 // Scope state
                 $scope.loading = true;
                 $scope.loadingWidgetName = '';
-                if (SYS_ID) {
+                if (SYS_ID && $scope.isWidgetRecord) {
                     ajax('getWidgetName', { sys_id: SYS_ID }).then(function (data) {
                         $scope.loadingWidgetName = data.name || '';
                     });
@@ -1187,7 +1203,9 @@
                 $scope.pendingNewWidget = false;
                 $scope.pickerWidgets = [];
                 $scope.pickerLoading = false;
-                $scope.picker = { search: '' };
+                $scope.picker = { search: '', table: RECORD_TABLE };
+                $scope.pickerOffset = 0;
+                $scope.pickerError = null;
                 $scope.pickerTotal = 0;
                 $scope.pickerHasMore = false;
                 $scope.pickerLoadingMore = false;
@@ -1198,7 +1216,7 @@
 
                 // Reverted notification
                 $scope.widgetReverted = false;
-                $scope.showReloadConfirm = false;
+                $scope.showRevertConfirm = false;
 
                 // Header field dirty tracking
                 $scope.headerDirty = {
@@ -1321,6 +1339,7 @@
                     showRecentlyOpenedWidgets: true,
                     showOpenHistory: true,
                     recentWidgets: [],
+                    recentRecords: [],
                     // Not surfaced in the Preferences dialog — just carried through load/save/export/import
                     // so Code Search+'s own preference lives on the shared preference row.
                     lastCodeSearchGroup: null,
@@ -1383,8 +1402,32 @@
                 // AJAX helper — GlideAjax → WidgetEditorAjax Script Include
                 function ajax(action, params) {
                     var deferred = $q.defer();
+                    var creating = $scope.isWidgetRecord === false && $scope.isNewWidget && action === 'saveWidget';
+                    if (creating) {
+                        if ($scope.creatingRecord) {
+                            deferred.resolve({ success: false, error: 'Record creation is already in progress.' });
+                            return deferred.promise;
+                        }
+                        $scope.creatingRecord = true;
+                        deferred.promise.finally(function () {
+                            $scope.creatingRecord = false;
+                        });
+                    }
                     var ga = new GlideAjax(AJAX_SCRIPT);
                     ga.addParam('sysparm_name', action);
+                    if (creating) ga.addParam('new_record', 'true');
+                    ga.addParam('record_table', (params && params.record_table) || RECORD_TABLE);
+                    if ($scope.isWidgetRecord === false && (action === 'saveWidget' || action === 'saveField')) {
+                        var originals = {};
+                        var payload = action === 'saveField' ? {} : JSON.parse(params.data);
+                        if (action === 'saveField') payload[params.field] = params.value;
+                        Object.keys(payload).forEach(function (name) {
+                            originals[name] = Object.prototype.hasOwnProperty.call(originalValues, name)
+                                ? originalValues[name]
+                                : originalHeader[name];
+                        });
+                        ga.addParam('original', JSON.stringify(originals));
+                    }
                     if (params) {
                         Object.keys(params).forEach(function (k) {
                             ga.addParam(k, params[k] != null ? String(params[k]) : '');
@@ -1464,6 +1507,20 @@
                             $scope.widget[def.field] = monacoEditors[def.key].getValue();
                         }
                     });
+                    if ($scope.isWidgetRecord === false) {
+                        var recordPayload = {};
+                        $scope.coreEditorDefs.forEach(function (def) {
+                            var value = $scope.widget[def.field] || '';
+                            if (!def.readOnly && ($scope.isNewWidget || value !== originalValues[def.field]))
+                                recordPayload[def.field] = value;
+                        });
+                        $scope.additionalWidgetFields.forEach(function (def) {
+                            var value = _normaliseExtraWidgetFieldValue(def, $scope.widget[def.name]);
+                            if (def.canWrite && ($scope.isNewWidget || value !== originalHeader[def.name]))
+                                recordPayload[def.name] = value;
+                        });
+                        return recordPayload;
+                    }
                     if ($scope.widget.is_public) {
                         $scope.rolesList.length = 0;
                     }
@@ -1499,7 +1556,13 @@
                     $scope.pickerLoading = true;
                     $scope.pickerHasMore = false;
                     var requestId = ++_widgetListRequestId;
-                    ajax('getWidgets', { search: search, offset: 0 }).then(
+                    var table = $scope.picker.table;
+                    $scope.pickerError = null;
+                    ajax(table === 'sp_widget' ? 'getWidgets' : 'getEditorRecords', {
+                        record_table: table,
+                        search: search,
+                        offset: 0,
+                    }).then(
                         function (d) {
                             if (requestId !== _widgetListRequestId) {
                                 return;
@@ -1508,12 +1571,18 @@
                             $scope.pickerWidgets =
                                 d.success && d.widgets
                                     ? d.widgets.map(function (w) {
-                                          w.widgetEditorUrl = buildWidgetEditorUrl(w.sys_id);
+                                          w.table = table;
+                                          w.widgetEditorUrl = buildWidgetEditorUrl(w.sys_id, table);
                                           return w;
                                       })
                                     : [];
                             $scope.pickerTotal = d.success ? d.total || 0 : 0;
-                            $scope.pickerHasMore = $scope.pickerWidgets.length < $scope.pickerTotal;
+                            $scope.pickerHasMore =
+                                d.has_more !== undefined
+                                    ? d.has_more
+                                    : $scope.pickerWidgets.length < $scope.pickerTotal;
+                            $scope.pickerOffset = d.next_offset || $scope.pickerWidgets.length;
+                            $scope.pickerError = d.success ? null : d.error || 'Could not load records.';
                             $scope.pickerLoading = false;
                         },
                         function () {
@@ -1524,6 +1593,7 @@
                             $scope.pickerWidgets = [];
                             $scope.pickerTotal = 0;
                             $scope.pickerHasMore = false;
+                            $scope.pickerError = 'Could not load records. Try searching again.';
                             $scope.pickerLoading = false;
                         }
                     );
@@ -1536,9 +1606,11 @@
                     $scope.pickerLoadingMore = true;
                     var requestId = _widgetListRequestId;
                     var search = $scope.pickerActiveSearch;
-                    ajax('getWidgets', {
+                    var table = $scope.picker.table;
+                    ajax(table === 'sp_widget' ? 'getWidgets' : 'getEditorRecords', {
+                        record_table: table,
                         search: search,
-                        offset: $scope.pickerWidgets.length,
+                        offset: $scope.pickerOffset,
                     }).then(
                         function (d) {
                             $scope.pickerLoadingMore = false;
@@ -1548,13 +1620,19 @@
                             var more =
                                 d.success && d.widgets
                                     ? d.widgets.map(function (w) {
-                                          w.widgetEditorUrl = buildWidgetEditorUrl(w.sys_id);
+                                          w.table = table;
+                                          w.widgetEditorUrl = buildWidgetEditorUrl(w.sys_id, table);
                                           return w;
                                       })
                                     : [];
                             $scope.pickerWidgets = $scope.pickerWidgets.concat(more);
                             $scope.pickerTotal = d.success ? d.total || 0 : $scope.pickerTotal;
-                            $scope.pickerHasMore = $scope.pickerWidgets.length < $scope.pickerTotal;
+                            $scope.pickerHasMore =
+                                d.has_more !== undefined
+                                    ? d.has_more
+                                    : $scope.pickerWidgets.length < $scope.pickerTotal;
+                            $scope.pickerOffset = d.next_offset || $scope.pickerWidgets.length;
+                            if (!d.success) $scope.pickerError = d.error || 'Could not load more records.';
                         },
                         function () {
                             $scope.pickerLoadingMore = false;
@@ -1577,6 +1655,38 @@
                     $scope.onPickerSearch();
                 };
 
+                $scope.onPickerTypeChange = function () {
+                    ++_widgetListRequestId;
+                    $scope.picker.search = '';
+                    $scope.pickerWidgets = [];
+                    $scope.pickerLoadingMore = false;
+                    $timeout.cancel(pickerDebounce);
+                    loadWidgetList('');
+                };
+                $scope.selectPickerRecordType = function (table) {
+                    $scope.openDropdown = null;
+                    if (table !== $scope.picker.table) {
+                        $scope.picker.table = table;
+                        $scope.onPickerTypeChange();
+                    }
+                    $timeout(function () {
+                        var input = document.getElementById('we-picker-search');
+                        if (input) input.focus();
+                    }, 0);
+                };
+                $scope.pickerType = function () {
+                    return (
+                        $scope.recordTypes.find(function (type) {
+                            return type.table === $scope.picker.table;
+                        }) || { label: 'Records', singular: 'Record' }
+                    );
+                };
+                $scope.recordTypeLabel = function (table) {
+                    var type = $scope.recordTypes.find(function (entry) {
+                        return entry.table === table;
+                    });
+                    return type ? type.singular : table;
+                };
                 $scope.onPickerSearchKeydown = function (event) {
                     var key = event && event.key;
                     var keyCode = event && event.keyCode;
@@ -1782,15 +1892,18 @@
                     });
                 };
 
-                function buildWidgetEditorUrl(widgetSysId) {
+                function buildWidgetEditorUrl(widgetSysId, table) {
                     return (
-                        window.location.pathname +
-                        '?sys_id=' +
+                        '/ui_page.do?sys_id=' +
                         window.WE_CONFIG.widgetPageSysId +
-                        '&widget_id=' +
-                        encodeURIComponent(widgetSysId)
+                        (table && table !== 'sp_widget'
+                            ? '&record_table=' +
+                              encodeURIComponent(table) +
+                              (widgetSysId ? '&record_sys_id=' + encodeURIComponent(widgetSysId) : '')
+                            : '&widget_id=' + encodeURIComponent(widgetSysId))
                     );
                 }
+                $scope.recordEditorUrl = buildWidgetEditorUrl;
 
                 function _mergeRecentWidget(list, sysId) {
                     var merged = (list || []).filter(function (id) {
@@ -1801,38 +1914,61 @@
                 }
 
                 function _refreshRecentWidgetsResolved() {
-                    var ids = ($scope.userPrefs.recentWidgets || []).slice(0, 10);
-                    if (!ids.length) {
-                        $scope.recentWidgetsResolved = [];
-                        return;
-                    }
-                    ajax('getWidgetsBySysIds', { sys_ids: ids }).then(function (d) {
-                        var byId = {};
-                        (d && d.success ? d.widgets : []).forEach(function (w) {
-                            byId[w.sys_id] = w;
+                    var recent = _recentRecordEntries();
+                    if (recent.length) {
+                        var tables = {};
+                        recent.forEach(function (entry) {
+                            (tables[entry.table] || (tables[entry.table] = [])).push(entry.sys_id);
                         });
-                        $scope.recentWidgetsResolved = ids
-                            .map(function (id) {
-                                return byId[id];
-                            })
-                            .filter(function (w) {
-                                return !!w;
+                        return $q
+                            .all(
+                                Object.keys(tables).map(function (table) {
+                                    return ajax(table === 'sp_widget' ? 'getWidgetsBySysIds' : 'getEditorRecords', {
+                                        record_table: table,
+                                        sys_ids: tables[table].join(','),
+                                    }).then(function (data) {
+                                        return (data.success ? data.widgets : []).map(function (record) {
+                                            record.table = table;
+                                            return record;
+                                        });
+                                    });
+                                })
+                            )
+                            .then(function (groups) {
+                                var resolved = {};
+                                groups.forEach(function (records) {
+                                    records.forEach(function (record) {
+                                        resolved[record.table + ':' + record.sys_id] = record;
+                                    });
+                                });
+                                $scope.recentWidgetsResolved = recent
+                                    .map(function (entry) {
+                                        return resolved[entry.table + ':' + entry.sys_id];
+                                    })
+                                    .filter(Boolean);
                             });
-                    });
+                    }
+                    $scope.recentWidgetsResolved = [];
                 }
 
                 $scope.clearWidgetHistory = function () {
                     $scope.userPrefs.recentWidgets = [];
+                    $scope.userPrefs.recentRecords = [];
                     $scope.recentWidgetsResolved = [];
                     saveUserPrefs();
                 };
 
                 $scope.removeRecentWidget = function (w) {
-                    $scope.userPrefs.recentWidgets = $scope.userPrefs.recentWidgets.filter(function (id) {
-                        return id !== w.sys_id;
+                    $scope.userPrefs.recentRecords = _recentRecordEntries().filter(function (entry) {
+                        return entry.table !== (w.table || 'sp_widget') || entry.sys_id !== w.sys_id;
                     });
+                    if (!w.table || w.table === 'sp_widget') {
+                        $scope.userPrefs.recentWidgets = $scope.userPrefs.recentWidgets.filter(function (id) {
+                            return id !== w.sys_id;
+                        });
+                    }
                     $scope.recentWidgetsResolved = $scope.recentWidgetsResolved.filter(function (r) {
-                        return r.sys_id !== w.sys_id;
+                        return r.sys_id !== w.sys_id || r.table !== w.table;
                     });
                     saveUserPrefs();
                 };
@@ -1843,16 +1979,43 @@
                 };
 
                 function navigateToWidget(w) {
-                    var recentWidgets = _mergeRecentWidget($scope.userPrefs.recentWidgets, w.sys_id);
+                    var table = w.table || 'sp_widget';
+                    var recentWidgets =
+                        table === 'sp_widget'
+                            ? _mergeRecentWidget($scope.userPrefs.recentWidgets, w.sys_id)
+                            : $scope.userPrefs.recentWidgets;
+                    var recentRecords = _mergeRecentRecord(table, w.sys_id);
                     var go = function () {
-                        window.location.href = buildWidgetEditorUrl(w.sys_id);
+                        window.location.href = buildWidgetEditorUrl(w.sys_id, table);
                     };
-                    saveUserPrefs({ recentWidgets: recentWidgets }).then(go, go);
+                    saveUserPrefs({ recentWidgets: recentWidgets, recentRecords: recentRecords }).then(go, go);
                 }
 
                 $scope.recentWidgetUrl = function (w) {
-                    return buildWidgetEditorUrl(w.sys_id);
+                    return buildWidgetEditorUrl(w.sys_id, w.table);
                 };
+
+                function _recentRecordEntries() {
+                    var entries = ($scope.userPrefs.recentRecords || []).slice();
+                    ($scope.userPrefs.recentWidgets || []).forEach(function (id) {
+                        if (
+                            !entries.some(function (entry) {
+                                return entry.table === 'sp_widget' && entry.sys_id === id;
+                            })
+                        )
+                            entries.push({ table: 'sp_widget', sys_id: id });
+                    });
+                    return entries.slice(0, 10);
+                }
+                function _mergeRecentRecord(table, id) {
+                    return [{ table: table, sys_id: id }]
+                        .concat(
+                            _recentRecordEntries().filter(function (entry) {
+                                return entry.table !== table || entry.sys_id !== id;
+                            })
+                        )
+                        .slice(0, 10);
+                }
 
                 $scope.openWidget = function (w) {
                     $scope.showWidgetPickerModal = false;
@@ -1876,6 +2039,22 @@
                     } else {
                         navigateToNewWidget();
                     }
+                };
+
+                $scope.newRecord = function (table) {
+                    table = table || RECORD_TABLE;
+                    if (table === 'sp_widget') {
+                        $scope.newWidget();
+                        return;
+                    }
+                    if (
+                        !$scope.recordTypes.some(function (type) {
+                            return type.table === table;
+                        })
+                    )
+                        return;
+                    $scope.openDropdown = null;
+                    $window.open(buildWidgetEditorUrl('', table) + '&new=1', '_blank', 'noopener,noreferrer');
                 };
 
                 $scope.cancelNewWidget = function () {
@@ -1904,6 +2083,7 @@
                 };
 
                 $scope.openWidgetPickerModal = function () {
+                    $scope.openDropdown = null;
                     $scope.picker.search = '';
                     $scope.pickerWidgets = [];
                     $scope.pickerLoading = true;
@@ -1913,6 +2093,7 @@
                 };
 
                 $scope.closeWidgetPickerModal = function () {
+                    $scope.openDropdown = null;
                     $scope.showWidgetPickerModal = false;
                 };
 
@@ -1957,9 +2138,20 @@
                 }
 
                 function _applyUserPrefsData(p) {
-                    if (p.order && Array.isArray(p.order)) {
+                    var layout = $scope.isWidgetRecord === false ? {} : p;
+                    $scope.widgetEditorLayout = {};
+                    ['template', 'css', 'client_script', 'script', 'link', 'order'].forEach(function (key) {
+                        if (p[key] !== undefined) $scope.widgetEditorLayout[key] = angular.copy(p[key]);
+                    });
+                    if (Array.isArray(p.recentRecords))
+                        $scope.userPrefs.recentRecords = p.recentRecords
+                            .filter(function (entry) {
+                                return entry && typeof entry.table === 'string' && /^[a-f0-9]{32}$/i.test(entry.sys_id);
+                            })
+                            .slice(0, 10);
+                    if (layout.order && Array.isArray(layout.order)) {
                         var ordered = [];
-                        p.order.forEach(function (key) {
+                        layout.order.forEach(function (key) {
                             var def = $scope.coreEditorDefs.filter(function (d) {
                                 return d.key === key;
                             })[0];
@@ -1982,7 +2174,7 @@
                         });
                     }
                     $scope.coreEditorDefs.forEach(function (d) {
-                        if (p.hasOwnProperty(d.key)) d.visible = p[d.key];
+                        if (layout.hasOwnProperty(d.key)) d.visible = layout[d.key];
                     });
                     _snapshotEditorPrefs();
                     [
@@ -2090,8 +2282,11 @@
                 }
 
                 function init() {
+                    ajax('getEditorRecordTypes', {}).then(function (data) {
+                        if (data.success) $scope.recordTypes = data.types;
+                    });
                     if (!SYS_ID) {
-                        if (IS_NEW) {
+                        if (IS_NEW && $scope.isWidgetRecord) {
                             $scope.isNewWidget = true;
                             $scope.widget = {
                                 name: '',
@@ -2175,26 +2370,29 @@
                             $window.addEventListener('beforeunload', stopPresenceSubscription);
                             return;
                         }
-                        $scope.showPicker = true;
-                        $scope.loading = false;
-                        loadWidgetList('');
-                        ajax('getUserPrefs', {}).then(function (prefsData) {
-                            _draftRetentionLoaded = !!(prefsData && prefsData.success);
-                            if (prefsData && prefsData.success && prefsData.value) {
-                                try {
-                                    _applyUserPrefsData(JSON.parse(prefsData.value));
-                                } catch (e) {
-                                    _draftRetentionLoaded = false;
+                        if (!IS_NEW) {
+                            $scope.showPicker = true;
+                            $scope.loading = false;
+                            loadWidgetList('');
+                            ajax('getUserPrefs', {}).then(function (prefsData) {
+                                _draftRetentionLoaded = !!(prefsData && prefsData.success);
+                                if (prefsData && prefsData.success && prefsData.value) {
+                                    try {
+                                        _applyUserPrefsData(JSON.parse(prefsData.value));
+                                    } catch (e) {
+                                        _draftRetentionLoaded = false;
+                                    }
                                 }
-                            }
-                            _findLocalDrafts();
-                        });
-                        return;
+                                _findLocalDrafts();
+                            });
+                            return;
+                        }
+                        $scope.isNewWidget = true;
                     }
 
                     // Widget + prefs are independent — fetch in parallel; side-data also parallel
                     $q.all([
-                        ajax('getWidget', {
+                        ajax($scope.isNewWidget ? 'getWidgetDefaults' : 'getWidget', {
                             sys_id: SYS_ID,
                         }),
                         ajax('getUserPrefs', {}),
@@ -2207,6 +2405,12 @@
                             }
 
                             $scope.widget = data.widget;
+                            if ($scope.isWidgetRecord === false) {
+                                $scope.recordLabel = data.record_label;
+                                $scope.recordPrimaryField = data.primary_field;
+                                $scope.coreEditorDefs = data.core_editor_defs;
+                                APP_TITLE = data.record_label + ' Editor+';
+                            }
                             _setAdditionalWidgetFields(data.additional_widget_fields);
                             var wo = data.widget.widgetOrigin;
                             if (wo && wo.created_on) {
@@ -2267,48 +2471,6 @@
                                     }
                                 });
                             };
-                            $scope.hasAnyAlerts = function () {
-                                if ($scope.loading || $scope.loadError || $scope.showPicker) {
-                                    return false;
-                                }
-                                if ($scope.isVersionView || $scope.widgetReverted) {
-                                    return true;
-                                }
-                                if ($scope.localDrafts.length || $scope.localDraftError) {
-                                    return true;
-                                }
-                                if (!$scope.canWriteWidget && !$scope.widgetSysPolicy) {
-                                    return true;
-                                }
-                                if ($scope.widgetSysPolicy) {
-                                    return true;
-                                }
-                                if ($scope.widgetIsServiceNow) {
-                                    return true;
-                                }
-                                if ($scope.widget && $scope.widget.deprecated) {
-                                    return true;
-                                }
-                                if ($scope.isNarrowLayout && $scope.hasUnsavedChanges && $scope.hasUnsavedChanges()) {
-                                    return true;
-                                }
-                                if (
-                                    $scope.isNarrowLayout &&
-                                    $scope.lastSaveTime &&
-                                    !$scope.saveError &&
-                                    $scope.hasUnsavedChanges &&
-                                    !$scope.hasUnsavedChanges()
-                                ) {
-                                    return true;
-                                }
-                                if ($scope.updateSetMismatch && !$scope.updateSetAlertDismissed) {
-                                    return true;
-                                }
-                                if ($scope.widgetVolatilityLevel) {
-                                    return true;
-                                }
-                                return false;
-                            };
                             $scope.updateSetMismatch = !!data.widget.update_set_mismatch;
                             $scope.widgetUpdateSetId = data.widget.widget_update_set_id || '';
                             $scope.widgetUpdateSetName = data.widget.widget_update_set_name || '';
@@ -2346,6 +2508,12 @@
                                 script: data.widget.script,
                                 link: data.widget.link,
                             };
+                            if ($scope.isWidgetRecord === false) {
+                                originalValues = {};
+                                $scope.coreEditorDefs.forEach(function (def) {
+                                    originalValues[def.field] = data.widget[def.field] || '';
+                                });
+                            }
                             lastServerValues = angular.copy(originalValues);
 
                             _draftRetentionLoaded = !!(prefsData && prefsData.success);
@@ -2357,19 +2525,23 @@
                                 }
                             }
 
-                            if (!$scope.isVersionView) {
-                                $scope.userPrefs.recentWidgets = _mergeRecentWidget(
-                                    $scope.userPrefs.recentWidgets,
-                                    SYS_ID
-                                );
+                            if (!$scope.isVersionView && SYS_ID) {
+                                if ($scope.isWidgetRecord)
+                                    $scope.userPrefs.recentWidgets = _mergeRecentWidget(
+                                        $scope.userPrefs.recentWidgets,
+                                        SYS_ID
+                                    );
+                                $scope.userPrefs.recentRecords = _mergeRecentRecord(RECORD_TABLE, SYS_ID);
                                 saveUserPrefs({
                                     recentWidgets: $scope.userPrefs.recentWidgets,
+                                    recentRecords: $scope.userPrefs.recentRecords,
                                 });
                             }
 
                             if ($scope.isVersionView) {
                                 return ajax('getVersion', {
                                     version_id: VERSION_ID,
+                                    sys_id: SYS_ID,
                                 });
                             }
                             return null;
@@ -2395,6 +2567,7 @@
                         });
 
                     // Side data — parallel, non-blocking
+                    if ($scope.isNewWidget) return;
                     ajax('getVersions', {
                         sys_id: SYS_ID,
                     }).then(function (d) {
@@ -2407,6 +2580,7 @@
                             }
                         }
                     });
+                    if ($scope.isWidgetRecord === false) return;
                     ajax('getTemplates', {
                         sys_id: SYS_ID,
                     }).then(function (d) {
@@ -2449,6 +2623,19 @@
                 }
 
                 function overlayVersionFields(fields) {
+                    if ($scope.isWidgetRecord === false) {
+                        $scope.additionalWidgetFields.forEach(function (def) {
+                            if (fields[def.name] !== undefined)
+                                $scope.widget[def.name] =
+                                    def.type === 'boolean'
+                                        ? fields[def.name] === '1' || fields[def.name] === 'true'
+                                        : fields[def.name];
+                        });
+                        $scope.coreEditorDefs.forEach(function (def) {
+                            if (fields[def.field] !== undefined) $scope.widget[def.field] = fields[def.field];
+                        });
+                        return;
+                    }
                     var map = {
                         public: function (v) {
                             $scope.widget.is_public = v === '1' || v === 'true';
@@ -2489,6 +2676,8 @@
                             label: def.label,
                             field: def.field,
                             language: def.language,
+                            scriptKind: def.scriptKind,
+                            readOnly: !!def.readOnly,
                             type: 'pane',
                             hasIdInput: false,
                             closeable: false,
@@ -3370,10 +3559,13 @@
                         var isJs = lang === 'javascript' || lang === 'typescript';
                         // ESLint only runs for JS/TS; HTML/SCSS use Monaco's built-in validators.
                         _lintEditorLangs[pane.key] = lang;
-                        _lintEditorIsServer[pane.key] = pane.field === 'script' || isSI;
-                        if (pane.field === 'script' || isSI) {
+                        _lintEditorIsServer[pane.key] = pane.scriptKind
+                            ? pane.scriptKind === 'server'
+                            : pane.field === 'script' || isSI;
+                        if (_lintEditorIsServer[pane.key]) {
                             loadServerMonarchDts();
                         } else if (
+                            pane.scriptKind === 'client' ||
                             pane.recordType === 'provider' ||
                             pane.field === 'link' ||
                             pane.field === 'client_script'
@@ -3435,13 +3627,14 @@
                             // Server and client panes share one Monaco JS language service; only one side's globals can be registered, so swap on focus.
                             if (isJs) {
                                 var _jsScriptKind =
-                                    pane.field === 'script' || isSI
+                                    pane.scriptKind ||
+                                    (pane.field === 'script' || isSI
                                         ? 'server'
                                         : pane.recordType === 'provider' ||
                                             pane.field === 'link' ||
                                             pane.field === 'client_script'
                                           ? 'client'
-                                          : null;
+                                          : null);
                                 if (_jsScriptKind) {
                                     ed.onDidFocusEditorText(function () {
                                         if (window.SNMonacoPlusBootstrap) {
@@ -3565,7 +3758,7 @@
                             };
 
                             // Track server script editors for script-include "new " completions
-                            if (pane.field === 'script' || isSI) {
+                            if (_lintEditorIsServer[pane.key]) {
                                 var _edModel = ed.getModel();
                                 if (_edModel) {
                                     _serverScriptModels[_edModel.id] = true;
@@ -4610,7 +4803,11 @@
                 // Server Breakpoints — gutter decoration + SN debug API
                 function initBreakpoints(editor, paneKey, pane) {
                     var isSIPane = pane && pane.recordType === 'script_include';
-                    if (paneKey !== 'script' && !isSIPane) {
+                    if (
+                        !isSIPane &&
+                        !(pane && pane.scriptKind === 'server') &&
+                        !(paneKey === 'script' && $scope.isWidgetRecord !== false)
+                    ) {
                         return;
                     }
 
@@ -4619,15 +4816,17 @@
                         table = 'sys_script_include';
                         recordSysId = pane.sys_id;
                     } else {
-                        table = 'sp_widget';
+                        table = $scope.recordTable || 'sp_widget';
                         recordSysId = $scope.widget && $scope.widget.sys_id;
                     }
                     if (!recordSysId) {
                         return;
                     }
 
-                    var bpBase = '/api/now/js/debugger/breakpoint/' + table + '/' + recordSysId + '/script/';
-                    var dpUrl = '/api/now/js/debugpoints/script/' + table + '/' + recordSysId + '/script';
+                    var scriptField = (pane && pane.field) || 'script';
+                    var bpBase =
+                        '/api/now/js/debugger/breakpoint/' + table + '/' + recordSysId + '/' + scriptField + '/';
+                    var dpUrl = '/api/now/js/debugpoints/script/' + table + '/' + recordSysId + '/' + scriptField;
                     var authHeaders = {
                         'X-UserToken': window.g_ck || '',
                         Accept: 'application/json',
@@ -4906,6 +5105,10 @@
                     if ($scope.isVersionView || !$scope.canWriteWidget) {
                         return;
                     }
+                    if ($scope.isWidgetRecord === false && $scope.isNewWidget) {
+                        $scope.saveAll();
+                        return;
+                    }
                     if ($scope.userPrefs.ctrlSSaveActiveOnly) {
                         if (pane && pane.dirty) {
                             $scope.savePaneField(pane);
@@ -4916,7 +5119,11 @@
                 }
 
                 $scope.savePaneField = function (pane) {
-                    if ($scope.isVersionView) {
+                    if ($scope.isWidgetRecord === false && $scope.isNewWidget) {
+                        $scope.saveAll();
+                        return;
+                    }
+                    if ($scope.isVersionView || pane.readOnly) {
                         return;
                     }
                     $scope.permissionAlertDismissed = false;
@@ -4955,6 +5162,11 @@
                             pane.dirty = (editor ? editor.getValue() : $scope.widget[pane.field] || '') !== value;
                             pane.externalChange = null;
                             _writeLocalDraft(true);
+                            if ($scope.isWidgetRecord === false) {
+                                ajax('getVersions', { sys_id: SYS_ID }).then(function (result) {
+                                    if (result.success) $scope.versions = result.versions;
+                                });
+                            }
                             if (!hasUnsavedChanges()) {
                                 pane.savedAt = null;
                                 $scope.lastSaveTime = new Date();
@@ -5051,6 +5263,31 @@
                 }, 30000);
 
                 function _acceptWidgetSave(payload) {
+                    if ($scope.isWidgetRecord === false) {
+                        Object.keys(payload).forEach(function (name) {
+                            if (Object.prototype.hasOwnProperty.call(originalValues, name)) {
+                                originalValues[name] = lastServerValues[name] = payload[name];
+                                var pane = paneMap[name];
+                                if (pane) {
+                                    pane.dirty =
+                                        (monacoEditors[name] ? monacoEditors[name].getValue() : $scope.widget[name]) !==
+                                        payload[name];
+                                    pane.savedAt = null;
+                                    pane.externalChange = null;
+                                }
+                            } else originalHeader[name] = payload[name];
+                        });
+                        if ($scope.recordPrimaryField === 'id' && payload.id !== undefined)
+                            originalHeader.name = payload.id;
+                        ($scope.additionalWidgetFields || []).forEach(function (def) {
+                            $scope.headerDirty[def.name] =
+                                _normaliseExtraWidgetFieldValue(def, $scope.widget[def.name]) !==
+                                originalHeader[def.name];
+                        });
+                        $scope.headerDirty.name = ($scope.widget.name || '') !== originalHeader.name;
+                        _writeLocalDraft(true);
+                        return;
+                    }
                     $scope.coreEditorDefs.forEach(function (def) {
                         var val = payload[def.field] || '';
                         originalValues[def.field] = val;
@@ -5096,16 +5333,22 @@
                     }
                     $scope.saveError = null;
                     $scope.permissionAlertDismissed = false;
-                    if (!$scope.widget.name || !$scope.widget.name.trim()) {
+                    var primary = $scope.isWidgetRecord === false ? $scope.recordPrimaryField : 'name';
+                    if (!$scope.widget[primary] || !$scope.widget[primary].trim()) {
                         $scope.nameInvalid = true;
-                        $scope.saveError = 'Widget name is required';
+                        $scope.saveError =
+                            $scope.isWidgetRecord === false
+                                ? 'A record name or ID is required.'
+                                : 'Widget name is required';
                         return;
                     }
 
                     var payload = _buildSavePayload();
 
                     // Marks script fields self-saving so the record-watcher echo doesn't re-dirty panes.
-                    var _saveAllScriptFields = ['template', 'css', 'client_script', 'script', 'link'];
+                    var _saveAllScriptFields = $scope.coreEditorDefs.map(function (def) {
+                        return def.field;
+                    });
                     _saveAllScriptFields.forEach(function (f) {
                         _selfSavingFields[f] = payload[f];
                     });
@@ -5134,19 +5377,57 @@
                             if (data.sys_updated_on) {
                                 $scope.widget.sys_updated_on = data.sys_updated_on;
                             }
+                            var acceptedPayload = payload;
                             var wasNew = $scope.isNewWidget;
                             if (wasNew) {
                                 SYS_ID = data.sys_id;
                                 $scope.widget.sys_id = SYS_ID;
-                                var newUrl =
-                                    '/' + (WE_UI_SCRIPTS.editorPage || 'widget_editor') + '.do?widget_id=' + SYS_ID;
+                                var newUrl = buildWidgetEditorUrl(SYS_ID, RECORD_TABLE);
                                 history.replaceState({}, '', newUrl);
                                 try {
                                     window.parent.history.replaceState({}, '', newUrl);
                                 } catch (e) {}
                                 $scope.isNewWidget = false;
+                                $scope.userPrefs.recentRecords = _mergeRecentRecord(RECORD_TABLE, SYS_ID);
+                                saveUserPrefs();
+                                if (
+                                    $scope.isWidgetRecord === false &&
+                                    data.created_record &&
+                                    data.created_record.success
+                                ) {
+                                    var created = data.created_record;
+                                    acceptedPayload = angular.copy(payload);
+                                    Object.keys(acceptedPayload).forEach(function (name) {
+                                        if (Object.prototype.hasOwnProperty.call(created.widget, name))
+                                            acceptedPayload[name] = created.widget[name];
+                                    });
+                                    _setAdditionalWidgetFields(created.additional_widget_fields);
+                                    $scope.additionalWidgetFields.forEach(function (def) {
+                                        if (!def.canWrite && !Object.prototype.hasOwnProperty.call(payload, def.name)) {
+                                            $scope.widget[def.name] = created.widget[def.name];
+                                            originalHeader[def.name] = _normaliseExtraWidgetFieldValue(
+                                                def,
+                                                created.widget[def.name]
+                                            );
+                                        }
+                                    });
+                                    $scope.widget.application = created.widget.application;
+                                    $scope.widget.application_sys_id = created.widget.application_sys_id;
+                                    $scope.canWriteWidget = created.widget.canWrite !== false;
+                                    created.core_editor_defs.forEach(function (def) {
+                                        var existing = $scope.coreEditorDefs.find(function (item) {
+                                            return item.key === def.key;
+                                        });
+                                        if (existing) existing.readOnly = def.readOnly;
+                                        if (paneMap[def.key]) paneMap[def.key].readOnly = def.readOnly;
+                                        if (monacoEditors[def.key])
+                                            monacoEditors[def.key].updateOptions({
+                                                readOnly: !$scope.canWriteWidget || def.readOnly,
+                                            });
+                                    });
+                                }
                             }
-                            _acceptWidgetSave(payload);
+                            _acceptWidgetSave(acceptedPayload);
                             // Sync ES12 — SYS_ID is now set even for newly-created widgets
                             $scope.saveEs12();
                             // Always refresh versions after a save so the new entry appears in the dropdown
@@ -5155,7 +5436,7 @@
                                     $scope.versions = d.versions;
                                 }
                             });
-                            if (wasNew) {
+                            if (wasNew && $scope.isWidgetRecord) {
                                 // Load remaining side data now that the record exists
                                 ajax('getTemplates', { sys_id: SYS_ID }).then(function (d) {
                                     if (d.success) {
@@ -5204,6 +5485,7 @@
 
                 // ES12
                 $scope.saveEs12 = function () {
+                    if ($scope.isWidgetRecord === false) return;
                     // Defer until the widget record exists (new unsaved widget has no SYS_ID).
                     // For existing widgets the server does an upsert, so no pre-existence check needed.
                     if (!SYS_ID) {
@@ -5664,6 +5946,23 @@
                     window.location.reload();
                 };
 
+                $scope.requestRevert = function () {
+                    $scope.openDropdown = null;
+                    $scope.showRevertConfirm = true;
+                };
+
+                $scope.cancelRevert = function () {
+                    _closeModal(function () {
+                        $scope.showRevertConfirm = false;
+                    });
+                };
+
+                $scope.confirmRevert = function () {
+                    if ($scope.creatingRecord || !_discardPageDraft()) return;
+                    _bypassUnloadWarning = true;
+                    window.location.reload();
+                };
+
                 // Editor visibility & user preferences
                 function _clearPaneWidths() {
                     Object.keys(paneMap).forEach(function (k) {
@@ -5739,6 +6038,7 @@
                     prefs.htmlClassThemeSysId = $scope.userPrefs.htmlClassThemeSysId;
                     prefs.htmlClassIncludeStandardCss = !!$scope.userPrefs.htmlClassIncludeStandardCss;
                     prefs.recentWidgets = $scope.userPrefs.recentWidgets;
+                    prefs.recentRecords = $scope.userPrefs.recentRecords;
                     prefs.order = storedOrder.length
                         ? storedOrder.concat(
                               $scope.coreEditorDefs
@@ -5752,6 +6052,15 @@
                         : $scope.coreEditorDefs.map(function (d) {
                               return d.key;
                           });
+                    if ($scope.isWidgetRecord === false) {
+                        $scope.coreEditorDefs.forEach(function (def) {
+                            delete prefs[def.key];
+                        });
+                        delete prefs.order;
+                        Object.keys($scope.widgetEditorLayout || {}).forEach(function (key) {
+                            prefs[key] = angular.copy($scope.widgetEditorLayout[key]);
+                        });
+                    }
                     return prefs;
                 }
 
@@ -6381,7 +6690,11 @@
                     if ($scope.isNewWidget) {
                         return;
                     }
-                    var rawUrl = 'widget_editor_assistant.do?record_table=sp_widget&record_sys_id=' + SYS_ID;
+                    var rawUrl =
+                        'widget_editor_assistant.do?record_table=' +
+                        encodeURIComponent($scope.recordTable || 'sp_widget') +
+                        '&record_sys_id=' +
+                        SYS_ID;
                     var $sce = $injector.get('$sce');
                     $scope.assistantModal.rawUrl = rawUrl;
                     /* Clear the iframe first so a stale previous session never flashes before the fresh navigation lands. */
@@ -6701,7 +7014,7 @@
                     }
 
                     var params = {
-                        table: 'sp_widget',
+                        table: $scope.recordTable || 'sp_widget',
                         record_id: widgetSysId,
                         version_1: version.sys_id,
                     };
@@ -6781,7 +7094,11 @@
                     snap.sys_updated_on = $scope.widget.sys_updated_on || '';
                     snap.sys_updated_by = $scope.widget.sys_updated_by || '';
 
-                    _openUnsavedSnapshotDiff('sp_widget', wSysId, snap, 'Unsaved changes');
+                    if ($scope.isWidgetRecord === false)
+                        $scope.additionalWidgetFields.forEach(function (def) {
+                            snap[def.name] = $scope.widget[def.name];
+                        });
+                    _openUnsavedSnapshotDiff($scope.recordTable || 'sp_widget', wSysId, snap, 'Unsaved changes');
                 };
 
                 function _openUnsavedSnapshotDiff(table, recordId, snap, label) {
@@ -6891,12 +7208,13 @@
 
                 // Alert Status Pills Hover & Keyboard Management
                 var alertHoverTimer = null;
+                var alertPopoverOpenedAt = 0;
                 $scope.onAlertPillEnter = function (key) {
                     if (alertHoverTimer) {
                         $timeout.cancel(alertHoverTimer);
                     }
                     alertHoverTimer = $timeout(function () {
-                        $scope.openDropdown = key;
+                        $scope.onAlertPillFocus(key);
                     }, 280);
                 };
                 $scope.onAlertPillLeave = function (key) {
@@ -6931,6 +7249,7 @@
                         $timeout.cancel(alertHoverTimer);
                         alertHoverTimer = null;
                     }
+                    if ($scope.openDropdown !== key) alertPopoverOpenedAt = Date.now();
                     $scope.openDropdown = key;
                 };
                 $scope.onAlertPillKeydown = function ($event, key) {
@@ -6941,7 +7260,7 @@
                     } else if ($event.keyCode === 13 || $event.keyCode === 32) {
                         $event.preventDefault();
                         $event.stopPropagation();
-                        $scope.toggleDropdown(key);
+                        $scope.toggleDropdown(key, true);
                     } else if ($event.keyCode === 9 && !$event.shiftKey) {
                         var currentBtn = $event.currentTarget;
                         var wrapper = currentBtn.closest ? currentBtn.closest('.we-alert-pill-wrapper') : null;
@@ -7019,7 +7338,16 @@
                 };
 
                 // Dropdown management
-                $scope.toggleDropdown = function (name) {
+                $scope.toggleDropdown = function (name, fromKeyboard) {
+                    if (name.indexOf('alert-') === 0 && !fromKeyboard) {
+                        if (alertHoverTimer) {
+                            $timeout.cancel(alertHoverTimer);
+                            alertHoverTimer = null;
+                        }
+                        // Hover and focus can open the popover just before the click arrives.
+                        if ($scope.openDropdown === name && Date.now() - alertPopoverOpenedAt < 500) return;
+                        if ($scope.openDropdown !== name) alertPopoverOpenedAt = Date.now();
+                    }
                     $scope.openDropdown = $scope.openDropdown === name ? null : name;
                     if (name !== 'compactMenu') {
                         $scope.openCompactSubmenu = null;
@@ -7034,7 +7362,7 @@
                     if (!el || !el.closest) {
                         return false;
                     }
-                    var target = el.closest('.we-dropdown-item, .we-compact-submenu-trigger');
+                    var target = el.closest('.we-dropdown-item, .we-compact-submenu-trigger, .we-picker-type-menu a');
                     if (!target) {
                         return false;
                     }
@@ -7049,7 +7377,9 @@
                         return [];
                     }
                     return Array.prototype.filter.call(
-                        container.querySelectorAll('.we-dropdown-item, .we-compact-submenu-trigger'),
+                        container.querySelectorAll(
+                            '.we-dropdown-item, .we-compact-submenu-trigger, .we-picker-type-menu a'
+                        ),
                         function (el) {
                             if (el.classList.contains('disabled')) {
                                 return false;
@@ -7060,10 +7390,12 @@
                 }
 
                 function _prepareDropdownKeyboardItems() {
-                    var roots = document.querySelectorAll('.we-dropdown-menu, .we-popover');
+                    var roots = document.querySelectorAll('.we-dropdown-menu, .we-popover, .we-picker-type-menu');
                     Array.prototype.forEach.call(roots, function (root) {
                         Array.prototype.forEach.call(
-                            root.querySelectorAll('.we-dropdown-item, .we-compact-submenu-trigger'),
+                            root.querySelectorAll(
+                                '.we-dropdown-item, .we-compact-submenu-trigger, .we-picker-type-menu a'
+                            ),
                             function (el) {
                                 // Menu options are arrow-key navigable; keep them out of Tab order.
                                 el.setAttribute('tabindex', '-1');
@@ -7147,12 +7479,18 @@
                 }
 
                 function _closeOpenModalOnEscape() {
+                    if ($scope.openDropdown === 'pickerType') {
+                        $scope.openDropdown = null;
+                        var trigger = document.getElementById('we-picker-type-toggle');
+                        if (trigger) trigger.focus();
+                        return true;
+                    }
                     if ($scope._modalClosing) {
                         return true;
                     }
 
-                    if ($scope.showReloadConfirm) {
-                        $scope.showReloadConfirm = false;
+                    if ($scope.showRevertConfirm) {
+                        $scope.cancelRevert();
                         return true;
                     }
                     if ($scope.showKeyboardShortcutsModal) {
@@ -7240,6 +7578,7 @@
                     var keyCode = event && event.keyCode;
                     if (key === 'Escape' || keyCode === 27) {
                         event.preventDefault();
+                        if (name === 'pickerType') event.stopPropagation();
                         $scope.openDropdown = null;
                         $scope.openCompactSubmenu = null;
                         return;
@@ -7265,7 +7604,7 @@
                     $timeout(function () {
                         _prepareDropdownKeyboardItems();
                         var openMenu = document.querySelector(
-                            '.we-dropdown-menu:not(.ng-hide), .we-popover:not(.ng-hide)'
+                            '.we-dropdown-menu:not(.ng-hide), .we-popover:not(.ng-hide), .we-picker-type-menu:not(.ng-hide)'
                         );
                         if (!openMenu) {
                             return;
@@ -7354,7 +7693,7 @@
                         return;
                     }
 
-                    var menuContainer = e.target.closest('.we-dropdown-menu, .we-popover');
+                    var menuContainer = e.target.closest('.we-dropdown-menu, .we-popover, .we-picker-type-menu');
                     if (!menuContainer) {
                         if (
                             !$scope.openDropdown ||
@@ -7365,7 +7704,7 @@
                         }
 
                         var openMenu = document.querySelector(
-                            '.we-dropdown-menu:not(.ng-hide), .we-popover:not(.ng-hide)'
+                            '.we-dropdown-menu:not(.ng-hide), .we-popover:not(.ng-hide), .we-picker-type-menu:not(.ng-hide)'
                         );
                         var openItems = _getMenuKeyboardItems(openMenu);
                         if (!openItems.length) {
@@ -7386,7 +7725,9 @@
                             return;
                         }
                         e.preventDefault();
-                        var current = e.target.closest('.we-dropdown-item, .we-compact-submenu-trigger');
+                        var current = e.target.closest(
+                            '.we-dropdown-item, .we-compact-submenu-trigger, .we-picker-type-menu a'
+                        );
                         var currentIdx = items.indexOf(current);
                         if (currentIdx < 0) {
                             items[0].focus();
@@ -7416,7 +7757,9 @@
                     }
 
                     e.preventDefault();
-                    var target = e.target.closest('.we-dropdown-item, .we-compact-submenu-trigger');
+                    var target = e.target.closest(
+                        '.we-dropdown-item, .we-compact-submenu-trigger, .we-picker-type-menu a'
+                    );
                     if (target && target.click) {
                         target.click();
                     }
@@ -7451,7 +7794,14 @@
                 $scope.validDraftRetentionDays = _validDraftRetentionDays;
 
                 function _draftPrefix() {
-                    return 'we_local_draft:v1:' + $scope.currentUserId + ':' + SYS_ID + ':';
+                    return (
+                        'we_local_draft:v1:' +
+                        $scope.currentUserId +
+                        ':' +
+                        ($scope.recordTable && $scope.recordTable !== 'sp_widget' ? $scope.recordTable + ':' : '') +
+                        SYS_ID +
+                        ':'
+                    );
                 }
 
                 function _syncLocalDraftSelection() {
@@ -7558,6 +7908,23 @@
                 }
 
                 function _draftWidgetFields() {
+                    if ($scope.isWidgetRecord === false)
+                        return $scope.coreEditorDefs
+                            .filter(function (def) {
+                                return !def.readOnly;
+                            })
+                            .map(function (def) {
+                                return def.field;
+                            })
+                            .concat(
+                                $scope.additionalWidgetFields
+                                    .filter(function (def) {
+                                        return def.canWrite;
+                                    })
+                                    .map(function (def) {
+                                        return def.name;
+                                    })
+                            );
                     return ['name', 'id', 'description', 'controller_as', 'is_public', 'roles', 'static']
                         .concat(
                             $scope.coreEditorDefs.map(function (d) {
@@ -7691,12 +8058,15 @@
                 }
 
                 function _discardPageDraft() {
-                    _draftCaptureStopped = true;
                     try {
                         localStorage.removeItem(_draftPrefix() + _draftPageId);
+                        _draftCaptureStopped = true;
                         $scope.lastDraftSaveTime = null;
+                        $scope.localDraftError = null;
+                        return true;
                     } catch (e) {
                         $scope.localDraftError = 'The local draft could not be discarded.';
+                        return false;
                     }
                 }
 
@@ -7758,7 +8128,9 @@
                                     typeof entry.value === valueType &&
                                     typeof entry.base === valueType &&
                                     entry.id === SYS_ID &&
-                                    _draftWidgetFields().concat(['option_schema', 'demo_data']).includes(entry.field)
+                                    _draftWidgetFields()
+                                        .concat($scope.isWidgetRecord === false ? [] : ['option_schema', 'demo_data'])
+                                        .includes(entry.field)
                                 );
                             }
                             return (
@@ -7873,6 +8245,16 @@
                                                     value: _draftPrettyJson(data[entry.field] || ''),
                                                 };
                                             }
+                                            if ($scope.isWidgetRecord === false) {
+                                                var header = (data.additional_widget_fields || []).find(function (def) {
+                                                    return def.name === entry.field;
+                                                });
+                                                var code = (data.core_editor_defs || []).find(function (def) {
+                                                    return def.field === entry.field;
+                                                });
+                                                if (!(header && header.canWrite) && !(code && !code.readOnly))
+                                                    throw new Error('A draft field is no longer editable.');
+                                            }
                                             return {
                                                 value: data.widget[entry.field],
                                                 record: data.widget,
@@ -7980,7 +8362,7 @@
                                 key: key,
                                 id: entry.id,
                                 table: {
-                                    widget: 'sp_widget',
+                                    widget: $scope.recordTable || 'sp_widget',
                                     template: 'sp_ng_template',
                                     provider: 'sp_angular_provider',
                                     script_include: 'sys_script_include',
@@ -8235,7 +8617,11 @@
                 $scope.hasUnsavedChanges = hasUnsavedChanges;
 
                 $scope.openInPlatform = function () {
-                    window.open('/nav_to.do?uri=' + encodeURIComponent('sp_widget.do?sys_id=' + SYS_ID), '_blank');
+                    window.open(
+                        '/nav_to.do?uri=' +
+                            encodeURIComponent(($scope.recordTable || 'sp_widget') + '.do?sys_id=' + SYS_ID),
+                        '_blank'
+                    );
                     $scope.openDropdown = null;
                 };
 
@@ -8273,14 +8659,15 @@
                     );
                 };
 
-                $scope.openExtraPaneInPlatform = function (item) {
+                $scope.openExtraPaneInEditor = function (item) {
+                    if (!item.sys_id) return;
                     var table =
                         item.recordType === 'template'
                             ? 'sp_ng_template'
                             : item.recordType === 'script_include'
                               ? 'sys_script_include'
                               : 'sp_angular_provider';
-                    window.open('/nav_to.do?uri=' + encodeURIComponent(table + '.do?sys_id=' + item.sys_id), '_blank');
+                    $window.open(buildWidgetEditorUrl(item.sys_id, table), '_blank', 'noopener,noreferrer');
                 };
 
                 $scope.openScriptDebugger = function () {
@@ -8460,25 +8847,28 @@
                     _draftRetentionLoaded = true;
                     _findLocalDrafts();
                     // Apply order and visibility from modal back to coreEditorDefs
-                    var orderedDefs = [];
-                    $scope.userPrefsEdit.editors.forEach(function (e) {
-                        for (var i = 0; i < $scope.coreEditorDefs.length; i++) {
-                            if ($scope.coreEditorDefs[i].key === e.key) {
-                                $scope.coreEditorDefs[i].visible = e.visible;
-                                orderedDefs.push($scope.coreEditorDefs[i]);
-                                break;
+                    if ($scope.isWidgetRecord !== false) {
+                        var orderedDefs = [];
+                        $scope.userPrefsEdit.editors.forEach(function (e) {
+                            for (var i = 0; i < $scope.coreEditorDefs.length; i++) {
+                                if ($scope.coreEditorDefs[i].key === e.key) {
+                                    $scope.coreEditorDefs[i].visible = e.visible;
+                                    orderedDefs.push($scope.coreEditorDefs[i]);
+                                    break;
+                                }
                             }
-                        }
-                    });
-                    $scope.coreEditorDefs.length = 0;
-                    orderedDefs.forEach(function (d) {
-                        $scope.coreEditorDefs.push(d);
-                    });
+                        });
+                        $scope.coreEditorDefs.length = 0;
+                        orderedDefs.forEach(function (d) {
+                            $scope.coreEditorDefs.push(d);
+                        });
+                    }
                     $scope.userPrefs.formatTabsToSpaces = $scope.userPrefsEdit.formatTabsToSpaces;
                     $scope.userPrefs.wordWrap = $scope.userPrefsEdit.wordWrap;
                     $scope.userPrefs.editorTheme = $scope.userPrefsEdit.editorTheme;
                     $scope.userPrefs.minimap = $scope.userPrefsEdit.minimap;
-                    $scope.userPrefs.alwaysShowLink = $scope.userPrefsEdit.alwaysShowLink;
+                    if ($scope.isWidgetRecord !== false)
+                        $scope.userPrefs.alwaysShowLink = $scope.userPrefsEdit.alwaysShowLink;
                     $scope.userPrefs.realtimeWidgetUpdates = $scope.userPrefsEdit.realtimeWidgetUpdates;
                     $scope.userPrefs.autoIndent = $scope.userPrefsEdit.autoIndent;
                     $scope.userPrefs.formatOnPaste = $scope.userPrefsEdit.formatOnPaste;
@@ -8574,6 +8964,12 @@
                     // Editor layout is only committed as the new default here, since this
                     // is the one place the user explicitly chose to change it.
                     _snapshotEditorPrefs();
+                    if ($scope.userPrefsEdit.widgetEditorLayout)
+                        $scope.widgetEditorLayout = $scope.userPrefsEdit.widgetEditorLayout;
+                    if ($scope.userPrefsEdit.recentRecords) {
+                        $scope.userPrefs.recentRecords = $scope.userPrefsEdit.recentRecords;
+                        _refreshRecentWidgetsResolved();
+                    }
                     // Only an import overrides Credit choices saved from its own page.
                     saveUserPrefs($scope.userPrefsEdit.credit ? { credit: $scope.userPrefsEdit.credit } : undefined);
                     if ($scope.userPrefsEdit.debugMenu) {
@@ -8702,31 +9098,33 @@
                 };
 
                 $scope.resetUserPrefsModal = function () {
-                    var defaultOrder = ['template', 'css', 'client_script', 'link', 'script'];
-                    var defaultVisible = {
-                        template: true,
-                        css: true,
-                        client_script: true,
-                        link: false,
-                        script: true,
-                    };
-                    var sorted = [];
-                    defaultOrder.forEach(function (key) {
-                        for (var i = 0; i < $scope.userPrefsEdit.editors.length; i++) {
-                            if ($scope.userPrefsEdit.editors[i].key === key) {
-                                var e = $scope.userPrefsEdit.editors[i];
-                                e.visible = !!defaultVisible[key];
-                                sorted.push(e);
-                                break;
+                    if ($scope.isWidgetRecord !== false) {
+                        var defaultOrder = ['template', 'css', 'client_script', 'link', 'script'];
+                        var defaultVisible = {
+                            template: true,
+                            css: true,
+                            client_script: true,
+                            link: false,
+                            script: true,
+                        };
+                        var sorted = [];
+                        defaultOrder.forEach(function (key) {
+                            for (var i = 0; i < $scope.userPrefsEdit.editors.length; i++) {
+                                if ($scope.userPrefsEdit.editors[i].key === key) {
+                                    var e = $scope.userPrefsEdit.editors[i];
+                                    e.visible = !!defaultVisible[key];
+                                    sorted.push(e);
+                                    break;
+                                }
                             }
-                        }
-                    });
-                    $scope.userPrefsEdit.editors = sorted;
+                        });
+                        $scope.userPrefsEdit.editors = sorted;
+                    }
                     $scope.userPrefsEdit.formatTabsToSpaces = true;
                     $scope.userPrefsEdit.wordWrap = true;
                     $scope.userPrefsEdit.editorTheme = 'auto';
                     $scope.userPrefsEdit.minimap = false;
-                    $scope.userPrefsEdit.alwaysShowLink = true;
+                    if ($scope.isWidgetRecord !== false) $scope.userPrefsEdit.alwaysShowLink = true;
                     $scope.userPrefsEdit.realtimeWidgetUpdates = false;
                     $scope.userPrefsEdit.autoIndent = true;
                     $scope.userPrefsEdit.formatOnPaste = true;
@@ -8820,16 +9218,36 @@
                 };
 
                 function _applyPrefsBlobToEdit(p) {
-                    if (p.order && Array.isArray(p.order)) {
-                        var orderedKeys = p.order.concat(
-                            $scope.coreEditorDefs
-                                .map(function (d) {
-                                    return d.key;
-                                })
-                                .filter(function (k) {
-                                    return p.order.indexOf(k) === -1;
-                                })
-                        );
+                    var layout = $scope.isWidgetRecord === false ? {} : p;
+                    if ($scope.isWidgetRecord === false) {
+                        var widgetLayout = angular.copy($scope.widgetEditorLayout || {});
+                        ['template', 'css', 'client_script', 'script', 'link', 'order'].forEach(function (key) {
+                            if (p[key] !== undefined) widgetLayout[key] = angular.copy(p[key]);
+                        });
+                        $scope.userPrefsEdit.widgetEditorLayout = widgetLayout;
+                    }
+                    if (Array.isArray(p.recentRecords))
+                        $scope.userPrefsEdit.recentRecords = p.recentRecords
+                            .filter(function (entry) {
+                                return entry && typeof entry.table === 'string' && /^[a-f0-9]{32}$/i.test(entry.sys_id);
+                            })
+                            .slice(0, 10);
+                    if (layout.order && Array.isArray(layout.order)) {
+                        var orderedKeys = layout.order
+                            .filter(function (key) {
+                                return $scope.coreEditorDefs.some(function (def) {
+                                    return def.key === key;
+                                });
+                            })
+                            .concat(
+                                $scope.coreEditorDefs
+                                    .map(function (d) {
+                                        return d.key;
+                                    })
+                                    .filter(function (k) {
+                                        return layout.order.indexOf(k) === -1;
+                                    })
+                            );
                         $scope.userPrefsEdit.editors = orderedKeys.map(function (key) {
                             var existing = $scope.userPrefsEdit.editors.filter(function (e) {
                                 return e.key === key;
@@ -8840,8 +9258,8 @@
                             return {
                                 key: key,
                                 label: def ? def.label : key,
-                                visible: p.hasOwnProperty(key)
-                                    ? !!p[key]
+                                visible: layout.hasOwnProperty(key)
+                                    ? !!layout[key]
                                     : existing
                                       ? existing.visible
                                       : def
@@ -8851,8 +9269,8 @@
                         });
                     } else {
                         $scope.userPrefsEdit.editors.forEach(function (e) {
-                            if (p.hasOwnProperty(e.key)) {
-                                e.visible = !!p[e.key];
+                            if (layout.hasOwnProperty(e.key)) {
+                                e.visible = !!layout[e.key];
                             }
                         });
                     }
@@ -9182,7 +9600,9 @@
                     window.open(
                         '/nav_to.do?uri=' +
                             encodeURIComponent(
-                                'ui_page.do?sys_id=9c5bf170283e4d6394aa639c79936587&sysparm_table=sp_widget&sysparm_record=' +
+                                'ui_page.do?sys_id=9c5bf170283e4d6394aa639c79936587&sysparm_table=' +
+                                    ($scope.recordTable || 'sp_widget') +
+                                    '&sysparm_record=' +
                                     SYS_ID
                             ),
                         '_blank',
@@ -9499,7 +9919,7 @@
                         '//' +
                         window.location.host +
                         '/nav_to.do?uri=' +
-                        encodeURIComponent('sp_widget?sys_id=' + SYS_ID);
+                        encodeURIComponent(buildWidgetEditorUrl(SYS_ID, RECORD_TABLE).substring(1));
                     navigator.clipboard.writeText(url);
                 };
 
@@ -9510,7 +9930,7 @@
                     $scope.xmlLoadError = null;
                     $scope.xmlExportUrl = null;
 
-                    var xmlUrl = '/sp_widget.do?UNL&sysparm_query=sys_id=' + SYS_ID;
+                    var xmlUrl = '/' + ($scope.recordTable || 'sp_widget') + '.do?UNL&sysparm_query=sys_id=' + SYS_ID;
 
                     $q.all([
                         $http.get(xmlUrl, {
@@ -9519,7 +9939,9 @@
                                 return d;
                             },
                         }),
-                        ajax('getHistorySetId', { sys_id: SYS_ID }),
+                        $scope.isWidgetRecord === false
+                            ? $q.resolve({ success: false })
+                            : ajax('getHistorySetId', { sys_id: SYS_ID }),
                     ]).then(
                         function (results) {
                             var xmlContent = typeof results[0].data === 'string' ? results[0].data : '';

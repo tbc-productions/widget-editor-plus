@@ -20,7 +20,8 @@
     <script>
         var _weConfigParams = new URLSearchParams(window.location.search);
         window.WE_CONFIG = {
-            sys_id: _weConfigParams.get('widget_id') || '',
+            sys_id: _weConfigParams.get('record_sys_id') || _weConfigParams.get('widget_id') || '',
+            record_table: _weConfigParams.get('record_table') || 'sp_widget',
             version_id: _weConfigParams.get('version_id') || '',
             is_new: _weConfigParams.get('new') === '1',
             openPanel: _weConfigParams.get('open') || '',
@@ -84,21 +85,24 @@
             flex-wrap: wrap;
             align-items: center;
             gap: 0.375rem 0.5rem;
-            padding: 0 0.75rem;
-            background: rgb(var(--now-color--primary-0, var(--now-color_background--tertiary, 221, 237, 233)));
-            border-bottom: 1px solid transparent;
+            padding: 0.75rem 1.25rem;
+            min-height: 3.5rem;
+            background: rgb(var(--now-color_chrome--brand-5, var(--now-color--primary-0, 221, 237, 233)));
+            border-bottom: 1px solid rgb(var(--now-color_border--secondary, var(--now-color_divider--secondary, 228, 230, 235)));
             flex-shrink: 0;
-            max-height: 0;
-            overflow: hidden;
-            opacity: 0;
-            transition: max-height 0.22s ease, opacity 0.16s ease, padding 0.22s ease, border-color 0.22s ease, overflow 0s linear 0.22s;
-        }
-        .we-alert-pills-row--open {
-            padding: 0.3125rem 0.75rem;
             overflow: visible;
-            border-bottom-color: rgba(var(--now-color--primary-1, var(--now-color--neutral-0, 48, 84, 82)), 0.15);
-            max-height: 12rem;
-            opacity: 1;
+        }
+
+        .we-record-name {
+            min-width: 0;
+            max-width: min(28rem, 45vw);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: var(--now-font-size--lg, 18px);
+            font-weight: 600;
+            line-height: 1.45;
+            color: rgb(var(--now-color--neutral-0, var(--now-color--neutral-12, 38, 50, 56)));
         }
 
         .we-alert-pill-wrapper {
@@ -511,6 +515,9 @@
             padding: 0.1875rem 0.375rem;
             height: 1.5rem;
         }
+        .we-field input.we-record-primary {
+            width: min(20rem, 50vw);
+        }
 
         .we-field input[readonly],
         .we-field input:disabled {
@@ -608,7 +615,8 @@
             padding: 0.5rem;
             min-width: 12.5rem;
         }
-        .we-desc-textarea { resize: none; width: 29.375rem; overflow: hidden; min-height: 3.375rem; max-width: 80vw; }
+        .we-desc-textarea { resize: vertical; width: 29.375rem; overflow-y: auto; min-height: 3.375rem; max-height: 65vh; max-width: 80vw; }
+        .we-record-more-fields input[type="text"] { width: 29.375rem; max-width: 80vw; }
         .we-widget-origin { display: block; margin-top: 0.625rem; color: rgba(var(--now-color_text--primary), 0.4); font-size: var(--now-font-size--sm); cursor: help; }
         .we-roles-count {
             cursor: pointer;
@@ -2017,6 +2025,7 @@
         /* Top Header Row */
         .we-picker-title-row {
             display: flex;
+            flex-wrap: wrap;
             align-items: center;
             justify-content: space-between;
             padding: 0.875rem 1.25rem;
@@ -2037,8 +2046,36 @@
             color: rgb(var(--now-color_text--primary));
             white-space: nowrap;
         }
+        .we-picker-type {
+            display: inline-block;
+            margin-left: 0.5rem;
+        }
+        .we-picker-title button.we-picker-type-toggle {
+            border: none !important;
+            border-bottom: 1px dotted currentColor !important;
+            border-radius: 0 !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            padding: 0 0 0.125rem !important;
+            height: auto !important;
+            min-height: 0 !important;
+            min-width: 12rem;
+            max-width: 26rem;
+            font: inherit !important;
+            line-height: 1.2 !important;
+            color: inherit !important;
+            text-align: left;
+            cursor: pointer;
+        }
+        .we-picker-type-menu {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 400;
+            min-width: 14rem;
+        }
         .we-picker-title-actions {
             display: flex;
+            flex-wrap: wrap;
             align-items: center;
             gap: 0.625rem;
             margin-left: auto;
@@ -2798,7 +2835,7 @@
                     </g>
                     </svg>
                 <span ng-if="loadingWidgetName">Loading {{loadingWidgetName}}…</span>
-                <span ng-if="!loadingWidgetName">Loading widget…</span>
+                <span ng-if="!loadingWidgetName">Loading {{recordLabel}}…</span>
             </div>
 
             <!-- Error state -->
@@ -2809,13 +2846,14 @@
                     <circle cx="65" cy="40" r="5" fill="currentColor"/>
                     <path d="M32 68 Q50 54 68 68" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
                 </svg>
-                <p class="we-not-found-title">Widget not found</p>
-                <button class="btn btn-default" ng-click="openWidgetPickerModal()">Open another widget</button>
+                <p class="we-not-found-title">{{recordLabel}} not found</p>
+                <button class="btn btn-default" ng-click="openWidgetPickerModal()">Open another {{isWidgetRecord ? 'widget' : 'record'}}</button>
             </div>
 
 
             <!-- Top Status Pills Alert Ribbon -->
-            <div class="we-alert-pills-row" ng-class="{'we-alert-pills-row--open': hasAnyAlerts()}">
+            <div class="we-alert-pills-row" ng-show="!loading &amp;&amp; !loadError &amp;&amp; !showPicker">
+                <span class="we-record-name" ng-attr-title="{{widget[recordPrimaryField] || (isNewWidget ? 'New ' + recordLabel : recordLabel)}}">{{widget[recordPrimaryField] || (isNewWidget ? 'New ' + recordLabel : recordLabel)}}</span>
 
                 <!-- ==================== 1. CRITICAL PILLS ==================== -->
 
@@ -2848,11 +2886,11 @@
                         <div class="we-alert-popover-title">
                             <i class="icon-locked" style="color:RGB(var(--now-alert--critical--color, var(--now-color_alert--critical-3, 180, 40, 40)));" aria-hidden="true" ng-if="!widget.scope_mismatch"></i>
                             <i class="icon-error-circle" style="color:RGB(var(--now-alert--critical--color, var(--now-color_alert--critical-3, 180, 40, 40)));" aria-hidden="true" ng-if="widget.scope_mismatch"></i>
-                            <span ng-if="!widget.scope_mismatch">Read-Only Widget</span>
+                            <span ng-if="!widget.scope_mismatch">Read-Only {{recordLabel}}</span>
                             <span ng-if="widget.scope_mismatch">Scope Mismatch</span>
                         </div>
                         <div class="we-alert-popover-body" ng-if="!widget.scope_mismatch">
-                            You do not have write access to edit this widget.
+                            You do not have write access to edit this {{isWidgetRecord ? 'widget' : 'record'}}.
                         </div>
                         <div class="we-alert-popover-body" ng-if="widget.scope_mismatch">
                             This widget belongs to application scope&nbsp;<strong>{{widget.application}}</strong>. Switch to this scope to make changes.
@@ -2875,8 +2913,8 @@
                             <span>Protected Policy</span>
                         </div>
                         <div class="we-alert-popover-body">
-                            <span ng-if="widget.name"><strong>{{widget.name}}</strong>&nbsp;is {{widgetSysPolicyDisplay | lowercase}} and cannot be edited.</span>
-                            <span ng-if="!widget.name">This widget is {{widgetSysPolicyDisplay | lowercase}} and cannot be edited.</span>
+                            <span ng-if="widget.name"><strong>{{widget.name}}</strong>&nbsp;is {{(widgetSysPolicyDisplay || 'protected') | lowercase}} and cannot be edited.</span>
+                            <span ng-if="!widget.name">This {{recordLabel | lowercase}} is {{(widgetSysPolicyDisplay || 'protected') | lowercase}} and cannot be edited.</span>
                         </div>
                     </div>
                 </div>
@@ -3063,8 +3101,9 @@
                         <div class="we-alert-popover-body">
                             You have unsaved changes in one or more fields. Save your work to avoid losing it.
                         </div>
-                        <div class="we-alert-popover-actions" ng-if="!isNewWidget">
-                            <button type="button" class="btn btn-primary btn-sm" ng-click="openUnsavedDiff(); openDropdown = null" ng-keydown="onAlertActionKeydown($event, 'alert-unsaved', true)" title="Compare unsaved changes with current saved version">Compare</button>
+                        <div class="we-alert-popover-actions">
+                            <button type="button" class="btn btn-primary btn-sm" ng-if="!isNewWidget" ng-click="openUnsavedDiff(); openDropdown = null" ng-keydown="onAlertActionKeydown($event, 'alert-unsaved', false)" title="Compare unsaved changes with current saved version">Compare</button>
+                            <button type="button" class="btn btn-default btn-sm" ng-click="requestRevert()" ng-disabled="creatingRecord" ng-keydown="onAlertActionKeydown($event, 'alert-unsaved', true)">Revert</button>
                         </div>
                     </div>
                 </div>
@@ -3097,11 +3136,11 @@
             <div class="we-header" ng-class="{'we-header--deprecated': widget.deprecated}" ng-if="!loading &amp;&amp; !loadError &amp;&amp; !showPicker">
 
                 <!-- Open widget -->
-                <button class="btn btn-default" ng-click="openWidgetPickerModal()" title="Open another widget">Open…</button>
+                <button class="btn btn-default" ng-click="openWidgetPickerModal()" title="Open another {{isWidgetRecord ? 'widget' : 'record'}}">Open…</button>
                 <div class="we-header-sep"></div>
 
                 <!-- Metadata fields -->
-                <div class="we-header-group">
+                <div class="we-header-group" ng-if="isWidgetRecord">
                     <div class="we-field we-field-with-popover">
                         <div class="we-field-label-row">
                             <label for="widget-name">Name</label>
@@ -3206,15 +3245,40 @@
 
                 <div class="we-header-sep"></div>
 
+                <div class="we-header-group" ng-if="!isWidgetRecord">
+                    <div class="we-field" ng-repeat="field in additionalWidgetFields track by field.name" ng-if="!field.more">
+                        <div class="we-field-label-row">
+                            <label ng-attr-for="record-field-{{field.name}}">{{field.label}}</label>
+                            <span class="we-pane-unsaved-dot" ng-if="headerDirty[field.name]" title="Unsaved changes"></span>
+
+                        </div>
+                        <input ng-if="field.type === 'boolean'" type="checkbox" class="checkbox" ng-attr-id="record-field-{{field.name}}" ng-model="widget[field.name]" ng-disabled="isVersionView || !canWriteWidget || !field.canWrite" />
+                        <select ng-if="field.type === 'choice'" class="form-control" ng-attr-id="record-field-{{field.name}}" ng-model="widget[field.name]" ng-options="choice.value as choice.label for choice in field.choices" ng-disabled="isVersionView || !canWriteWidget || !field.canWrite"><option value="">-- None --</option></select>
+                        <input ng-if="field.type === 'reference'" type="text" class="form-control" ng-attr-id="record-field-{{field.name}}" ng-value="field.displayValue" readonly="readonly" />
+                        <input ng-if="field.type !== 'boolean' &amp;&amp; field.type !== 'choice' &amp;&amp; field.type !== 'reference'" type="text" class="form-control" ng-class="{'we-record-primary': field.name === recordPrimaryField}" ng-attr-id="record-field-{{field.name}}" ng-model="widget[field.name]" ng-readonly="isVersionView || !canWriteWidget || !field.canWrite" />
+                    </div>
+                    <div class="we-field we-field-with-popover">
+                        <button type="button" class="btn btn-default" ng-click="toggleDropdown('description'); $event.stopPropagation()" ng-keydown="onDropdownTriggerKeydown($event, 'description')" title="More fields" aria-label="More fields" aria-expanded="{{openDropdown === 'description'}}" aria-controls="we-record-more-fields"><i class="icon-cog" aria-hidden="true"></i></button>
+                        <div id="we-record-more-fields" class="we-popover we-record-more-fields" ng-if="openDropdown === 'description'" ng-click="$event.stopPropagation()" we-dropdown-auto-pos="we-dropdown-auto-pos">
+                            <div class="we-field" ng-repeat="field in additionalWidgetFields track by field.name" ng-if="field.more">
+                                <div class="we-field-label-row"><label ng-attr-for="record-more-{{field.name}}">{{field.label}}</label></div>
+                                <textarea ng-if="field.multiline" we-auto-resize="we-auto-resize" class="form-control we-desc-textarea" ng-attr-id="record-more-{{field.name}}" ng-model="widget[field.name]" ng-readonly="isVersionView || !canWriteWidget || !field.canWrite" rows="3"></textarea>
+                                <input ng-if="!field.multiline" type="text" class="form-control" ng-attr-id="record-more-{{field.name}}" ng-model="widget[field.name]" ng-readonly="isVersionView || !canWriteWidget || !field.canWrite" />
+                            </div>
+                            <div class="we-field"><label for="record-application">Application</label><input id="record-application" type="text" class="form-control" ng-model="widget.application" readonly="readonly" /></div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Providers dropdown -->
-                <div class="we-dropdown we-header-wide-only" ng-if="!isVersionView" we-close-on-outside-click="openDropdown" close-key="'providers'">
+                <div class="we-dropdown we-header-wide-only" ng-if="isWidgetRecord &amp;&amp; !isVersionView" we-close-on-outside-click="openDropdown" close-key="'providers'">
                     <button class="btn btn-default" ng-click="toggleDropdown('providers')" ng-disabled="isNewWidget">Providers ({{providers.length}}) <span class="caret" ng-class="{'we-caret--open': openDropdown === 'providers'}"></span></button>
                     <div class="we-dropdown-menu we-dropdown-menu-providers" ng-show="openDropdown === 'providers'" we-dropdown-auto-pos="we-dropdown-auto-pos">
                         <div class="we-dropdown-empty" ng-if="providers.length === 0">No providers linked</div>
                         <div class="we-dropdown-item" ng-repeat="p in providers" ng-click="openProvider(p)">
                             <span class="we-dropdown-item-label" ng-bind="p.name"></span>
                             <button class="we-dropdown-unlink-btn" ng-if="canWriteWidget" ng-click="$event.stopPropagation(); unlinkProviderFromDropdown(p)" title="Unlink provider" aria-label="Unlink provider" style="margin-right: 0.5rem;"></button>
-                            <a class="we-dropdown-ext-link" href="/nav_to.do?uri=sp_angular_provider.do%3Fsys_id={{p.sys_id}}" target="_blank" ng-click="$event.stopPropagation(); openDropdown = null" title="Open in platform" aria-label="Open provider in platform"></a>
+                            <a class="we-dropdown-ext-link" ng-href="{{recordEditorUrl(p.sys_id, 'sp_angular_provider')}}" target="_blank" rel="noopener noreferrer" ng-click="$event.stopPropagation(); openDropdown = null" title="Open in Editor+" aria-label="Open provider in Editor+"></a>
                         </div>
                         <div class="we-dropdown-divider" ng-if="providers.length > 0 &amp;&amp; canWriteWidget"></div>
                         <div class="we-dropdown-item add-item we-add-new" ng-if="canWriteWidget" ng-click="addNewProvider()">Add new provider</div>
@@ -3223,13 +3287,13 @@
                 </div>
 
                 <!-- Templates dropdown -->
-                <div class="we-dropdown we-header-wide-only" ng-if="!isVersionView" we-close-on-outside-click="openDropdown" close-key="'templates'">
+                <div class="we-dropdown we-header-wide-only" ng-if="isWidgetRecord &amp;&amp; !isVersionView" we-close-on-outside-click="openDropdown" close-key="'templates'">
                     <button class="btn btn-default" ng-click="toggleDropdown('templates')" ng-disabled="isNewWidget">Templates ({{templates.length}}) <span class="caret" ng-class="{'we-caret--open': openDropdown === 'templates'}"></span></button>
                     <div class="we-dropdown-menu" ng-show="openDropdown === 'templates'" we-dropdown-auto-pos="we-dropdown-auto-pos">
                         <div class="we-dropdown-empty" ng-if="templates.length === 0">No templates</div>
                         <div class="we-dropdown-item" ng-repeat="t in templates" ng-click="openTemplate(t)">
                             <span class="we-dropdown-item-label" ng-bind="t.id"></span>
-                            <a class="we-dropdown-ext-link" href="/nav_to.do?uri=sp_ng_template.do%3Fsys_id={{t.sys_id}}" target="_blank" ng-click="$event.stopPropagation(); openDropdown = null" title="Open in platform" aria-label="Open template in platform"></a>
+                            <a class="we-dropdown-ext-link" ng-href="{{recordEditorUrl(t.sys_id, 'sp_ng_template')}}" target="_blank" rel="noopener noreferrer" ng-click="$event.stopPropagation(); openDropdown = null" title="Open in Editor+" aria-label="Open template in Editor+"></a>
                         </div>
                         <div class="we-dropdown-divider" ng-if="templates.length > 0 &amp;&amp; canWriteWidget"></div>
                         <div class="we-dropdown-item add-item we-add-new" ng-if="canWriteWidget" ng-click="addTemplate()">Add template</div>
@@ -3237,7 +3301,7 @@
                 </div>
 
                 <!-- Dependencies dropdown -->
-                <div class="we-dropdown we-header-wide-only" ng-if="!isVersionView" we-close-on-outside-click="openDropdown" close-key="'dependencies'">
+                <div class="we-dropdown we-header-wide-only" ng-if="isWidgetRecord &amp;&amp; !isVersionView" we-close-on-outside-click="openDropdown" close-key="'dependencies'">
                     <button class="btn btn-default" ng-click="toggleDropdown('dependencies')" ng-disabled="isNewWidget">Dependencies ({{dependencies.length}}) <span class="caret" ng-class="{'we-caret--open': openDropdown === 'dependencies'}"></span></button>
                     <div class="we-dropdown-menu we-dropdown-menu-providers" ng-show="openDropdown === 'dependencies'" we-dropdown-auto-pos="we-dropdown-auto-pos">
                         <div class="we-dropdown-empty" ng-if="dependencies.length === 0">No dependencies linked</div>
@@ -3270,12 +3334,12 @@
                 </div>
 
                 <!-- Related Lists button -->
-                <button class="btn btn-default we-header-wide-only" ng-if="!isVersionView" ng-click="openRelatedModal()" ng-disabled="isNewWidget">Related Lists</button>
+                <button class="btn btn-default we-header-wide-only" ng-if="isWidgetRecord &amp;&amp; !isVersionView" ng-click="openRelatedModal()" ng-disabled="isNewWidget">Related Lists</button>
 
                 <div class="we-header-sep we-header-wide-only"></div>
 
                 <!-- Editor visibility -->
-                <div class="we-dropdown" ng-if="!isVersionView" we-close-on-outside-click="openDropdown" close-key="'editorPicker'">
+                <div class="we-dropdown" ng-if="!isVersionView &amp;&amp; coreEditorDefs.length > 1" we-close-on-outside-click="openDropdown" close-key="'editorPicker'">
                     <button class="btn btn-default" ng-click="toggleDropdown('editorPicker')" title="Choose visible editors">Editors <span class="caret" ng-class="{'we-caret--open': openDropdown === 'editorPicker'}"></span></button>
                     <div class="we-dropdown-menu" ng-show="openDropdown === 'editorPicker'" we-dropdown-auto-pos="we-dropdown-auto-pos">
                         <div class="we-dropdown-item" ng-repeat="e in coreEditorDefs">
@@ -3289,21 +3353,21 @@
 
                 <!-- Compact menu (viewport < 1200px): replaces individual dropdowns -->
                 <div class="we-compact-menu we-dropdown">
-                    <button class="btn btn-default" ng-click="toggleDropdown('compactMenu')" title="Widget options" aria-label="Widget options">Lists <span class="caret" ng-class="{'we-caret--open': openDropdown === 'compactMenu'}"></span></button>
+                    <button class="btn btn-default" ng-click="toggleDropdown('compactMenu')" title="{{isWidgetRecord ? 'Widget options' : 'Record options'}}" aria-label="{{isWidgetRecord ? 'Widget options' : 'Record options'}}">{{isWidgetRecord ? 'Lists' : 'More'}} <span class="caret" ng-class="{'we-caret--open': openDropdown === 'compactMenu'}"></span></button>
                     <div class="we-dropdown-menu we-compact-menu-panel" ng-show="openDropdown === 'compactMenu'" we-dropdown-auto-pos="we-dropdown-auto-pos">
 
                         <!-- Providers -->
-                        <div class="we-compact-submenu-trigger" ng-if="!isVersionView" ng-click="toggleCompactSubmenu('providers')">
+                        <div class="we-compact-submenu-trigger" ng-if="isWidgetRecord &amp;&amp; !isVersionView" ng-click="toggleCompactSubmenu('providers')">
                             <span>Providers ({{providers.length}})</span>
                             <span class="we-compact-submenu-arrow" ng-class="{'we-compact-submenu-arrow--open': openCompactSubmenu === 'providers'}"><i class="icon-chevron-right"></i></span>
                         </div>
-                        <div class="we-compact-submenu-panel" ng-show="openCompactSubmenu === 'providers'">
+                        <div class="we-compact-submenu-panel" ng-if="isWidgetRecord" ng-show="openCompactSubmenu === 'providers'">
                             <div class="we-dropdown-empty" ng-if="isNewWidget">Save widget first</div>
                             <div class="we-dropdown-empty" ng-if="!isNewWidget &amp;&amp; providers.length === 0">No providers</div>
                             <div class="we-dropdown-item" ng-repeat="p in providers" ng-if="!isNewWidget" ng-click="openProvider(p)">
                                 <span class="we-dropdown-item-label" ng-bind="p.name"></span>
                                 <button class="we-dropdown-unlink-btn" ng-if="canWriteWidget" ng-click="$event.stopPropagation(); unlinkProviderFromDropdown(p)" title="Unlink provider" aria-label="Unlink provider" style="margin-right:0.5rem;"></button>
-                                <a class="we-dropdown-ext-link" href="/nav_to.do?uri=sp_angular_provider.do%3Fsys_id={{p.sys_id}}" target="_blank" ng-click="$event.stopPropagation(); openDropdown = null" title="Open in platform" aria-label="Open provider in platform"></a>
+                                <a class="we-dropdown-ext-link" ng-href="{{recordEditorUrl(p.sys_id, 'sp_angular_provider')}}" target="_blank" rel="noopener noreferrer" ng-click="$event.stopPropagation(); openDropdown = null" title="Open in Editor+" aria-label="Open provider in Editor+"></a>
                             </div>
                             <div class="we-dropdown-divider" ng-if="!isNewWidget &amp;&amp; providers.length > 0 &amp;&amp; canWriteWidget"></div>
                             <div class="we-dropdown-item add-item we-add-new" ng-if="!isNewWidget &amp;&amp; canWriteWidget" ng-click="addNewProvider()">Add new provider</div>
@@ -3311,27 +3375,27 @@
                         </div>
 
                         <!-- Templates -->
-                        <div class="we-compact-submenu-trigger" ng-if="!isVersionView" ng-click="toggleCompactSubmenu('templates')">
+                        <div class="we-compact-submenu-trigger" ng-if="isWidgetRecord &amp;&amp; !isVersionView" ng-click="toggleCompactSubmenu('templates')">
                             <span>Templates ({{templates.length}})</span>
                             <span class="we-compact-submenu-arrow" ng-class="{'we-compact-submenu-arrow--open': openCompactSubmenu === 'templates'}"><i class="icon-chevron-right"></i></span>
                         </div>
-                        <div class="we-compact-submenu-panel" ng-show="openCompactSubmenu === 'templates'">
+                        <div class="we-compact-submenu-panel" ng-if="isWidgetRecord" ng-show="openCompactSubmenu === 'templates'">
                             <div class="we-dropdown-empty" ng-if="isNewWidget">Save widget first</div>
                             <div class="we-dropdown-empty" ng-if="!isNewWidget &amp;&amp; templates.length === 0">No templates</div>
                             <div class="we-dropdown-item" ng-repeat="t in templates" ng-if="!isNewWidget" ng-click="openTemplate(t)">
                                 <span class="we-dropdown-item-label" ng-bind="t.id"></span>
-                                <a class="we-dropdown-ext-link" href="/nav_to.do?uri=sp_ng_template.do%3Fsys_id={{t.sys_id}}" target="_blank" ng-click="$event.stopPropagation(); openDropdown = null" title="Open in platform" aria-label="Open template in platform"></a>
+                                <a class="we-dropdown-ext-link" ng-href="{{recordEditorUrl(t.sys_id, 'sp_ng_template')}}" target="_blank" rel="noopener noreferrer" ng-click="$event.stopPropagation(); openDropdown = null" title="Open in Editor+" aria-label="Open template in Editor+"></a>
                             </div>
                             <div class="we-dropdown-divider" ng-if="!isNewWidget &amp;&amp; templates.length > 0 &amp;&amp; canWriteWidget"></div>
                             <div class="we-dropdown-item add-item we-add-new" ng-if="!isNewWidget &amp;&amp; canWriteWidget" ng-click="addTemplate()">Add template</div>
                         </div>
 
                         <!-- Dependencies -->
-                        <div class="we-compact-submenu-trigger" ng-if="!isVersionView" ng-click="toggleCompactSubmenu('dependencies')">
+                        <div class="we-compact-submenu-trigger" ng-if="isWidgetRecord &amp;&amp; !isVersionView" ng-click="toggleCompactSubmenu('dependencies')">
                             <span>Dependencies ({{dependencies.length}})</span>
                             <span class="we-compact-submenu-arrow" ng-class="{'we-compact-submenu-arrow--open': openCompactSubmenu === 'dependencies'}"><i class="icon-chevron-right"></i></span>
                         </div>
-                        <div class="we-compact-submenu-panel" ng-show="openCompactSubmenu === 'dependencies'">
+                        <div class="we-compact-submenu-panel" ng-if="isWidgetRecord" ng-show="openCompactSubmenu === 'dependencies'">
                             <div class="we-dropdown-empty" ng-if="isNewWidget">Save widget first</div>
                             <div class="we-dropdown-empty" ng-if="!isNewWidget &amp;&amp; dependencies.length === 0">No dependencies</div>
                             <div class="we-dropdown-item" ng-repeat="dep in dependencies" ng-if="!isNewWidget" ng-click="openDependency(dep)">
@@ -3365,7 +3429,7 @@
                         <div class="we-dropdown-divider--group" ng-if="!isVersionView"></div>
 
                         <!-- Related Lists -->
-                        <div class="we-dropdown-item" ng-if="!isVersionView" ng-class="{'disabled': isNewWidget}" ng-click="openRelatedModal(); openDropdown = null">Related Lists</div>
+                            <div class="we-dropdown-item" ng-if="isWidgetRecord &amp;&amp; !isVersionView" ng-class="{'disabled': isNewWidget}" ng-click="openRelatedModal(); openDropdown = null">Related Lists</div>
 
                         <!-- Assistant -->
                         <div class="we-dropdown-item" ng-if="!isVersionView &amp;&amp; userPrefs.showAssistantButton !== true" ng-class="{'disabled': isNewWidget}" ng-click="openAssistantModal(); openDropdown = null">Assistant</div>
@@ -3419,8 +3483,9 @@
                             <div class="we-alert-popover-body">
                                 You have unsaved changes in one or more fields. Save your work to avoid losing it.
                             </div>
-                            <div class="we-alert-popover-actions" ng-if="!isNewWidget">
-                                <button type="button" class="btn btn-primary btn-sm" ng-click="openUnsavedDiff(); openDropdown = null" ng-keydown="onAlertActionKeydown($event, 'alert-unsaved', true)" title="Compare unsaved changes with current saved version">Compare</button>
+                            <div class="we-alert-popover-actions">
+                                <button type="button" class="btn btn-primary btn-sm" ng-if="!isNewWidget" ng-click="openUnsavedDiff(); openDropdown = null" ng-keydown="onAlertActionKeydown($event, 'alert-unsaved', false)" title="Compare unsaved changes with current saved version">Compare</button>
+                                <button type="button" class="btn btn-default btn-sm" ng-click="requestRevert()" ng-disabled="creatingRecord" ng-keydown="onAlertActionKeydown($event, 'alert-unsaved', true)">Revert</button>
                             </div>
                         </div>
                     </div>
@@ -3448,11 +3513,11 @@
                     </div>
 
                     <!-- Save all -->
-                    <button class="btn btn-primary" ng-click="saveAll()" ng-if="!isVersionView" ng-disabled="!canWriteWidget"
+                    <button class="btn btn-primary" ng-click="saveAll()" ng-if="!isVersionView" ng-disabled="!canWriteWidget || creatingRecord"
                             ng-class="{'we-btn-save--error': hasLintErrors, 'we-btn-save--warn': !hasLintErrors &amp;&amp; hasLintWarnings}" style="padding-left: 1.25rem; padding-right: 1.25rem;margin-left: 0.3125rem; margin-right: 0.3125rem;">Save</button>
 
                     <!-- Open in VS Code (SN Utils) -->
-                    <button id="vscode-btn" class="btn btn-default" ng-if="!isVersionView &amp;&amp; hasSnUtils &amp;&amp; userPrefs.showOpenInVsCode !== false" ng-click="editInVsCode()" title="Open in VS Code (SN ScriptSync)" aria-label="Open in VS Code" style="padding:0.125rem 0.625rem;line-height:1.2;margin-right:0.3125rem;">
+                    <button id="vscode-btn" class="btn btn-default" ng-if="isWidgetRecord &amp;&amp; !isVersionView &amp;&amp; hasSnUtils &amp;&amp; userPrefs.showOpenInVsCode !== false" ng-click="editInVsCode()" title="Open in VS Code (SN ScriptSync)" aria-label="Open in VS Code" style="padding:0.125rem 0.625rem;line-height:1.2;margin-right:0.3125rem;">
                         <svg viewBox="0 0 100 100" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align: text-bottom;">
                             <mask id="we-vsc-mask0" mask-type="alpha" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">
                                 <path fill-rule="evenodd" clip-rule="evenodd" d="M70.9119 99.3171C72.4869 99.9307 74.2828 99.8914 75.8725 99.1264L96.4608 89.2197C98.6242 88.1787 100 85.9892 100 83.5872V16.4133C100 14.0113 98.6243 11.8218 96.4609 10.7808L75.8725 0.873756C73.7862 -0.130129 71.3446 0.11576 69.5135 1.44695C69.252 1.63711 69.0028 1.84943 68.769 2.08341L29.3551 38.0415L12.1872 25.0096C10.589 23.7965 8.35363 23.8959 6.86933 25.2461L1.36303 30.2549C-0.452552 31.9064 -0.454633 34.7627 1.35853 36.417L16.2471 50.0001L1.35853 63.5832C-0.454633 65.2374 -0.452552 68.0938 1.36303 69.7453L6.86933 74.7541C8.35363 76.1043 10.589 76.2037 12.1872 74.9905L29.3551 61.9587L68.769 97.9167C69.3925 98.5406 70.1246 99.0104 70.9119 99.3171ZM75.0152 27.2989L45.1091 50.0001L75.0152 72.7012V27.2989Z" fill="white"/>
@@ -3474,15 +3539,15 @@
                     <div class="we-dropdown" we-close-on-outside-click="openDropdown" close-key="'burger'">
                         <button class="btn btn-default" ng-click="toggleDropdown('burger')" title="Menu" aria-label="Menu" style="padding:0.125rem 0.625rem;line-height:1.2"><span class="icon-menu"></span></button>
                         <div class="we-dropdown-menu we-dropdown-menu-right" ng-show="openDropdown === 'burger'" we-dropdown-auto-pos="we-dropdown-auto-pos">
-                            <div class="we-dropdown-item" ng-click="newWidget()">New widget</div>
-                            <div class="we-dropdown-item" ng-if="!isNewWidget" ng-class="{'disabled': widget.deleted}" ng-click="cloneWidget()">Clone widget</div>
+                            <div class="we-dropdown-item" ng-click="newRecord()">New {{recordLabel}}</div>
+                            <div class="we-dropdown-item" ng-if="isWidgetRecord &amp;&amp; !isNewWidget" ng-class="{'disabled': widget.deleted}" ng-click="cloneWidget()">Clone widget</div>
                             <div class="we-dropdown-divider--group" ng-if="!isNewWidget"></div>
-                            <div class="we-dropdown-item" ng-if="!isNewWidget &amp;&amp; !widget.is_header_footer" ng-class="{'disabled': widget.deleted}" ng-click="openOptionSchemaModal()">Edit option schema <span class="we-status-dot we-status-dot--green" ng-if="widget.option_schema_has_value" title="Has an option schema defined"></span></div>
-                            <div class="we-dropdown-item" ng-if="!isNewWidget &amp;&amp; !widget.is_header_footer" ng-class="{'disabled': widget.deleted}" ng-click="openDemoDataModal()">Edit demo data <span class="we-status-dot we-status-dot--green" ng-if="widget.demo_data_has_value" title="Has demo data defined"></span></div>
+                            <div class="we-dropdown-item" ng-if="isWidgetRecord &amp;&amp; !isNewWidget &amp;&amp; !widget.is_header_footer" ng-class="{'disabled': widget.deleted}" ng-click="openOptionSchemaModal()">Edit option schema <span class="we-status-dot we-status-dot--green" ng-if="widget.option_schema_has_value" title="Has an option schema defined"></span></div>
+                            <div class="we-dropdown-item" ng-if="isWidgetRecord &amp;&amp; !isNewWidget &amp;&amp; !widget.is_header_footer" ng-class="{'disabled': widget.deleted}" ng-click="openDemoDataModal()">Edit demo data <span class="we-status-dot we-status-dot--green" ng-if="widget.demo_data_has_value" title="Has demo data defined"></span></div>
                             <div class="we-dropdown-item" ng-if="!isNewWidget" ng-class="{'disabled': widget.deleted}" ng-click="openXmlModal()">Show XML</div>
                             <div class="we-dropdown-divider--group" ng-if="!isNewWidget"></div>
-                            <div class="we-dropdown-item" ng-if="!isNewWidget" ng-class="{'disabled': widget.deleted}" ng-click="copyWidgetUrl()">Copy widget URL</div>
-                            <div class="we-dropdown-item" ng-if="!isNewWidget" ng-class="{'disabled': !widget.has_active_instances || widget.deleted}" ng-click="openOnPortalModal()" title="{{widget.deleted ? 'This widget has been deleted' : (widget.has_active_instances ? '' : 'This widget is not placed on any active page')}}">Open in portal</div>
+                            <div class="we-dropdown-item" ng-if="!isNewWidget" ng-class="{'disabled': widget.deleted}" ng-click="copyWidgetUrl()">{{isWidgetRecord ? 'Copy widget URL' : 'Copy record URL'}}</div>
+                            <div class="we-dropdown-item" ng-if="isWidgetRecord &amp;&amp; !isNewWidget" ng-class="{'disabled': !widget.has_active_instances || widget.deleted}" ng-click="openOnPortalModal()" title="{{widget.deleted ? 'This widget has been deleted' : (widget.has_active_instances ? '' : 'This widget is not placed on any active page')}}">Open in portal</div>
                             <div class="we-dropdown-divider" ng-if="!isNewWidget"></div>
                             <div class="we-dropdown-item" ng-if="!isNewWidget" ng-class="{'disabled': widget.deleted}" ng-click="openInPlatform()">Open in platform</div>
                             <div class="we-dropdown-divider--group" ng-if="!isNewWidget"></div>
@@ -3507,7 +3572,7 @@
                     <div class="we-pane-header" ng-class="{'we-pane-header--deprecated': widget.deprecated}" ng-if="item.type === 'pane'">
 
                         <!-- Left: label, save button, status indicators -->
-                        <span class="we-pane-title" ng-bind="item.label"></span>
+                        <span class="we-pane-title" ng-bind="item.label" ng-attr-title="{{item.readOnly ? 'Read-only — no write access' : undefined}}"></span>
                         <span class="we-pane-unsaved-dot" ng-if="item.dirty || item.idDirty" title="Unsaved changes"></span>
 
                         <button class="btn btn-default we-pane-save-btn" ng-if="(item.dirty || item.idDirty) &amp;&amp; !isVersionView &amp;&amp; canWriteWidget &amp;&amp; (!isNewWidget || item.hasIdInput) &amp;&amp; !item.readOnly" ng-click="savePaneField(item)" title="Save {{item.label}}">Save</button>
@@ -3524,7 +3589,7 @@
 
                         <!-- Right: ES12 toggle, format, ext-link, debugger, close -->
                         <span class="we-pane-right-actions">
-                            <span ng-if="item.key === 'script' &amp;&amp; !isVersionView" class="we-toggle we-toggle-inline input-group-checkbox we-pane-es12" title="ES12 / Modern JavaScript">
+                            <span ng-if="isWidgetRecord &amp;&amp; item.key === 'script' &amp;&amp; !isVersionView" class="we-toggle we-toggle-inline input-group-checkbox we-pane-es12" title="ES12 / Modern JavaScript">
                                 <input type="checkbox" class="checkbox" id="chk-es12" ng-model="widget.es12" ng-change="saveEs12()" ng-disabled="!canWriteWidget" />
                                 <label class="checkbox-label" for="chk-es12">ES12</label>
                             </span>
@@ -3532,8 +3597,8 @@
                             <button class="btn btn-default we-pane-icon-btn" ng-click="formatDocument(item)" ng-if="!isVersionView" ng-disabled="!canWriteWidget || (item.hasIdInput &amp;&amp; !item.editorUnlocked) || item.readOnly" title="Format document" aria-label="Format document"><span class="we-icon we-icon-format" aria-hidden="true"></span></button>
                             <button class="btn btn-default we-pane-icon-btn we-pane-icon-btn--danger" ng-if="item.hasIdInput &amp;&amp; item.sys_id &amp;&amp; !isVersionView &amp;&amp; item.canDelete &amp;&amp; (item.recordType !== 'provider' || !item.linkedToOtherWidgets)" ng-click="deleteExtraPane(item)" title="Delete {{item.recordType === 'template' ? 'template' : 'provider'}}" aria-label="Delete {{item.recordType === 'template' ? 'template' : 'provider'}}"><span class="we-icon we-icon-delete" aria-hidden="true"></span></button>
                             <button class="btn btn-default we-pane-icon-btn we-pane-icon-btn--danger" ng-if="item.hasIdInput &amp;&amp; item.sys_id &amp;&amp; !isVersionView &amp;&amp; item.recordType === 'provider' &amp;&amp; canWriteWidget" ng-click="unlinkExtraPane(item)" title="Unlink provider" aria-label="Unlink provider"><span class="we-icon we-icon-unlink" aria-hidden="true"></span></button>
-                            <button class="btn btn-default we-pane-icon-btn" ng-click="openScriptDebugger()" ng-if="(item.key === 'script' || item.recordType === 'script_include') &amp;&amp; !isVersionView" title="Open Script Debugger" aria-label="Open Script Debugger"><span class="we-icon we-icon-debugger" aria-hidden="true"></span></button>
-                            <button class="btn btn-default we-pane-icon-btn" ng-if="(item.hasIdInput || item.recordType === 'script_include') &amp;&amp; item.sys_id" ng-click="openExtraPaneInPlatform(item)" title="Open in platform" aria-label="Open in platform"><span class="we-icon we-icon-ext-link" aria-hidden="true"></span></button>
+                            <button class="btn btn-default we-pane-icon-btn" ng-click="openScriptDebugger()" ng-if="(item.scriptKind === 'server' || (isWidgetRecord &amp;&amp; item.key === 'script') || item.recordType === 'script_include') &amp;&amp; !isVersionView" title="Open Script Debugger" aria-label="Open Script Debugger"><span class="we-icon we-icon-debugger" aria-hidden="true"></span></button>
+                            <button class="btn btn-default we-pane-icon-btn" ng-if="(item.hasIdInput || item.recordType === 'script_include') &amp;&amp; item.sys_id" ng-click="openExtraPaneInEditor(item)" title="Open in Editor+" aria-label="Open in Editor+"><span class="we-icon we-icon-ext-link" aria-hidden="true"></span></button>
                         </span>
                         <span class="we-pane-close" ng-if="!isVersionView &amp;&amp; visiblePaneCount > 1" ng-click="closePaneItem(item)" title="Close pane" aria-label="Close pane" role="button" tabindex="0"><span class="icon-connect-close"></span></span>
                     </div>
@@ -3569,7 +3634,7 @@
                     </div>
 
                     <!-- Read-only infobar for extra panes in a different scope or without write access -->
-                    <div class="we-pane-infobar" ng-if="item.type === 'pane' &amp;&amp; item.readOnly">
+                    <div class="we-pane-infobar" ng-if="isWidgetRecord &amp;&amp; item.type === 'pane' &amp;&amp; item.readOnly">
                         <span ng-if="item.readOnlyReason === 'scope'">Read-only (scope: {{item.scopeName}})</span>
                         <span ng-if="item.readOnlyReason !== 'scope'">Read-only — no write access.</span>
                     </div>
@@ -3608,7 +3673,7 @@
                     <div class="we-pref-columns">
                         <!-- Left column: Default editors -->
                         <div class="we-pref-col">
-                            <div class="we-modal-section">
+                            <div class="we-modal-section" ng-if="isWidgetRecord">
                                 <div class="we-modal-section-title">Default editors</div>
                                 <div class="we-modal-option we-pref-editor-row" ng-repeat="e in userPrefsEdit.editors track by e.key" we-pref-draggable="{{e.key}}">
                                     <span class="we-pref-drag-handle" draggable="true" title="Drag to reorder">
@@ -3995,7 +4060,7 @@
                                 <span class="we-picker-item-id" ng-if="p.type" ng-bind="formatProviderType(p.type)"></span>
                             </div>
                             <div class="we-picker-item-actions">
-                                <a class="we-picker-action-btn" ng-href="/nav_to.do?uri=sp_angular_provider.do%3Fsys_id={{p.sys_id}}" target="_blank" ng-click="$event.stopPropagation()" title="Open in platform" aria-label="Open provider in platform">
+                                <a class="we-picker-action-btn" ng-href="{{recordEditorUrl(p.sys_id, 'sp_angular_provider')}}" target="_blank" rel="noopener noreferrer" ng-click="$event.stopPropagation()" title="Open in Editor+" aria-label="Open provider in Editor+">
                                     <i class="icon-open-document-new-tab" aria-hidden="true"></i>
                                 </a>
                             </div>
@@ -4257,31 +4322,36 @@
         </dialog>
 
         <!-- Widget picker modal -->
-        <dialog class="we-modal-backdrop we-modal-anchored-top" we-modal-dialog="showWidgetPickerModal || showPicker" we-dialog-cancel="!showPicker &amp;&amp; closeWidgetPickerModal()" ng-click="!showPicker &amp;&amp; closeWidgetPickerModal()">
-            <div class="we-picker-box" ng-click="$event.stopPropagation()" ng-class="{'we-picker-box--split': userPrefs.showRecentlyOpenedWidgets !== false &amp;&amp; userPrefs.showOpenHistory &amp;&amp; userPrefs.recentWidgets.length}">
+        <dialog class="we-modal-backdrop we-modal-anchored-top" we-modal-dialog="showWidgetPickerModal || showPicker" we-dialog-cancel="!showPicker &amp;&amp; closeWidgetPickerModal()" ng-click="openDropdown = null; !showPicker &amp;&amp; closeWidgetPickerModal()">
+            <div class="we-picker-box" ng-click="openDropdown === 'pickerType' &amp;&amp; (openDropdown = null); $event.stopPropagation()" ng-class="{'we-picker-box--split': userPrefs.showRecentlyOpenedWidgets !== false &amp;&amp; userPrefs.showOpenHistory &amp;&amp; recentWidgetsResolved.length}">
                 <!-- Header -->
                 <div class="we-picker-title-row">
                     <div class="we-picker-title-left">
-                        <span class="we-picker-title">Open a Widget</span>
+                        <div class="we-picker-title">Open<div class="dropdown we-dropdown we-picker-type" ng-class="{'open': openDropdown === 'pickerType'}">
+                            <button type="button" id="we-picker-type-toggle" class="dropdown-toggle we-picker-type-toggle" ng-click="toggleDropdown('pickerType'); $event.stopPropagation()" ng-keydown="onDropdownTriggerKeydown($event, 'pickerType')" aria-haspopup="true" aria-expanded="{{openDropdown === 'pickerType'}}" aria-controls="we-picker-type-menu" aria-label="Record type: {{pickerType().singular}}">{{pickerType().singular}}</button>
+                            <ul id="we-picker-type-menu" class="dropdown-menu we-picker-type-menu" ng-show="openDropdown === 'pickerType'" role="menu" aria-labelledby="we-picker-type-toggle" we-dropdown-auto-pos="we-dropdown-auto-pos">
+                                <li ng-repeat="type in recordTypes | orderBy:'label' track by type.table" role="presentation" ng-class="{'active': picker.table === type.table}"><a href="" role="menuitem" ng-click="selectPickerRecordType(type.table); $event.stopPropagation()">{{type.label}}</a></li>
+                            </ul>
+                        </div></div>
                     </div>
                     <div class="we-picker-title-actions">
-                        <button type="button" class="btn btn-default" ng-if="userPrefs.showRecentlyOpenedWidgets !== false &amp;&amp; userPrefs.recentWidgets.length" ng-click="toggleRecentWidgetsPane()" aria-pressed="{{!!userPrefs.showOpenHistory}}" we-tooltip-title="{{userPrefs.showOpenHistory ? 'Hide recently opened widgets' : 'Show recently opened widgets'}}" aria-label="History">
+                        <button type="button" class="btn btn-default" ng-if="userPrefs.showRecentlyOpenedWidgets !== false &amp;&amp; recentWidgetsResolved.length" ng-click="toggleRecentWidgetsPane()" aria-pressed="{{!!userPrefs.showOpenHistory}}" we-tooltip-title="{{userPrefs.showOpenHistory ? 'Hide recently opened records' : 'Show recently opened records'}}" aria-label="History">
                             <i class="icon-history" aria-hidden="true"></i>
                         </button>
-                        <button type="button" class="btn btn-primary we-picker-btn-new" ng-click="newWidget()">
-                            <span>+ New Widget</span>
+                        <button type="button" class="btn btn-primary we-picker-btn-new" ng-click="newRecord(picker.table)">
+                            <span>+ New {{pickerType().singular}}</span>
                         </button>
                         <button type="button" class="we-modal-close-btn we-picker-close-btn" ng-if="!showPicker" ng-click="closeWidgetPickerModal()" aria-label="Close"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M5 5L19 19M19 5L5 19" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
                     </div>
                 </div>
 
                 <!-- Columns Layout -->
-                <div class="we-picker-columns" ng-class="{'we-picker-columns--split': userPrefs.showRecentlyOpenedWidgets !== false &amp;&amp; userPrefs.showOpenHistory &amp;&amp; userPrefs.recentWidgets.length}">
+                <div class="we-picker-columns" ng-class="{'we-picker-columns--split': userPrefs.showRecentlyOpenedWidgets !== false &amp;&amp; userPrefs.showOpenHistory &amp;&amp; recentWidgetsResolved.length}">
                     <!-- Main Search Column -->
                     <div class="we-picker-col-main">
                         <!-- Search Bar -->
                         <div class="we-picker-search-wrap">
-                            <input class="form-control we-picker-search-input" type="text" ng-model="picker.search"
+                            <input id="we-picker-search" class="form-control we-picker-search-input" type="text" ng-model="picker.search"
                                 ng-change="onPickerSearch()" ng-keydown="onPickerSearchKeydown($event)" placeholder="Search by name or ID" autofocus="autofocus" />
                             <span class="we-picker-search-clear" ng-if="picker.search &amp;&amp; !pickerLoading" ng-click="clearPickerSearch()" role="button" title="Clear search">×</span>
                             <span class="we-picker-search-spinner" ng-if="pickerLoading"><we-loader></we-loader></span>
@@ -4291,8 +4361,8 @@
                         <!-- Section Header -->
                         <div class="we-picker-section-header">
                             <span class="we-picker-section-title">
-                                <span>Widgets</span>
-                                <span class="we-picker-count-badge" ng-if="pickerTotal" ng-bind="pickerTotal"></span>
+                                <span>{{pickerType().label}}</span>
+                                <span class="we-picker-count-badge" ng-if="pickerTotal">{{pickerTotal}}{{picker.table !== 'sp_widget' &amp;&amp; pickerHasMore ? '+' : ''}}</span>
                                 <we-header-loader ng-if="pickerLoading || pickerLoadingMore"></we-header-loader>
                             </span>
                         </div>
@@ -4300,7 +4370,7 @@
                         <!-- Results List -->
                         <div class="we-picker-list" we-infinite-scroll="loadMoreWidgets()">
                             <div class="we-picker-empty" ng-if="!pickerLoading &amp;&amp; pickerWidgets.length === 0">
-                                <span class="we-picker-empty-title">No widgets found</span>
+                                <span class="we-picker-empty-title">{{pickerError || 'No records found'}}</span>
                             </div>
                             <div class="we-picker-item" ng-repeat="w in pickerWidgets" ng-click="openWidget(w)" ng-keydown="onPickerItemKeydown($event, w)" tabindex="0" role="button">
                                 <span class="we-picker-item-icon" aria-hidden="true">
@@ -4311,7 +4381,7 @@
                                     <span class="we-picker-item-id" ng-bind-html="w.id | weHighlight:pickerActiveSearch"></span>
                                 </div>
                                 <div class="we-picker-item-actions">
-                                    <a class="we-picker-action-btn" ng-href="{{w.widgetEditorUrl}}" target="_blank" ng-click="$event.stopPropagation()" title="Open in new tab" aria-label="Open widget in new tab">
+                                    <a class="we-picker-action-btn" ng-href="{{w.widgetEditorUrl}}" target="_blank" ng-click="$event.stopPropagation()" title="Open in new tab" aria-label="Open record in new tab">
                                         <i class="icon-open-document-new-tab" aria-hidden="true"></i>
                                     </a>
                                 </div>
@@ -4321,28 +4391,29 @@
                     </div>
 
                     <!-- Recent Widgets Column -->
-                    <div class="we-picker-col-recent" ng-if="userPrefs.showRecentlyOpenedWidgets !== false &amp;&amp; userPrefs.showOpenHistory &amp;&amp; userPrefs.recentWidgets.length">
+                    <div class="we-picker-col-recent" ng-if="userPrefs.showRecentlyOpenedWidgets !== false &amp;&amp; userPrefs.showOpenHistory &amp;&amp; recentWidgetsResolved.length">
                         <div class="we-picker-section-header">
                             <span class="we-picker-section-title">
                                 <span>Recent</span>
-                                <span class="we-picker-count-badge" ng-bind="userPrefs.recentWidgets.length"></span>
+                                <span class="we-picker-count-badge" ng-bind="recentWidgetsResolved.length"></span>
                             </span>
                             <a class="we-picker-clear-link" ng-click="clearWidgetHistory()" role="button" tabindex="0" title="Clear all recent widget history">Clear history</a>
                         </div>
                         <div class="we-picker-list">
-                            <div class="we-picker-item" ng-repeat="w in recentWidgetsResolved | limitTo:10 track by w.sys_id" ng-click="openWidget(w)" ng-keydown="onPickerItemKeydown($event, w)" tabindex="0" role="button">
+                            <div class="we-picker-item" ng-repeat="w in recentWidgetsResolved | limitTo:10 track by (w.table + ':' + w.sys_id)" ng-click="openWidget(w)" ng-keydown="onPickerItemKeydown($event, w)" tabindex="0" role="button">
                                 <span class="we-picker-item-icon" aria-hidden="true">
                                     <i class="{{widgetPickerIconClass(w)}}" aria-hidden="true"></i>
                                 </span>
                                 <div class="we-picker-item-content">
                                     <span class="we-picker-item-name" ng-bind="w.name || '&lt; no name &gt;'"></span>
                                     <span class="we-picker-item-id" ng-bind="w.id"></span>
+                                    <span class="we-picker-item-id" ng-if="w.table !== 'sp_widget'">{{recordTypeLabel(w.table)}}</span>
                                 </div>
                                 <div class="we-picker-item-actions">
-                                    <a class="we-picker-action-btn" ng-href="{{recentWidgetUrl(w)}}" target="_blank" ng-click="$event.stopPropagation()" title="Open in new tab" aria-label="Open widget in new tab">
+                                    <a class="we-picker-action-btn" ng-href="{{recentWidgetUrl(w)}}" target="_blank" ng-click="$event.stopPropagation()" title="Open in new tab" aria-label="Open record in new tab">
                                         <i class="icon-open-document-new-tab" aria-hidden="true"></i>
                                     </a>
-                                    <button type="button" class="we-picker-action-btn" ng-click="$event.stopPropagation(); removeRecentWidget(w)" title="Remove from history" aria-label="Remove widget from history">
+                                    <button type="button" class="we-picker-action-btn" ng-click="$event.stopPropagation(); removeRecentWidget(w)" title="Remove from history" aria-label="Remove record from history">
                                         <i class="icon-cross" aria-hidden="true"></i>
                                     </button>
                                 </div>
@@ -4551,16 +4622,17 @@
             </div>
         </dialog>
 
-        <!-- Reload confirmation after revert -->
-        <dialog class="we-modal-backdrop" we-modal-dialog="showReloadConfirm" we-dialog-cancel="cancelReloadWidget()" ng-click="cancelReloadWidget()">
+        <!-- Discard unsaved changes confirmation -->
+        <dialog class="we-modal-backdrop" we-modal-dialog="showRevertConfirm" we-dialog-cancel="cancelRevert()" ng-click="cancelRevert()">
             <div class="we-modal-box" style="width:25rem" ng-click="$event.stopPropagation()">
-                <div class="we-modal-title">Reload Widget</div>
+                <div class="we-modal-title">Discard unsaved changes?</div>
                 <div class="we-modal-body">
-                    <p>Reloading will replace your unsaved changes with the reverted version. Continue?</p>
+                    <p>Your unsaved changes will be discarded. {{isNewWidget ? 'The new record will return to its defaults.' : 'The saved record will be reloaded.'}}</p>
+                    <p ng-if="localDraftError" role="alert" ng-bind="localDraftError"></p>
                 </div>
                 <div class="we-modal-actions">
-                    <button class="btn btn-primary" ng-click="confirmReloadWidget()">Reload</button>
-                    <button class="btn btn-default" ng-click="cancelReloadWidget()">Cancel</button>
+                    <button class="btn btn-primary" ng-click="confirmRevert()" ng-disabled="creatingRecord">Discard changes</button>
+                    <button class="btn btn-default" ng-click="cancelRevert()">Cancel</button>
                 </div>
             </div>
         </dialog>

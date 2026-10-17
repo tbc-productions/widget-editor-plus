@@ -2,6 +2,30 @@
 
 [Back to README](README.md)
 
+## Supported editor records
+
+Use **Open…** and click the dotted record type in the title to switch between the following types. The widget toolbar and panes retain their existing layout; the picker keeps its search and recent-history columns.
+
+| Record type | Table | Code panes |
+|---|---|---|
+| Widgets | `sp_widget` | HTML template, CSS/SCSS, client controller, link and server script |
+| Script Includes | `sys_script_include` | Script |
+| CSS | `sp_css` | CSS/SCSS |
+| UI Scripts | `sys_ui_script` | Script |
+| Angular Providers | `sp_angular_provider` | Script |
+| UI Pages | `sys_ui_page` | HTML/Jelly, client script and processing script |
+| Angular HTML templates | `sp_ng_template` | HTML template |
+
+**New** follows the selected record type and opens an unsaved record directly in Editor+ in another tab; widgets retain their existing Editor+ creation flow. Dictionary defaults and create permissions apply. Use **Save** to create the record; code-pane saves and local draft recovery become available after the first successful save. Each type has an explicit field list in `WidgetEditorAjax`; unsupported fields are preserved. Name or template ID, booleans and relevant choices appear in the toolbar, with descriptions and other fields under **More fields**. The parent widget of an Angular HTML template is shown read-only.
+
+Save code panes independently, or use the toolbar **Save** for all changed editable fields. The pill bar shows the current name or template ID as you type, with **New <record type>** for unnamed new records. **Revert** in the Unsaved changes popover asks for confirmation, then discards this tab’s edits and reloads the saved record or new-record defaults. Local drafts are recovery copies and never write to ServiceNow automatically. Record and field access checks, protection policies and normal record validation apply to saves. If a changed field has also changed in ServiceNow, saving stops and keeps your local edits for comparison.
+
+In widgets, **Open in Editor+** on related Script Includes, Angular HTML templates and Angular Providers opens the full record editor in another tab. The toolbar cog opens **More fields**, including Description, API name and Application where available.
+
+Recent history identifies records by table and sys_id, retaining existing widget history. Drafts are separated by record type. Default editor visibility and order in User Preferences apply only to widgets; other record types start with all code panes visible. The Editors menu is hidden when there is only one code pane. Widget-specific actions, related lists, live presence, real-time updates, ES12 controls and SN Utils integration remain in the widget view; other records retain version comparison, Assistant, XML and native-form access.
+
+Existing widget links using `widget_id` continue to work. Links to another record use the same UI Page with `record_table=<supported table>&record_sys_id=<record sys_id>`; for example, `ui_page.do?sys_id=8b2e70458373fe1070b8b5dfeeaad35e&record_table=sys_ui_page&record_sys_id=<record sys_id>`. These links open records for editing and do not execute the target UI Page or script.
+
 ## System Properties
 All system properties are managed under the `monaco.plus.*` namespace:
 
