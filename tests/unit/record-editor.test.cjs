@@ -29,6 +29,7 @@ function serverHarness(table = 'sys_ui_page', options = {}) {
         global: '0',
         client_callable: '0',
         sandbox_callable: '0',
+        mobile_callable: '0',
         direct: '0',
         access: 'all',
         ui_type: '0',
@@ -49,10 +50,13 @@ function serverHarness(table = 'sys_ui_page', options = {}) {
         ...options.row,
     };
     const calls = [],
-        writes = [];
+        writes = [],
+        queries = [];
     function Record(name) {
         calls.push(name);
-        let current = row,
+        const related = { sys_es_latest_script: options.es12, sys_update_version: options.origin, sys_user: options.user };
+        const record = Object.hasOwn(related, name) ? (related[name] || {}) : row;
+        let current = record,
             cursor = 0;
         const filters = {};
         this.get = () => options.exists !== false;
@@ -61,14 +65,25 @@ function serverHarness(table = 'sys_ui_page', options = {}) {
         this.canRead = () => options.canRead !== false;
         this.canCreate = () => options.canCreate !== false;
         this.canWrite = () => options.canWrite !== false;
+        this.initialize = () => {};
         this.newRecord = () => {
             for (const field of ['name', 'id', 'script', 'html', 'client_script', 'processing_script', 'css', 'template', 'description', 'api_name']) row[field] = '';
             Object.assign(row, options.defaults || {});
         };
-        this.isValidField = (field) => Object.hasOwn(row, field);
+        this.isValidField = (field) => Object.hasOwn(record, field);
         this.getValue = (field) => current[field] ?? null;
         this.getDisplayValue = (field) => field === 'sys_policy' && options.policyDisplay !== undefined ? options.policyDisplay : (field === 'sp_widget' ? 'Parent widget' : String(current[field] || ''));
         this.getElement = (field) => ({
+            getLabel: () => options.labels?.[field] ?? ({
+                name: 'Name', id: 'ID', active: 'Active', global: 'Global',
+                client_callable: 'Glide AJAX enabled', sandbox_callable: 'Sandbox enabled',
+                mobile_callable: 'Mobile callable', access: 'Accessible from',
+                description: 'Description', api_name: 'API name', sys_policy: 'Protection policy',
+                sys_scope: 'Application', script: 'Script', css: 'CSS', ui_type: 'UI type',
+                type: 'Type', category: 'Category', direct: 'Direct', html: 'HTML',
+                client_script: 'Client script', processing_script: 'Processing script',
+                sp_widget: 'Widget', template: 'Template',
+            }[field] ?? field),
             canRead: () => !(options.noRead || []).includes(field),
             canWrite: () => !(options.noWrite || []).includes(field),
             isMandatory: () => (options.mandatory || []).includes(field),
@@ -76,13 +91,15 @@ function serverHarness(table = 'sys_ui_page', options = {}) {
         });
         this.addQuery = (field, value) => {
             filters[field] = value;
+            queries.push([name, field, value]);
             return { addOrCondition() {} };
         };
-        this.orderBy = this.chooseWindow = () => {};
+        this.orderBy = this.chooseWindow = this.setLimit = () => {};
         this.query = () => {
             cursor = 0;
         };
         this.next = () => {
+            if (Object.hasOwn(related, name)) return cursor++ === 0 && !!related[name];
             if (name === 'sys_choice') {
                 const values =
                     {
@@ -99,7 +116,7 @@ function serverHarness(table = 'sys_ui_page', options = {}) {
         };
         this.setValue = (field, value) => {
             writes.push([field, value]);
-            row[field] = value;
+            record[field] = value;
         };
         this.update = () => {
             writes.push(['update']);
@@ -122,7 +139,7 @@ function serverHarness(table = 'sys_ui_page', options = {}) {
     const api = context.WidgetEditorAjax.prototype;
     api.getParameter = (name) => params[name];
     api._answer = (answer) => JSON.parse(JSON.stringify(answer));
-    return { api, params, row, calls, writes };
+    return { api, params, row, calls, writes, queries };
 }
 
 test('the editor exposes exactly the seven agreed types and rejects other tables before querying', () => {
@@ -189,6 +206,119 @@ test('record metadata returns protection policy labels only when the field is re
         assert.equal(hidden.widget.sys_policy, undefined);
         assert.equal(hidden.widget.sys_policy_display, undefined);
     }
+});
+
+test('record field and editor labels come from dictionary metadata with only authorised header aliases', () => {
+    for (const table of supported.slice(1)) {
+        const h = serverHarness(table);
+        const profile = h.api._getEditorProfiles()[table];
+        const labels = Object.fromEntries(Array.from(profile.fields, field => [field.name, 'Dictionary ' + field.name]));
+        labels.sys_scope = 'Application from dictionary';
+        const result = serverHarness(table, { labels }).api.getWidget();
+        for (const def of [...result.additional_widget_fields, ...result.core_editor_defs]) {
+            assert.equal(def.label, labels[def.name || def.field], table);
+        }
+        assert.equal(result.widget.application_label, labels.sys_scope, table);
+        const aliases = result.additional_widget_fields.filter(field => field.shortLabel).map(field => [field.name, field.shortLabel]);
+        assert.deepEqual(aliases, table === 'sys_script_include' ? [['client_callable', 'Client'], ['sandbox_callable', 'Sandbox']] : []);
+        assert.equal(profile.fields.some(field => Object.hasOwn(field, 'label')), false, table);
+    }
+});
+
+test('record origins share the widget history lookup and respect readable history and user names', () => {
+    const origin = { sys_created_on: '2020-01-02 03:04:05', sys_created_by: 'ada' };
+    for (const table of supported) {
+        const h = serverHarness(table, { origin, user: { name: 'Ada Lovelace' } });
+        const result = table === 'sp_widget' ? h.api._getRecordOrigin(table, id) : h.api.getWidget().widget.widgetOrigin;
+        assert.deepEqual({ ...result }, { created_on: origin.sys_created_on, founder: 'Ada Lovelace' });
+        assert.ok(h.queries.some(([name, field, value]) => name === 'sys_update_version' && field === 'name' && value === table + '_' + id));
+        assert.ok(h.queries.some(([name, field, value]) => name === 'sys_user' && field === 'user_name' && value === 'ada'));
+    }
+    assert.equal(serverHarness().api.getWidget().widget.widgetOrigin, null);
+    assert.equal(serverHarness('sys_ui_page', { origin }).api.getWidget().widget.widgetOrigin.founder, 'ada');
+    for (const field of ['sys_created_on', 'sys_created_by']) {
+        const h = serverHarness('sys_ui_page', { origin, noRead: [field] });
+        assert.equal(h.api.getWidget().widget.widgetOrigin, null);
+        assert.equal(h.calls.includes('sys_user'), false);
+    }
+    const hiddenUser = serverHarness('sys_ui_page', { origin, user: { name: 'Ada Lovelace' }, noRead: ['name'] });
+    assert.equal(hiddenUser.api._getRecordOrigin('sys_ui_page', id).founder, 'ada');
+    const defaults = serverHarness('sys_ui_page', { origin });
+    assert.equal(defaults.api.getWidgetDefaults().widget.widgetOrigin, null);
+    assert.equal(defaults.calls.includes('sys_update_version'), false);
+});
+
+test('Active is a header field on every additional type when present and readable', () => {
+    for (const table of supported.slice(1)) {
+        const result = serverHarness(table, { noWrite: ['active'] }).api.getWidget();
+        const field = result.additional_widget_fields.find(def => def.name === 'active');
+        assert.equal(field.type, 'boolean', table);
+        assert.equal(field.more, undefined, table);
+        assert.equal(field.canWrite, false, table);
+        assert.equal(result.widget.active, true, table);
+        for (const options of [{ noRead: ['active'] }, { absent: true }]) {
+            const h = serverHarness(table, options);
+            if (options.absent) delete h.row.active;
+            const hidden = h.api.getWidget();
+            assert.equal(hidden.additional_widget_fields.some(def => def.name === 'active'), false, table);
+            assert.equal(hidden.widget.active, undefined, table);
+        }
+        const h = serverHarness(table, { params: { field: 'active', value: 'false', original: '{"active":true}' } });
+        assert.equal(h.api.saveField().success, true, table);
+        assert.deepEqual(h.writes, [['active', '0'], ['update']]);
+    }
+});
+
+test('Script Include more fields expose Mobile callable and the read-only protection policy label', () => {
+    const result = serverHarness('sys_script_include', { row: { sys_policy: 'read' }, policyDisplay: 'Read-only' }).api.getWidget();
+    const mobile = result.additional_widget_fields.find(def => def.name === 'mobile_callable');
+    assert.equal(mobile.type, 'boolean');
+    assert.equal(mobile.more, true);
+    const policy = result.additional_widget_fields.find(def => def.name === 'sys_policy');
+    assert.equal(policy.more, true);
+    assert.equal(policy.canWrite, false);
+    assert.equal(policy.displayValue, 'Read-only');
+    const h = serverHarness('sys_script_include', { params: { field: 'mobile_callable', value: 'true', original: '{"mobile_callable":false}' } });
+    assert.equal(h.api.saveField().success, true);
+    assert.deepEqual(h.writes, [['mobile_callable', '1'], ['update']]);
+    const hidden = serverHarness('sys_script_include', { noRead: ['mobile_callable', 'sys_policy'] }).api.getWidget();
+    assert.equal(hidden.additional_widget_fields.some(def => ['mobile_callable', 'sys_policy'].includes(def.name)), false);
+});
+
+test('ES12 loads and saves for server-script types and rejects unsupported or inaccessible records', () => {
+    for (const table of supported.slice(1)) {
+        const supported = ['sys_script_include', 'sys_ui_page'].includes(table);
+        for (const value of ['1', 'true', '0', 'false']) {
+            const result = serverHarness(table, { es12: { use_es_latest: value } }).api.getWidget();
+            assert.equal(result.widget.es12_supported, supported, table);
+            assert.equal(result.widget.es12, supported && ['1', 'true'].includes(value), table);
+            assert.equal(result.widget.es12_record_exists, supported, table);
+        }
+        for (const es12 of [undefined, { use_es_latest: '0' }]) {
+            const h = serverHarness(table, { es12, params: { enabled: 'true' } });
+            assert.equal(h.api.saveEs12().success, supported, table);
+            if (supported) {
+                assert.ok(h.writes.some(([field, value]) => field === 'use_es_latest' && value === true));
+                if (!es12) assert.ok(h.writes.some(([field, value]) => field === 'table' && value === table));
+            } else assert.deepEqual(h.writes, []);
+        }
+    }
+    for (const table of ['sys_script_include', 'sys_ui_page']) {
+        const field = table === 'sys_ui_page' ? 'processing_script' : 'script';
+        for (const options of [{ canWrite: false }, { canRead: false }, { exists: false }, { noWrite: [field] }, { noRead: [field] }, { row: { sys_policy: 'read' } }]) {
+            const h = serverHarness(table, { ...options, params: { enabled: 'true' } });
+            assert.equal(h.api.saveEs12().success, false, JSON.stringify(options));
+            assert.deepEqual(h.writes, []);
+        }
+        const hidden = serverHarness(table, { es12: { use_es_latest: '1' }, noRead: ['use_es_latest'] }).api.getWidget();
+        assert.equal(hidden.widget.es12_record_exists, false);
+        const defaults = serverHarness(table).api.getWidgetDefaults();
+        assert.equal(defaults.widget.es12_supported, true);
+        assert.equal(defaults.widget.es12_record_exists, false);
+    }
+    const invalid = serverHarness('__proto__', { params: { enabled: 'true' } });
+    assert.equal(invalid.api.saveEs12().success, false);
+    assert.deepEqual(invalid.calls, []);
 });
 
 test('saving one code field preserves the other fields for every additional type', () => {
@@ -619,6 +749,15 @@ function browserFixture() {
     return { markup, browserClient };
 }
 
+async function checkPopoverCheckbox(page, id) {
+    const { label, checkbox } = await page.locator('#' + id).evaluate(input => ({
+        label: document.querySelector('label[for="' + input.id + '"]').getBoundingClientRect().toJSON(),
+        checkbox: input.getBoundingClientRect().toJSON(),
+    }));
+    assert.ok(checkbox.x >= label.x + label.width, id + ' checkbox is to the right of its label');
+    assert.ok(Math.abs(checkbox.y + checkbox.height / 2 - label.y - label.height / 2) < 1, id + ' is vertically centred');
+}
+
 async function checkDescriptionSizing(page, selector) {
     const textarea = page.locator(selector);
     const original = await textarea.inputValue();
@@ -667,8 +806,8 @@ test('the real Angular page preserves widgets and opens and saves the six additi
             await page.setContent(markup);
             await page.addStyleTag({ content: ':root { --now-color_chrome--brand-5: 3, 45, 62; --now-color--neutral-0: 255, 255, 255; --now-color_background--secondary: 242, 247, 248; --now-color_text--primary: 29, 49, 56; --now-modal--border-radius: 6px; --now-dropdown-list_search--background-color--hover: 224, 238, 241; } input[type=checkbox].checkbox { display:block; margin:10px 0; } button:not(.btn) { padding:10px !important; border:1px solid #ccc !important; border-radius:4px !important; min-height:32px !important; background:#eee !important; }' });
             const fixture = table === 'sp_widget' ? { success: true, additional_widget_fields: [], widget: {
-                sys_id: id, name: 'Example', id: 'example', description: Array(20).fill('Saved description line').join('\n'), template: 'saved html', css: '', client_script: '', script: '', link: '', canWrite: true,
-            } } : serverHarness(table, { row: { description: Array(20).fill('Saved description line').join('\n') } }).api.getWidget();
+                sys_id: id, name: 'Example', id: 'example', description: Array(20).fill('Saved description line').join('\n'), template: 'saved html', css: '', client_script: '', script: '', link: '', canWrite: true, is_header_footer: true, static: false,
+            } } : serverHarness(table, { row: { description: Array(20).fill('Saved description line').join('\n') }, origin: { sys_created_on: '2020-01-02 03:04:05', sys_created_by: 'ada' }, user: { name: 'Ada Lovelace' } }).api.getWidget();
             await page.evaluate(({ table, id, fixture, types }) => {
                 window.WE_CONFIG = { record_table: table, sys_id: id, widgetPageSysId: 'page-id' };
                 window.require = () => {};
@@ -684,6 +823,7 @@ test('the real Angular page preserves widgets and opens and saves the six additi
                         const action = params.sysparm_name;
                         if (action === 'saveWidget') sessionStorage.setItem('lastSaveBeforeNew', JSON.stringify(params));
                         const answer = action === 'saveWidget' && window.failNextSave ? (window.failNextSave = false, { success: false, error: 'Save rejected' }) : action === 'getWidget' ? fixture
+                            : action === 'saveEs12' ? { success: true, result: params.enabled === 'true' }
                             : action === 'getEditorRecordTypes' ? { success: true, types }
                             : action === 'getUserPrefs' ? { success: true, value: JSON.stringify({ showRecentlyOpenedWidgets: false }) }
                             : action === 'getEditorRecords' ? { success: true, widgets: [{ table: params.record_table, sys_id: id, name: 'Example', canWrite: true }], total: 1 }
@@ -742,6 +882,7 @@ test('the real Angular page preserves widgets and opens and saves the six additi
                 assert.equal(await page.locator('.we-info-icon[title="More fields"]').evaluate(element => element.classList.contains('icon-arrow-down-rounded')), true);
                 await page.locator('.we-info-icon[title="More fields"]').press('Enter');
                 assert.equal(await page.locator('.we-info-icon[title="More fields"]').evaluate(element => element.classList.contains('icon-arrow-up-rounded') && !element.classList.contains('icon-arrow-down-rounded')), true);
+                await checkPopoverCheckbox(page, 'widget-static');
                 await checkDescriptionSizing(page, '#widget-description');
                 await page.locator('#widget-name').click();
                 assert.equal(await page.locator('.we-info-icon[title="More fields"]').evaluate(element => element.classList.contains('icon-arrow-down-rounded') && !element.classList.contains('icon-arrow-up-rounded')), true);
@@ -795,6 +936,19 @@ test('the real Angular page preserves widgets and opens and saves the six additi
             }
             assert.equal(await page.locator('button[title="Choose visible editors"]').count(), fixture.core_editor_defs.length > 1 ? 1 : 0, table);
             assert.equal(await page.getByText('Default editors', { exact: true }).count(), 0, table);
+            assert.equal(await page.locator('#record-field-active').isChecked(), true, table);
+            const serverScript = fixture.core_editor_defs.find(def => def.scriptKind === 'server');
+            assert.equal(await page.locator('#chk-es12').count(), serverScript ? 1 : 0, table);
+            if (serverScript) {
+                await page.locator('#chk-es12').check();
+                const saved = await page.evaluate(() => calls.filter(call => call.sysparm_name === 'saveEs12').at(-1));
+                assert.equal(saved.record_table, table);
+                assert.equal(saved.sys_id, id);
+                assert.equal(saved.enabled, 'true');
+                await page.evaluate(() => editorScope.$apply(() => { editorScope.isVersionView = true; }));
+                assert.equal(await page.locator('#chk-es12').count(), 0);
+                await page.evaluate(() => editorScope.$apply(() => { editorScope.isVersionView = false; }));
+            }
             const primary = fixture.primary_field;
             assert.equal(await page.locator('#record-field-' + primary).inputValue(), fixture.widget[primary], table);
             const primaryInput = page.locator('#record-field-' + primary);
@@ -807,6 +961,11 @@ test('the real Angular page preserves widgets and opens and saves the six additi
             assert.ok(longWidth > shortWidth, table);
             await primaryInput.fill(fixture.widget[primary]);
             if (table === 'sys_script_include') {
+                for (const [field, shortLabel] of [['client_callable', 'Client'], ['sandbox_callable', 'Sandbox']]) {
+                    const label = page.locator('label[for="record-field-' + field + '"]');
+                    assert.equal((await label.textContent()).trim(), shortLabel);
+                    assert.equal(await label.getAttribute('title'), fixture.additional_widget_fields.find(def => def.name === field).label);
+                }
                 const rows = await page.locator('.we-record-field').evaluateAll(fields => fields.map(field => {
                     const label = field.querySelector('label').getBoundingClientRect();
                     const labelRow = field.querySelector('.we-field-label-row').getBoundingClientRect();
@@ -830,12 +989,20 @@ test('the real Angular page preserves widgets and opens and saves the six additi
             assert.equal(await moreFieldsButton.evaluate(element => element.classList.contains('icon-arrow-up-rounded') ? 1 : 0), 1);
             assert.equal(await moreFieldsButton.evaluate(element => element.classList.contains('icon-arrow-down-rounded') ? 1 : 0), 0);
             assert.equal(await page.locator('#record-application').isVisible(), true);
+            const origin = page.locator('#we-record-more-fields .we-widget-origin');
+            assert.equal(await origin.innerText(), 'Established 2020 by Ada Lovelace', table);
+            assert.ok(await origin.getAttribute('title'), table);
             if (table === 'sys_script_include') {
                 assert.equal(await page.locator('#record-more-description').isVisible(), true);
                 await checkDescriptionSizing(page, '#record-more-description');
                 assert.equal(await page.locator('#record-more-api_name').isVisible(), true);
                 assert.equal(await page.locator('#record-more-api_name').evaluate(element => element.tagName), 'INPUT');
                 assert.equal(await page.locator('#record-more-description').evaluate(element => element.tagName), 'TEXTAREA');
+                assert.equal(await page.locator('#record-more-mobile_callable').getAttribute('type'), 'checkbox');
+                await checkPopoverCheckbox(page, 'record-more-mobile_callable');
+                await page.locator('#record-more-mobile_callable').check();
+                assert.equal(await page.evaluate(() => editorScope.widget.mobile_callable), true);
+                assert.equal(await page.locator('#record-more-sys_policy').getAttribute('readonly'), 'readonly');
             }
             await page.locator('#record-field-' + primary).click();
             assert.equal(await moreFieldsButton.getAttribute('aria-expanded'), 'false');
@@ -866,12 +1033,12 @@ test('the real Angular page preserves widgets and opens and saves the six additi
             const saves = await page.evaluate(() => calls.filter(call => call.sysparm_name === 'saveField'));
             assert.deepEqual(saves.map(call => [call.record_table, call.field, call.value]), [[table, code, 'edited code']]);
             const headerSave = await page.evaluate(() => calls.find(call => call.sysparm_name === 'saveWidget'));
-            assert.deepEqual(JSON.parse(headerSave.data), { [primary]: 'Renamed' });
-            assert.deepEqual(JSON.parse(headerSave.original), { [primary]: fixture.widget[primary] });
+            assert.deepEqual(JSON.parse(headerSave.data), { [primary]: 'Renamed', ...(table === 'sys_script_include' ? { mobile_callable: true } : {}) });
+            assert.deepEqual(JSON.parse(headerSave.original), { [primary]: fixture.widget[primary], ...(table === 'sys_script_include' ? { mobile_callable: false } : {}) });
             assert.equal(await page.evaluate(() => editorScope.headerDirty[editorScope.recordPrimaryField]), false, table);
             assert.equal(await page.evaluate(() => editorScope.hasUnsavedChanges()), false, table);
             if (table === 'sys_script_include') {
-                const sandbox = page.getByRole('checkbox', { name: 'Sandbox enabled', exact: true });
+                const sandbox = page.getByRole('checkbox', { name: 'Sandbox', exact: true });
                 assert.equal(await sandbox.isChecked(), false);
                 await sandbox.check();
                 await page.getByRole('button', { name: 'Save', exact: true }).click();
@@ -1058,6 +1225,7 @@ test('new records open directly in Editor+, create on Save and retain newer typi
                                 respond(success ? { success: true, sys_id: id, created_record: record } : { success: false, error: 'Creation rejected' });
                             };
                         } else if (params.sysparm_name === 'getWidgetDefaults') respond(defaults);
+                        else if (params.sysparm_name === 'saveEs12') respond({ success: true, result: params.enabled === 'true' });
                         else if (params.sysparm_name === 'getEditorRecordTypes') respond({ success: true, types });
                         else if (params.sysparm_name === 'getUserPrefs') respond({ success: true, value: '{}' });
                         else respond({ success: true, versions: [] });
@@ -1073,6 +1241,10 @@ test('new records open directly in Editor+, create on Save and retain newer typi
             await page.waitForFunction(() => !editorScope.loading);
             assert.equal(await page.evaluate(() => editorScope.loadError), null, table);
             assert.equal(await page.evaluate(() => editorScope.isNewWidget), true);
+            if (defaults.widget.es12_supported) {
+                await page.locator('#chk-es12').check();
+                assert.equal(await page.evaluate(() => calls.some(call => call.sysparm_name === 'saveEs12')), false);
+            }
             assert.equal(await page.evaluate(() => calls.some(call => call.sysparm_name === 'saveWidget' || call.sysparm_name === 'getVersions')), false);
             assert.equal(await page.locator('.we-record-name').innerText(), 'New ' + defaults.record_label, table);
             await page.locator('#record-field-' + defaults.primary_field).fill('NewRecord');
@@ -1124,7 +1296,14 @@ test('new records open directly in Editor+, create on Save and retain newer typi
             assert.equal(fieldSave.new_record, undefined);
             assert.deepEqual(JSON.parse(fieldSave.original), { [field]: 'created code' });
             assert.equal(await page.evaluate(() => editorScope.hasUnsavedChanges()), false);
-            assert.equal(await page.evaluate(() => calls.some(call => ['getTemplates', 'getProviders', 'saveEs12'].includes(call.sysparm_name))), false);
+            assert.equal(await page.evaluate(() => calls.some(call => ['getTemplates', 'getProviders'].includes(call.sysparm_name))), false);
+            const es12Calls = await page.evaluate(() => calls.filter(call => call.sysparm_name === 'saveEs12'));
+            assert.equal(es12Calls.length, defaults.widget.es12_supported ? 1 : 0, table);
+            if (es12Calls.length) {
+                assert.equal(es12Calls[0].sys_id, id);
+                assert.equal(es12Calls[0].record_table, table);
+                assert.equal(es12Calls[0].enabled, 'true');
+            }
         }
         assert.deepEqual(errors, []);
     } finally {

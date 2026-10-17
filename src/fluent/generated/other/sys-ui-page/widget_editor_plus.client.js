@@ -5499,7 +5499,7 @@
                                 }
                             }
                             _acceptWidgetSave(acceptedPayload);
-                            // Sync ES12 — SYS_ID is now set even for newly-created widgets
+                            // Sync ES12 once the record has a SYS_ID.
                             $scope.saveEs12();
                             // Always refresh versions after a save so the new entry appears in the dropdown
                             ajax('getVersions', { sys_id: SYS_ID }).then(function (d) {
@@ -5556,9 +5556,8 @@
 
                 // ES12
                 $scope.saveEs12 = function () {
-                    if ($scope.isWidgetRecord === false) return;
-                    // Defer until the widget record exists (new unsaved widget has no SYS_ID).
-                    // For existing widgets the server does an upsert, so no pre-existence check needed.
+                    if ($scope.isWidgetRecord === false && !$scope.widget.es12_supported) return;
+                    // Defer until the record exists; the server upserts the setting.
                     if (!SYS_ID) {
                         return;
                     }

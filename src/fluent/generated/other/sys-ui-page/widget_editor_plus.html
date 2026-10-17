@@ -634,6 +634,10 @@
         }
         .we-desc-textarea { resize: vertical; width: 29.375rem; overflow-y: auto; min-height: 3.375rem; max-height: 65vh; max-width: 80vw; }
         .we-record-more-fields input[type="text"] { width: 29.375rem; max-width: 80vw; }
+        .we-popover .we-field-boolean { flex-direction: row; align-items: center; gap: 0.5rem; }
+        .we-popover .input-group-checkbox { display: inline-flex; flex-direction: row-reverse; align-items: center; align-self: flex-start; gap: 0.5rem; }
+        .we-popover .input-group-checkbox label { margin: 0; }
+        .we-header .we-popover input[type="checkbox"] { margin: 0; flex: 0 0 auto; }
         .we-widget-origin { display: block; margin-top: 0.625rem; color: rgba(var(--now-color_text--primary), 0.4); font-size: var(--now-font-size--sm); cursor: help; }
         .we-roles-count {
             cursor: pointer;
@@ -3284,7 +3288,7 @@
                 <div class="we-header-group" ng-if="!isWidgetRecord">
                     <div class="we-field we-record-field we-field-with-popover" ng-repeat="field in additionalWidgetFields track by field.name" ng-if="!field.more">
                         <div class="we-field-label-row">
-                            <label ng-attr-for="record-field-{{field.name}}">{{field.label}}</label>
+                            <label ng-attr-for="record-field-{{field.name}}" title="{{field.label}}">{{field.shortLabel || field.label}}</label>
                             <i ng-if="field.name === recordPrimaryField" class="we-info-icon" ng-class="{'icon-arrow-up-rounded': openDropdown === 'description', 'icon-arrow-down-rounded': openDropdown !== 'description'}" ng-click="toggleDropdown('description'); $event.stopPropagation()" ng-keydown="onDropdownTriggerKeydown($event, 'description')" title="More fields" aria-label="More fields" tabindex="0" role="button" aria-haspopup="true" aria-expanded="{{openDropdown === 'description'}}" aria-controls="we-record-more-fields"></i>
                             <span class="we-pane-unsaved-dot" ng-if="headerDirty[field.name]" title="Unsaved changes"></span>
 
@@ -3294,12 +3298,15 @@
                         <input ng-if="field.type === 'reference'" type="text" class="form-control" ng-attr-id="record-field-{{field.name}}" ng-value="field.displayValue" readonly="readonly" />
                         <input ng-if="field.type !== 'boolean' &amp;&amp; field.type !== 'choice' &amp;&amp; field.type !== 'reference'" type="text" class="form-control" ng-class="{'we-record-primary': field.name === recordPrimaryField}" ng-attr-id="record-field-{{field.name}}" ng-model="widget[field.name]" ng-readonly="isVersionView || !canWriteWidget || !field.canWrite" />
                         <div id="we-record-more-fields" class="we-popover we-record-more-fields" ng-if="field.name === recordPrimaryField &amp;&amp; openDropdown === 'description'" ng-click="$event.stopPropagation()" we-dropdown-auto-pos="we-dropdown-auto-pos">
-                            <div class="we-field" ng-repeat="field in additionalWidgetFields track by field.name" ng-if="field.more">
-                                <div class="we-field-label-row"><label ng-attr-for="record-more-{{field.name}}">{{field.label}}</label></div>
+                            <div class="we-field" ng-class="{'we-field-boolean': field.type === 'boolean'}" ng-repeat="field in additionalWidgetFields track by field.name" ng-if="field.more">
+                                <div class="we-field-label-row"><label ng-attr-for="record-more-{{field.name}}" title="{{field.label}}">{{field.label}}</label></div>
                                 <textarea ng-if="field.multiline" we-auto-resize="we-auto-resize" class="form-control we-desc-textarea" ng-attr-id="record-more-{{field.name}}" ng-model="widget[field.name]" ng-readonly="isVersionView || !canWriteWidget || !field.canWrite" rows="3"></textarea>
-                                <input ng-if="!field.multiline" type="text" class="form-control" ng-attr-id="record-more-{{field.name}}" ng-model="widget[field.name]" ng-readonly="isVersionView || !canWriteWidget || !field.canWrite" />
+                                <input ng-if="field.type === 'boolean'" type="checkbox" class="checkbox" ng-attr-id="record-more-{{field.name}}" ng-model="widget[field.name]" ng-disabled="isVersionView || !canWriteWidget || !field.canWrite" />
+                                <input ng-if="!field.multiline &amp;&amp; field.readOnly" type="text" class="form-control" ng-attr-id="record-more-{{field.name}}" ng-value="field.displayValue" readonly="readonly" />
+                                <input ng-if="!field.multiline &amp;&amp; !field.readOnly &amp;&amp; field.type !== 'boolean'" type="text" class="form-control" ng-attr-id="record-more-{{field.name}}" ng-model="widget[field.name]" ng-readonly="isVersionView || !canWriteWidget || !field.canWrite" />
                             </div>
-                            <div class="we-field"><label for="record-application">Application</label><input id="record-application" type="text" class="form-control" ng-model="widget.application" readonly="readonly" /></div>
+                            <div class="we-field"><label for="record-application">{{widget.application_label}}</label><input id="record-application" type="text" class="form-control" ng-model="widget.application" readonly="readonly" /></div>
+                            <span class="we-widget-origin" ng-if="widgetOrigin" title="{{widgetOrigin.tooltip}}" ng-bind-template="Established {{widgetOrigin.year}} by {{widgetOrigin.founder}}"></span>
                         </div>
                     </div>
                 </div>
@@ -3621,8 +3628,8 @@
 
                         <!-- Right: ES12 toggle, format, ext-link, debugger, close -->
                         <span class="we-pane-right-actions">
-                            <span ng-if="isWidgetRecord &amp;&amp; item.key === 'script' &amp;&amp; !isVersionView" class="we-toggle we-toggle-inline input-group-checkbox we-pane-es12" title="ES12 / Modern JavaScript">
-                                <input type="checkbox" class="checkbox" id="chk-es12" ng-model="widget.es12" ng-change="saveEs12()" ng-disabled="!canWriteWidget" />
+                            <span ng-if="((isWidgetRecord &amp;&amp; item.key === 'script') || (!isWidgetRecord &amp;&amp; widget.es12_supported &amp;&amp; item.scriptKind === 'server' &amp;&amp; !item.recordType)) &amp;&amp; !isVersionView" class="we-toggle we-toggle-inline input-group-checkbox we-pane-es12" title="ES12 / Modern JavaScript">
+                                <input type="checkbox" class="checkbox" id="chk-es12" ng-model="widget.es12" ng-change="saveEs12()" ng-disabled="!canWriteWidget || item.readOnly" />
                                 <label class="checkbox-label" for="chk-es12">ES12</label>
                             </span>
 

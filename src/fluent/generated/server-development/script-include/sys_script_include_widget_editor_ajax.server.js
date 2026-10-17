@@ -30,14 +30,16 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 singular: 'Script Include',
                 primary: 'name',
                 fields: [
-                    { name: 'name', label: 'Name', required: true },
-                    { name: 'active', label: 'Active', type: 'boolean' },
-                    { name: 'client_callable', label: 'Client callable', type: 'boolean' },
-                    { name: 'sandbox_callable', label: 'Sandbox enabled', type: 'boolean' },
-                    { name: 'access', label: 'Accessible from', type: 'choice' },
-                    { name: 'description', label: 'Description', multiline: true, more: true },
-                    { name: 'api_name', label: 'API name', readOnly: true, more: true },
-                    { name: 'script', label: 'Script', language: 'javascript', scriptKind: 'server' },
+                    { name: 'name', required: true },
+                    { name: 'active', type: 'boolean' },
+                    { name: 'client_callable', shortLabel: 'Client', type: 'boolean' },
+                    { name: 'sandbox_callable', shortLabel: 'Sandbox', type: 'boolean' },
+                    { name: 'access', type: 'choice' },
+                    { name: 'description', multiline: true, more: true },
+                    { name: 'api_name', readOnly: true, more: true },
+                    { name: 'mobile_callable', type: 'boolean', more: true },
+                    { name: 'sys_policy', readOnly: true, more: true },
+                    { name: 'script', language: 'javascript', scriptKind: 'server' },
                 ],
             },
             sp_css: {
@@ -45,8 +47,9 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 singular: 'Style Sheet',
                 primary: 'name',
                 fields: [
-                    { name: 'name', label: 'Name', required: true },
-                    { name: 'css', label: 'CSS/SCSS', language: 'scss' },
+                    { name: 'name', required: true },
+                    { name: 'active', type: 'boolean' },
+                    { name: 'css', language: 'scss' },
                 ],
             },
             sys_ui_script: {
@@ -54,12 +57,12 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 singular: 'UI Script',
                 primary: 'name',
                 fields: [
-                    { name: 'name', label: 'Name', required: true },
-                    { name: 'active', label: 'Active', type: 'boolean' },
-                    { name: 'global', label: 'Global', type: 'boolean' },
-                    { name: 'ui_type', label: 'UI type', type: 'choice' },
-                    { name: 'description', label: 'Description', multiline: true, more: true },
-                    { name: 'script', label: 'Script', language: 'javascript', scriptKind: 'client' },
+                    { name: 'name', required: true },
+                    { name: 'active', type: 'boolean' },
+                    { name: 'global', type: 'boolean' },
+                    { name: 'ui_type', type: 'choice' },
+                    { name: 'description', multiline: true, more: true },
+                    { name: 'script', language: 'javascript', scriptKind: 'client' },
                 ],
             },
             sp_angular_provider: {
@@ -67,9 +70,10 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 singular: 'Angular Provider',
                 primary: 'name',
                 fields: [
-                    { name: 'name', label: 'Name', required: true },
-                    { name: 'type', label: 'Type', type: 'choice' },
-                    { name: 'script', label: 'Script', language: 'javascript', scriptKind: 'client' },
+                    { name: 'name', required: true },
+                    { name: 'active', type: 'boolean' },
+                    { name: 'type', type: 'choice' },
+                    { name: 'script', language: 'javascript', scriptKind: 'client' },
                 ],
             },
             sys_ui_page: {
@@ -77,15 +81,15 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 singular: 'UI Page',
                 primary: 'name',
                 fields: [
-                    { name: 'name', label: 'Name', required: true },
-                    { name: 'category', label: 'Category', type: 'choice' },
-                    { name: 'direct', label: 'Direct', type: 'boolean' },
-                    { name: 'description', label: 'Description', multiline: true, more: true },
-                    { name: 'html', label: 'HTML / Jelly', language: 'html' },
-                    { name: 'client_script', label: 'Client script', language: 'javascript', scriptKind: 'client' },
+                    { name: 'name', required: true },
+                    { name: 'active', type: 'boolean' },
+                    { name: 'category', type: 'choice' },
+                    { name: 'direct', type: 'boolean' },
+                    { name: 'description', multiline: true, more: true },
+                    { name: 'html', language: 'html' },
+                    { name: 'client_script', language: 'javascript', scriptKind: 'client' },
                     {
                         name: 'processing_script',
-                        label: 'Processing script',
                         language: 'javascript',
                         scriptKind: 'server',
                     },
@@ -96,9 +100,10 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 singular: 'Angular HTML Template',
                 primary: 'id',
                 fields: [
-                    { name: 'id', label: 'Template ID', required: true },
-                    { name: 'sp_widget', label: 'Widget', type: 'reference', readOnly: true },
-                    { name: 'template', label: 'HTML template', language: 'html' },
+                    { name: 'id', required: true },
+                    { name: 'active', type: 'boolean' },
+                    { name: 'sp_widget', type: 'reference', readOnly: true },
+                    { name: 'template', language: 'html' },
                 ],
             },
         };
@@ -166,6 +171,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             Object.keys(source).forEach(function (key) {
                 def[key] = source[key];
             });
+            def.label = String(element.getLabel());
             def.type = def.type || 'string';
             def.canWrite = !def.readOnly && element.canWrite();
             if (def.type === 'choice') def.choices = this._getEditorChoices(gr.getTableName(), def.name);
@@ -177,6 +183,25 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     _editorValue: function (gr, def) {
         var value = gr.getValue(def.name) || '';
         return def.type === 'boolean' ? value === '1' || value === 'true' : String(value);
+    },
+
+    _getRecordOrigin: function (table, sysId) {
+        if (!sysId) return null;
+        // Use the oldest readable update version, matching the widget's established date and founder.
+        var gr = new GlideRecordSecure('sys_update_version');
+        gr.addQuery('name', table + '_' + sysId);
+        gr.orderBy('sys_created_on');
+        gr.setLimit(1);
+        gr.query();
+        if (!gr.next() || !gr.getElement('sys_created_on').canRead() || !gr.getElement('sys_created_by').canRead())
+            return null;
+        var founder = gr.getValue('sys_created_by') || '';
+        var user = new GlideRecordSecure('sys_user');
+        user.addQuery('user_name', founder);
+        user.setLimit(1);
+        user.query();
+        if (user.next() && user.getElement('name').canRead()) founder = user.getDisplayValue('name') || founder;
+        return { created_on: gr.getValue('sys_created_on'), founder: founder };
     },
 
     getEditorRecords: function () {
@@ -265,13 +290,14 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             application: '',
             application_sys_id: '',
             canWrite: isNew ? gr.canCreate() : gr.canWrite(),
+            widgetOrigin: this._getRecordOrigin(gr.getTableName(), sysId),
         };
         var editors = [],
             fields = [];
         for (var i = 0; i < defs.length; i++) {
             var def = defs[i];
             values[def.name] = this._editorValue(gr, def);
-            if (def.type === 'reference') def.displayValue = gr.getDisplayValue(def.name) || '';
+            if (def.type === 'reference' || def.readOnly) def.displayValue = gr.getDisplayValue(def.name) || '';
             if (def.language) {
                 editors.push({
                     key: def.name,
@@ -291,10 +317,28 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         ) {
             return { success: false, error: 'Record not found or access denied.' };
         }
+        values.es12_supported = editors.some(function (editor) {
+            return editor.scriptKind === 'server';
+        });
+        values.es12 = false;
+        values.es12_record_exists = false;
+        if (sysId && values.es12_supported) {
+            var esGr = new GlideRecordSecure('sys_es_latest_script');
+            esGr.addQuery('id', sysId);
+            esGr.addQuery('table', gr.getTableName());
+            esGr.query();
+            if (esGr.next() && esGr.getElement('use_es_latest').canRead()) {
+                values.es12_record_exists = true;
+                var esValue = esGr.getValue('use_es_latest');
+                values.es12 = esValue === '1' || esValue === 'true';
+            }
+        }
         if (profile.primary === 'id') values.name = values.id;
         ['sys_scope', 'sys_policy', 'sys_updated_on', 'sys_updated_by', 'sys_mod_count'].forEach(function (name) {
             if (gr.isValidField(name) && gr.getElement(name).canRead()) values[name] = gr.getValue(name) || '';
         });
+        if (gr.isValidField('sys_scope') && gr.getElement('sys_scope').canRead())
+            values.application_label = String(gr.getElement('sys_scope').getLabel());
         if (values.sys_scope) {
             values.application_sys_id = values.sys_scope;
             values.application = gr.getDisplayValue('sys_scope');
@@ -591,27 +635,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         var sysPolicy = gr.getValue('sys_policy') || '';
         var sysPolicyDisplay = sysPolicy ? gr.getDisplayValue('sys_policy') : '';
 
-        // Oldest sys_update_version for this widget → "est. year" + founder name
-        var widgetOrigin = null;
-        var ovGr = new GlideRecordSecure('sys_update_version');
-        ovGr.addQuery('name', 'sp_widget_' + sysId);
-        ovGr.orderBy('sys_created_on');
-        ovGr.setLimit(1);
-        ovGr.query();
-        if (ovGr.next()) {
-            var originCreatedOn = ovGr.getValue('sys_created_on'); // UTC "YYYY-MM-DD HH:MM:SS"
-            var originUser = ovGr.getValue('sys_created_by');
-            var originDisplay = originUser;
-            var uGr = new GlideRecordSecure('sys_user');
-            uGr.addQuery('user_name', originUser);
-            uGr.setLimit(1);
-            uGr.query();
-            if (uGr.next()) originDisplay = uGr.getDisplayValue('name');
-            widgetOrigin = {
-                created_on: originCreatedOn,
-                founder: originDisplay,
-            };
-        }
+        var widgetOrigin = this._getRecordOrigin('sp_widget', sysId);
 
         // Volatility risk
         var widgetVolLevel = '';
@@ -2278,14 +2302,15 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     ////////////////////////////////////////////////////////////
 
     /**
-     * Upserts a sys_es_latest_script record to enable or disable ES12 mode for a widget.
+     * Upserts a sys_es_latest_script record to enable or disable ES12 mode for a server-script record.
      * Never deletes the record; sets use_es_latest=false to disable.
-     * Accepts `sys_id` (sp_widget sys_id) and `enabled` ('true' to enable, any other value to disable).
+     * Accepts `sys_id`, `record_table` (defaults to sp_widget) and `enabled` ('true' to enable).
      * @returns {{success: boolean, result: boolean}} Return value.
      */
     saveEs12: function () {
         var sysId = this.getParameter('sys_id');
         var enabled = this.getParameter('enabled') == 'true';
+        var table = this._getEditorTable();
         if (!sysId) {
             return this._answer({
                 success: false,
@@ -2293,9 +2318,27 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             });
         }
 
+        if (table !== 'sp_widget') {
+            var profiles = this._getEditorProfiles();
+            if (!Object.prototype.hasOwnProperty.call(profiles, table))
+                return this._answer({ success: false, error: 'Record type not supported.' });
+            var record = new GlideRecordSecure(table);
+            if (
+                !/^[a-f0-9]{32}$/i.test(sysId) ||
+                !record.get(sysId) ||
+                !record.canRead() ||
+                !record.canWrite() ||
+                (record.isValidField('sys_policy') && record.getValue('sys_policy')) ||
+                !this._getEditorFieldDefs(record, profiles[table]).some(function (def) {
+                    return def.scriptKind === 'server' && def.canWrite;
+                })
+            )
+                return this._answer({ success: false, error: 'ES12 is not supported or write access is denied.' });
+        }
+
         var gr = new GlideRecordSecure('sys_es_latest_script');
         gr.addQuery('id', sysId);
-        gr.addQuery('table', 'sp_widget');
+        gr.addQuery('table', table);
         gr.query();
 
         if (gr.next()) {
@@ -2309,7 +2352,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         } else {
             gr.initialize();
             gr.setValue('id', sysId);
-            gr.setValue('table', 'sp_widget');
+            gr.setValue('table', table);
             gr.setValue('use_es_latest', enabled);
             if (!gr.insert()) {
                 return this._answer({
