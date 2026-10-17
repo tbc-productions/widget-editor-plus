@@ -842,7 +842,7 @@
                             <div class="cp-stats-boards"><div class="cp-stats-board" ng-repeat="item in ctrl.skeletonBoards"><span class="we-skeleton-bar" style="width:60%"></span><span class="we-skeleton-bar" style="width:100%" ng-repeat="row in ctrl.skeletonRows"></span></div></div>
                         </div>
                         <div ng-if="ctrl.statistics.loaded">
-                            <dl class="cp-stats-facts"><div class="panel panel-default cp-stat-card" ng-class="fact.style" ng-repeat="fact in ctrl.statistics.facts"><dt><span ng-bind="fact.label"></span><i class="fa cp-stats-icon" aria-hidden="true" ng-class="fact.icon"></i></dt><dd><a class="cp-stats-name dc-link" ng-if="fact.href" ng-href="{{fact.href}}" ng-bind="fact.value"></a><span ng-if="!fact.href" ng-bind="fact.value"></span></dd></div></dl>
+                            <dl class="cp-stats-facts"><div class="panel panel-default cp-stat-card" ng-class="fact.style" ng-repeat="fact in ctrl.statistics.facts"><dt><span ng-bind="fact.label"></span><i class="fa cp-stats-icon" aria-hidden="true" ng-class="fact.icon"></i></dt><dd><a class="cp-stats-name dc-link" ng-if="fact.href" ng-href="{{fact.href}}" credit-stat-value="fact.value"></a><span ng-if="!fact.href" credit-stat-value="fact.value"></span></dd></div></dl>
                             <section class="cp-activity" ng-if="ctrl.statistics.activity.length" credit-activity="ctrl.statistics.activity" aria-label="Record activity">
                                 <h3>Activity <i class="fa fa-line-chart cp-stats-icon" aria-hidden="true"></i><span class="cp-activity-range" aria-label="Visible activity dates"></span></h3>
                                 <div class="cp-activity-body">

@@ -2627,6 +2627,24 @@
                 },
             };
         });
+        app.directive('creditStatValue', function () {
+            return {
+                restrict: 'A',
+                link: function (scope, element, attrs) {
+                    scope.$watch(attrs.creditStatValue, function (value) {
+                        var node = element[0],
+                            text = value == null ? '' : String(value),
+                            parts = text.indexOf('@') === -1 ? [text] : text.split(/([@.])/);
+                        node.textContent = '';
+                        parts.forEach(function (part) {
+                            if (part === '@') node.appendChild(document.createElement('wbr'));
+                            node.appendChild(document.createTextNode(part));
+                            if (part === '.') node.appendChild(document.createElement('wbr'));
+                        });
+                    });
+                },
+            };
+        });
         app.directive('creditContribution', function () {
             var observer = window.IntersectionObserver
                 ? new IntersectionObserver(

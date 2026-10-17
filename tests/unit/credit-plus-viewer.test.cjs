@@ -1121,6 +1121,43 @@ test('statistics load only on demand, render safe leaderboards, cache while open
     } finally { await browser.close(); }
 });
 
+test('Founder email values prefer punctuation breaks without changing copied text or overflowing', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        for (const width of [1280, 390]) for (const linked of [false, true]) {
+            const page = await browser.newPage(); await initialise(page, width);
+            await page.evaluate(linked => window.nextAnswer = {
+                success: true, ageDays: 1, founder: 'alex.smith@example.com.au', founderUserId: linked ? '3'.repeat(32) : '',
+                updateSetCount: 1, contributorCount: 1, added: 1, removed: 0, creators: [], destroyers: [], creatorSets: [], destroyerSets: [],
+            }, linked);
+            await page.getByRole('button', { name: 'Statistics', exact: true }).click(); await settle(page);
+            const card = page.locator('.cp-stat-card').filter({ has: page.locator('dt', { hasText: /^Founder$/ }) });
+            const value = card.locator('[credit-stat-value]');
+            assert.equal(await value.textContent(), 'alex.smith@example.com.au');
+            assert.equal(await value.locator('wbr').count(), 4);
+            assert.equal(await value.locator('wbr').evaluateAll(nodes => nodes.every(node => node.previousSibling.textContent === '.' || node.nextSibling.textContent === '@')), true);
+            assert.equal(await value.evaluate(node => {
+                const selection = getSelection(), range = document.createRange();
+                range.selectNodeContents(node); selection.removeAllRanges(); selection.addRange(range);
+                return selection.toString();
+            }), 'alex.smith@example.com.au');
+            assert.equal(await value.evaluate(node => node.getBoundingClientRect().height > parseFloat(getComputedStyle(node).fontSize) * 1.25), true);
+            for (const name of ['a'.repeat(80) + '@example.com', 'Ada Lovelace', '<img src=x onerror=alert(1)>@example.com']) {
+                await page.evaluate(name => {
+                    const scope = angular.element(document.getElementById('credit-plus')).scope();
+                    scope.ctrl.statistics.facts.find(fact => fact.label === 'Founder').value = name;
+                    scope.$apply();
+                }, name);
+                assert.equal(await value.textContent(), name);
+                assert.equal(await card.evaluate(node => node.scrollWidth <= node.clientWidth), true);
+                assert.equal(await value.locator('img').count(), 0);
+                if (name === 'Ada Lovelace') assert.equal(await value.locator('wbr').count(), 0);
+            }
+            await page.close();
+        }
+    } finally { await browser.close(); }
+});
+
 test('people leaderboards show photos and consistent coloured initials with safe image fallbacks in both themes', async () => {
     const browser = await chromium.launch({ headless: true });
     try {
