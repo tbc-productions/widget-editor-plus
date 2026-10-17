@@ -1,7 +1,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const { chromium } = require('@playwright/test');
+const { chromium, expect } = require('@playwright/test');
 
 let browser;
 before(async () => { browser = await chromium.launch({ headless: true }); });
@@ -2326,10 +2326,15 @@ test('group attribution stays visible while scrolling and yields to the next gro
                 await page.evaluate(() => new Promise(requestAnimationFrame));
             }
             const scrollTop = () => monaco ? page.evaluate(() => creditEditors[0].getScrollTop()) : pane.evaluate(node => node.scrollTop);
-            const top = async () => (await pane.boundingBox()).y;
+            async function assertSticky(index, message) {
+                await expect.poll(() => pane.evaluate((node, index) => {
+                    const card = node.querySelectorAll('.cp-attribution-block')[index];
+                    return Math.abs(card.getBoundingClientRect().top - node.getBoundingClientRect().top);
+                }, index), { message }).toBeLessThan(1);
+            }
             await scroll(1200);
             assert.equal(await cards.count(), 2, 'One set of details is rendered per group');
-            assert.ok(Math.abs((await cards.first().boundingBox()).y - await top()) < 1, 'The current group stays at the top of the pane');
+            await assertSticky(0, 'The current group stays at the top of the pane');
             await cards.first().locator('.cp-author').evaluate(node => node.focus({ preventScroll: true }));
             await page.keyboard.press('Shift+F10');
             assert.equal(await page.locator('#cp-context-menu').isVisible(), true);
@@ -2338,24 +2343,28 @@ test('group attribution stays visible while scrolling and yields to the next gro
             await page.keyboard.press('Escape');
             assert.equal(await scrollTop(), menuScroll, 'Returning focus to the sticky author preserves the scroll position');
             await page.screenshot({ path: '/tmp/credit-sticky-attribution-' + width + '-' + (monaco ? 'monaco' : 'fallback') + '.png', fullPage: true });
-            const nextTop = (await cards.nth(1).boundingBox()).y - await top() + await scrollTop();
+            const nextTop = await pane.evaluate((node, monaco) =>
+                node.querySelectorAll('.cp-attribution-block')[1].getBoundingClientRect().top - node.getBoundingClientRect().top +
+                (monaco ? creditEditors[0].getScrollTop() : node.scrollTop), monaco);
             await scroll(nextTop - 24);
-            const first = await cards.first().boundingBox(), next = await cards.nth(1).boundingBox();
-            assert.ok(first.y < await top() && first.y + first.height <= next.y + 1, 'Details stop at their group boundary');
+            await expect.poll(() => pane.evaluate(node => {
+                const [first, next] = [...node.querySelectorAll('.cp-attribution-block')].map(card => card.getBoundingClientRect());
+                return first.top < node.getBoundingClientRect().top && first.bottom <= next.top + 1;
+            }), { message: 'Details stop at their group boundary' }).toBe(true);
             await scroll(nextTop + 200);
-            assert.ok(Math.abs((await cards.nth(1).boundingBox()).y - await top()) < 1, 'The next group becomes sticky');
+            await assertSticky(1, 'The next group becomes sticky');
             await menuAction(page, cards.nth(1).locator('.cp-author'), 'Show matching');
             await scroll(1200);
             assert.equal(await cards.count(), 1);
-            assert.ok(Math.abs((await cards.first().boundingBox()).y - await top()) < 1, 'Filtering rebuilds the sticky group');
+            await assertSticky(0, 'Filtering rebuilds the sticky group');
             await field.getByRole('button', { name: 'Clear created by filter' }).click();
             await scroll(1200);
             assert.equal(await cards.count(), 2);
-            assert.ok(Math.abs((await cards.first().boundingBox()).y - await top()) < 1);
+            await assertSticky(0, 'Clearing the filter rebuilds both sticky groups');
             if (monaco) {
                 await page.evaluate(() => creditEditors[0].updateOptions({ lineHeight: 27 }));
                 await page.evaluate(() => new Promise(requestAnimationFrame));
-                assert.ok(Math.abs((await cards.first().boundingBox()).y - await top()) < 1, 'Font changes refresh sticky bounds');
+                await assertSticky(0, 'Font changes refresh sticky bounds');
             }
             await page.close();
         }

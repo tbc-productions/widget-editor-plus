@@ -27,7 +27,7 @@ let browser;
 before(async () => { browser = await chromium.launch({ headless: true }); });
 after(async () => { if (browser) await browser.close(); });
 
-async function mount({ current = 'widget-editor', admin = true, width = 1024, touch = false, host, rootSize = 16, search = '', capabilities, delay = 0 } = {}) {
+async function mount({ current = 'widget-editor', admin = true, width = 1024, touch = false, host, rootSize = 16, search = '', capabilities, holdContext = false } = {}) {
     const page = await browser.newPage({ viewport: { width, height: 768 }, hasTouch: touch });
     await page.context().route('http://widget-editor.test/**', route => route.fulfill({
         contentType: 'text/html',
@@ -38,17 +38,20 @@ async function mount({ current = 'widget-editor', admin = true, width = 1024, to
             <div class="clipped"><header>${host || `<we-app-drawer current-app="${current}" credit-available="${admin}"></we-app-drawer>`}<span>App title</span></header></div>
             <button id="outside">Outside</button>`,
     }));
-    await page.addInitScript(({ capabilities, delay }) => {
+    await page.addInitScript(({ capabilities, holdContext }) => {
         window.ajaxCalls = [];
+        window.contextResponses = [];
         window.GlideAjax = function (name) {
             const params = {};
             this.addParam = (key, value) => { params[key] = value; };
             this.getXMLAnswer = callback => {
                 window.ajaxCalls.push({ name, params });
-                window.setTimeout(() => callback(JSON.stringify({ success: true, apps: capabilities })), delay);
+                const respond = () => callback(JSON.stringify({ success: true, apps: capabilities }));
+                if (holdContext) window.contextResponses.push(respond);
+                else window.setTimeout(respond, 0);
             };
         };
-    }, { capabilities, delay });
+    }, { capabilities, holdContext });
     await page.goto('http://widget-editor.test/' + search);
     await page.addScriptTag({ content: drawer });
     return page;
@@ -364,12 +367,13 @@ test('unsupported, missing and malformed record context opens apps fresh', async
 });
 
 test('context checks ignore stale responses and refresh after Credit+ selects a different record', async () => {
-    const page = await mount({ current: 'credit', search: '?sysparm_table=sys_script_include&sysparm_record=' + record, capabilities: support, delay: 250 });
+    const page = await mount({ current: 'credit', search: '?sysparm_table=sys_script_include&sysparm_record=' + record, capabilities: support, holdContext: true });
     try {
         await page.getByRole('button', { name: 'Apps', exact: true }).click();
         const link = page.locator('[data-app="widget-editor"] .we-app-drawer-link');
         await expect(link).toHaveAttribute('aria-disabled', 'true');
         assert.equal(await link.getAttribute('href'), null);
+        assert.equal(await page.evaluate(() => window.contextResponses.length), 1);
         await page.evaluate(() => {
             history.replaceState({}, '', '?sysparm_table=incident&sysparm_record=' + 'b'.repeat(32));
             window.GlideAjax = function () {
@@ -380,7 +384,7 @@ test('context checks ignore stale responses and refresh after Credit+ selects a 
         });
         await page.getByRole('button', { name: 'Apps', exact: true }).click();
         await expect(page.locator('nav')).toHaveAttribute('aria-busy', 'false');
-        await page.waitForTimeout(300);
+        await page.evaluate(() => window.contextResponses[0]());
         assert.match(drawerDestination(await link.getAttribute('href')).search, /^\?sys_id=[a-f0-9]{32}$/);
         assert.ok(drawerDestination(await page.locator('[data-app="compare"] .we-app-drawer-link').getAttribute('href')).search.includes('&table=incident&record_id=' + 'b'.repeat(32)));
         await page.evaluate(() => { history.replaceState({}, '', '?sysparm_update=only-update-id'); document.querySelector('nav').hidePopover(); });

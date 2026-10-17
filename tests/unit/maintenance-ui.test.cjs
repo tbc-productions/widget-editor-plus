@@ -527,7 +527,11 @@ test('mobile preview contains long values, preserves focus and recovers from per
     try {
         h.database.sys_ui_page[0].name = '<unsafe & ' + 'LongRecordName'.repeat(15);
         h.database.sys_security_acl[0].undeletable = true;
+        await expect(page.locator('#wep-review-uninstall')).toBeEnabled();
+        const access = page.waitForResponse(response => response.request().method() === 'POST' &&
+            response.request().postDataJSON().method === 'getMaintenanceAccess');
         await page.locator('#wep-uninstall-details summary.panel-heading').click();
+        await access;
         await page.getByRole('button', { name: 'Review records to remove' }).click();
         await expect(page.locator('#wep-uninstall-blocked')).toContainText('permissions');
         await expect(page.locator('#wep-uninstall')).toBeDisabled();
