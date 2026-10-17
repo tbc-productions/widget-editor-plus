@@ -3586,7 +3586,7 @@
                         <span class="we-pane-title" ng-bind="item.label" ng-attr-title="{{item.readOnly ? 'Read-only — no write access' : undefined}}"></span>
                         <span class="we-pane-unsaved-dot" ng-if="item.dirty || item.idDirty" title="Unsaved changes"></span>
 
-                        <button class="btn btn-default we-pane-save-btn" ng-if="(item.dirty || item.idDirty) &amp;&amp; !isVersionView &amp;&amp; canWriteWidget &amp;&amp; (!isNewWidget || item.hasIdInput) &amp;&amp; !item.readOnly" ng-click="savePaneField(item)" title="Save {{item.label}}">Save</button>
+                        <button class="btn btn-default we-pane-save-btn" ng-if="(item.dirty || item.idDirty) &amp;&amp; !isVersionView &amp;&amp; canWriteWidget &amp;&amp; (!isNewWidget || item.hasIdInput) &amp;&amp; !item.readOnly" ng-click="savePaneField(item)" title="Save" aria-label="Save"><i class="icon-save" aria-hidden="true"></i></button>
                         <span class="we-pane-saved-text" ng-if="item.savedAt &amp;&amp; !item.dirty &amp;&amp; !item.idDirty" style="margin-left: 0.3125rem;" ng-bind="getPaneSavedLabel(item)"></span>
                         <span class="we-pane-save-error" ng-if="item.saveError" title="{{item.saveError}}">
                             <span class="icon-warning-circle"></span> {{item.saveError}}
