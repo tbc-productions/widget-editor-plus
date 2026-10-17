@@ -1773,6 +1773,7 @@
                         node('cp-code-view').hidden = !!data;
                         node('cp-table-fallback').hidden = !data;
                         node('cp-attribution').textContent = '';
+                        node('cp-code-monaco').parentNode.style.removeProperty('--cp-content-height');
                         gutter.scrollTop = 0;
                     }
 
@@ -1796,6 +1797,13 @@
 
                     function layoutAnnotations() {
                         if (!creditEditor) return;
+                        var body = node('cp-code-monaco').parentNode;
+                        var height = Math.ceil(creditEditor.getContentHeight()) + 'px';
+                        if (body.style.getPropertyValue('--cp-content-height') !== height) {
+                            body.style.setProperty('--cp-content-height', height);
+                            if (diffEditor) diffEditor.layout();
+                            else creditEditor.layout();
+                        }
                         var font = creditEditor.getOption(monaco.editor.EditorOption.fontInfo);
                         gutterContent.style.fontFamily = font.fontFamily;
                         gutterContent.style.fontSize = font.fontSize + 'px';
@@ -1857,7 +1865,7 @@
                                 domReadOnly: true,
                                 lineHeight: 24,
                                 fontSize: 13,
-                                padding: { top: 8, bottom: 8 },
+                                padding: { top: 0, bottom: 8 },
                                 wordWrap: 'off',
                                 folding: false,
                                 codeLens: false,

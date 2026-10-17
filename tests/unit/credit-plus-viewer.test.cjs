@@ -44,14 +44,16 @@ function installMonaco() {
         createModel: (text, language) => { const model = { text, language, dispose: () => window.disposedModels++ }; window.createdModels.push(model); return model; },
         create: (container, options) => {
             window.creditOptions.push(options); let top = 0, scroll, configuration, zonesChanged;
-            let font = { fontFamily: 'monospace', fontSize: 13, fontWeight: 'normal', letterSpacing: 0, lineHeight: 24 }, padding = 8, zone = 0, hidden = [], groupZones = {}, nextZone = 0;
-            const editor = { getScrollHeight: () => Math.max(container.clientHeight, options.model.text.split('\n').length * font.lineHeight + padding * 2 + zone + Object.values(groupZones).reduce((sum, zone) => sum + zone.heightInPx, 0)), getScrollTop: () => top,
+            let font = { fontFamily: 'monospace', fontSize: 13, fontWeight: 'normal', letterSpacing: 0, lineHeight: 24 }, padding = options.padding?.top ?? 0, bottomPadding = options.padding?.bottom ?? 0, zone = 0, hidden = [], groupZones = {}, nextZone = 0;
+            const editor = {
+                getContentHeight: () => (options.model.text.split('\n').length - hidden.reduce((sum, range) => sum + range.endLineNumber - range.startLineNumber + 1, 0)) * font.lineHeight + padding + bottomPadding + zone + Object.values(groupZones).reduce((sum, zone) => sum + zone.heightInPx, 0),
+                getScrollHeight: () => Math.max(container.clientHeight, editor.getContentHeight()), getScrollTop: () => top,
                 getScrollWidth: () => container.clientWidth, getLayoutInfo: () => ({ height: container.clientHeight, contentWidth: container.clientWidth, horizontalScrollbarHeight: 12 }),
                 getOption: () => font,
                 deltaDecorations: (_old, decorations) => { editor.decorations = decorations; return decorations.map((_, i) => 'decoration-' + i); },
                 setHiddenAreas: ranges => { hidden = ranges; window.hiddenRanges = ranges; },
                 getTopForLineNumber: (number, includeZone) => padding + (number - 1 - hidden.reduce((total, range) => total + Math.max(0, Math.min(number - 1, range.endLineNumber) - range.startLineNumber + 1), 0)) * font.lineHeight + (number > 15 && !(number === 16 && includeZone) ? zone : 0) + Object.values(groupZones).filter(zone => zone.afterLineNumber < number).reduce((sum, zone) => sum + zone.heightInPx, 0),
-                updateOptions: options => { font = { ...font, ...options }; padding = options.padding?.top ?? padding; if (configuration) configuration(); },
+                updateOptions: options => { font = { ...font, ...options }; padding = options.padding?.top ?? padding; bottomPadding = options.padding?.bottom ?? bottomPadding; if (configuration) configuration(); },
                 changeViewZones: callback => {
                     callback({ addZone: zone => {
                         const id = String(++nextZone); groupZones[id] = zone;
@@ -298,6 +300,55 @@ test('inline diff compares the row update to the selected update and restores at
         assert.equal(await part(section, 'cp-code-view').isVisible(), true);
         await page.locator('#cp-retry').click();
         assert.equal(await page.locator('.cp-field-section[open]').count(), 0);
+    } finally { await browser.close(); }
+});
+
+test('short Monaco fields fit their code and attribution, while long fields retain a scrollable height limit', async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        for (const width of [1280, 390]) {
+            const page = await browser.newPage(); await initialise(page, width, true);
+            await page.evaluate(() => {
+                const [first, second] = window.fixture.updates;
+                window.fixture.lines = [first.id, first.id, first.id, second.id, first.id].map((update, i) => ({ number: i + 1, text: 'line' + i + '();', update }));
+            });
+            const field = await openField(page);
+            const body = field.locator('.cp-code-body');
+            async function fitted() {
+                await page.waitForFunction(() => document.querySelector('.cp-code-body').clientHeight === creditEditors[0].getContentHeight());
+                const box = await body.boundingBox();
+                assert.ok(box.height < 320, 'Short fields shrink below the normal minimum height');
+                const row = await part(field, 'cp-attribution').locator('tr').first().boundingBox();
+                assert.equal(row.y, box.y, 'The first attribution starts directly below the field heading');
+                const cells = await part(field, 'cp-attribution').locator('.cp-origin').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().bottom));
+                assert.ok(cells.every(bottom => bottom <= box.y + box.height), 'Attribution groups fit without clipping');
+                return box.height;
+            }
+            const groupedHeight = await fitted();
+            assert.equal(await page.evaluate(() => creditOptions[0].padding.top), 0, 'Code starts at the same position as attribution');
+            await menuAction(page, setCell(field), 'Quick compare');
+            assert.equal(await fitted(), groupedHeight, 'Inline comparison also fits the field');
+            await page.evaluate(() => creditEditors.at(-1).addViewZone(37));
+            await page.waitForFunction(() => document.querySelector('.cp-code-body').clientHeight === creditEditors.at(-1).getContentHeight());
+            assert.equal((await body.boundingBox()).height, groupedHeight + 37, 'Diff view zones remain visible');
+            await part(field, 'cp-diff-close').click();
+            await page.getByRole('button', { name: 'Column view', exact: true }).click();
+            // Closing quick compare creates a new editor for this field.
+            await page.waitForFunction(() => document.querySelector('.cp-code-body').clientHeight === creditEditors.at(-1).getContentHeight());
+            assert.ok((await body.boundingBox()).height < groupedHeight, 'Columns remove unused attribution space');
+            const beforeFilter = (await body.boundingBox()).height;
+            await menuAction(page, part(field, 'cp-attribution').locator('[data-context-kind="author"]').first(), 'Show matching');
+            assert.ok((await body.boundingBox()).height < beforeFilter, 'Filtering shrinks the field again');
+            await page.evaluate(() => window.fixture.lines = Array.from({ length: 120 }, (_, i) => ({ number: i + 1, text: 'line' + i + '();', update: window.fixture.selected })));
+            const long = await openField(page, 'client_script');
+            const longBody = long.locator('.cp-code-body');
+            assert.equal((await longBody.boundingBox()).height, 510, 'Long fields keep the existing 60vh height');
+            assert.ok(await page.evaluate(() => creditEditors.at(-1).getContentHeight()) > 510, 'Long code remains scrollable');
+            await page.setViewportSize({ width, height: 500 });
+            const minimum = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize) * 20);
+            assert.equal((await longBody.boundingBox()).height, Math.max(minimum, 300), 'Long fields retain the existing responsive height limit');
+            await page.close();
+        }
     } finally { await browser.close(); }
 });
 
@@ -567,7 +618,7 @@ test('every field resists ServiceNow table/button sizing and uses theme variable
             assert.equal(await part(section, 'cp-attribution').locator('tr').first().evaluate(node => getComputedStyle(node).display), 'block');
             assert.equal(await part(section, 'cp-gutter-content').evaluate(node => getComputedStyle(node).position), 'relative');
             assert.equal(await part(section, 'cp-attribution').locator('button').count(), 0);
-            assert.equal(await part(section, 'cp-attribution').locator('tr').nth(1).evaluate(row => row.getBoundingClientRect().top - row.closest('.cp-code-body').getBoundingClientRect().top), 32);
+            assert.equal(await part(section, 'cp-attribution').locator('tr').nth(1).evaluate(row => row.getBoundingClientRect().top - row.closest('.cp-code-body').getBoundingClientRect().top), 24);
         }
         await page.addStyleTag({ content: ':root { --now-color_background--primary:255,255,255; --now-button--secondary--color:22,27,28; }' });
         await page.waitForFunction(() => getComputedStyle(document.getElementById('cp-update-button')).backgroundColor === 'rgb(255, 255, 255)');
@@ -653,7 +704,7 @@ test('inline author/set filters combine and clear independently while retaining 
             assert.deepEqual(await numbers(), [1, 3, 6]);
             if (useMonaco) {
                 assert.equal(await page.evaluate(() => window.createdModels[0].text.split('\n').length), 6);
-                assert.deepEqual(await body().locator('tr:not([hidden])').evaluateAll(rows => rows.map(row => parseFloat(row.style.top))), [8, 32, 56]);
+                assert.deepEqual(await body().locator('tr:not([hidden])').evaluateAll(rows => rows.map(row => parseFloat(row.style.top))), [0, 24, 48]);
             }
             await menuAction(page, set(), 'Show matching'); assert.deepEqual(await numbers(), [1, 3, 6]);
             await section.getByRole('button', {name:'Clear created by filter',exact:true}).click();
@@ -2441,11 +2492,15 @@ test('Compare+ drawer opens Credit+ with the same record even when its Customer 
     const record = 'a'.repeat(32);
     try {
         const page = await browser.newPage();
-        await page.route('https://credit.test/**', route => route.fulfill({
-            contentType: 'text/html',
-            body: new URL(route.request().url()).searchParams.get('sys_id') === '9c5bf170283e4d6394aa639c79936587'
-                ? markup : '<we-app-drawer current-app="compare" credit-available="true"></we-app-drawer>',
-        }));
+        await page.route('https://credit.test/**', route => {
+            const url = new URL(route.request().url());
+            if (url.pathname === '/nav_to.do') return route.fulfill({ contentType: 'text/html', body: '<iframe src="/' + url.searchParams.get('uri').replace(/&/g, '&amp;') + '"></iframe>' });
+            return route.fulfill({
+                contentType: 'text/html',
+                body: url.searchParams.get('sys_id') === '9c5bf170283e4d6394aa639c79936587'
+                    ? markup : '<we-app-drawer current-app="compare" credit-available="true"></we-app-drawer>',
+            });
+        });
         await page.addInitScript(() => {
             window.calls = [];
             window.GlideAjax = function (processor) {
@@ -2463,13 +2518,15 @@ test('Compare+ drawer opens Credit+ with the same record even when its Customer 
         await page.addScriptTag({ path: 'src/fluent/generated/other/sys-ui-page/widget_editor_app_drawer.js' });
         await page.getByRole('button', { name: 'Apps', exact: true }).click();
         await page.getByRole('link', { name: 'Credit+', exact: true }).click();
-        await page.waitForURL('https://credit.test/ui_page.do?sys_id=9c5bf170283e4d6394aa639c79936587&sysparm_table=sp_widget&sysparm_record=' + record);
-        await installCredit(page);
-        const request = await page.evaluate(() => window.calls.find(call => call.sysparm_name === 'getCredit'));
+        await page.waitForURL('https://credit.test/nav_to.do?uri=' + encodeURIComponent('ui_page.do?sys_id=9c5bf170283e4d6394aa639c79936587&sysparm_table=sp_widget&sysparm_record=' + record));
+        const frame = page.frames()[1];
+        await frame.waitForLoadState();
+        await installCredit(frame);
+        const request = await frame.evaluate(() => window.calls.find(call => call.sysparm_name === 'getCredit'));
         assert.equal(request.processor, 'WidgetEditorCreditAjax');
         assert.equal(request.sysparm_table, 'sp_widget');
         assert.equal(request.sysparm_record, record);
-        assert.match(await page.locator('#cp-status').textContent(), /No Customer Updates/);
+        assert.match(await frame.locator('#cp-status').textContent(), /No Customer Updates/);
         assert.equal(page.context().pages().length, 1);
     } finally { await browser.close(); }
 });

@@ -498,7 +498,7 @@
         @media (prefers-reduced-motion: reduce) { .cp-field-loading .icon-loading { animation: none; } }
         .cp-gutter-head { align-items: center; display: flex; min-width: 0; overflow: hidden; }
         .cp-gutter-head span { padding: 0.5rem 0.75rem; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .cp-code-body { height: clamp(20rem, 60vh, 45rem); background: rgb(var(--now-color_background--primary, 255 255 255)); }
+        .cp-code-body { height: min(var(--cp-content-height, 45rem), clamp(20rem, 60vh, 45rem)); background: rgb(var(--now-color_background--primary, 255 255 255)); }
         #credit-plus .cp-code-monaco { min-width: 0; overflow: hidden; }
         #credit-plus .cp-gutter { min-width: 0; overflow: hidden; overflow: clip; border-right: 1px solid rgb(var(--now-color_border--secondary, 228 230 235)); }
         #credit-plus .cp-gutter-content { position: relative; }

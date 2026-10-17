@@ -71,8 +71,18 @@
         /* ServiceNow's nav reset overrides the browser's default hidden popover style. */
         we-app-drawer .we-app-drawer-popover:not(:popover-open) { display: none; }
         we-app-drawer .we-app-drawer-title {
+            display: flex; align-items: center; justify-content: space-between; gap: 12px;
             padding: 14px 16px 12px; font-size: 14px; font-weight: 600;
+            background: rgb(var(--now-color_background--secondary, 246, 247, 249));
             border-bottom: 1px solid rgb(var(--now-color_border--secondary, 216, 223, 224));
+        }
+        we-app-drawer .we-app-drawer-properties {
+            display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+            width: 26px; height: 26px; border-radius: 4px; font-size: 16px; line-height: 1;
+            color: rgba(var(--now-color_text--primary, 38, 50, 56), .6); text-decoration: none;
+        }
+        we-app-drawer .we-app-drawer-properties:hover {
+            background: rgba(var(--now-color_text--primary, 38, 50, 56), .08); color: inherit;
         }
         we-app-drawer .we-app-drawer-list { padding: 8px; }
         we-app-drawer .we-app-drawer-option {
@@ -86,6 +96,8 @@
         we-app-drawer .we-app-drawer-option.is-current { background: rgba(var(--now-color--primary-1, 0, 118, 204), .05); }
         we-app-drawer .we-app-drawer-option:hover,
         we-app-drawer .we-app-drawer-option:focus-within { background: rgba(var(--now-color--primary-1, 0, 118, 204), .08); }
+        we-app-drawer .we-app-drawer-option.is-current::before,
+        we-app-drawer .we-app-drawer-option.is-current + .we-app-drawer-option::before,
         we-app-drawer .we-app-drawer-option:hover::before,
         we-app-drawer .we-app-drawer-option:focus-within::before,
         we-app-drawer .we-app-drawer-option:hover + .we-app-drawer-option::before,
@@ -108,7 +120,6 @@
         }
         we-app-drawer .we-app-drawer-copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 2px; }
         we-app-drawer .we-app-drawer-name { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-weight: 500; }
-        we-app-drawer .we-app-drawer-current { font-size: 11px; color: rgb(var(--now-color_text--secondary, 82, 96, 100)); }
         we-app-drawer .we-app-drawer-description { font-size: 11px; color: rgba(var(--now-color_text--primary, 38, 50, 56), .5); }
         we-app-drawer .we-app-drawer-new-tab {
             display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
@@ -127,6 +138,7 @@
         }
         @media (hover: none), (pointer: coarse) {
             we-app-drawer .we-app-drawer-trigger,
+            we-app-drawer .we-app-drawer-properties,
             we-app-drawer .we-app-drawer-new-tab { min-width: 44px; min-height: 44px; }
             we-app-drawer .we-app-drawer-new-tab { opacity: 1; visibility: visible; }
         }
@@ -150,7 +162,7 @@
                     })
                     .map(function (app) {
                         var selected = app.id === current;
-                        var href = '/ui_page.do?sys_id=' + app.page;
+                        var href = '/nav_to.do?uri=' + encodeURIComponent('ui_page.do?sys_id=' + app.page);
                         return [
                             '<div data-app="' +
                                 app.id +
@@ -170,7 +182,6 @@
                                 '" aria-hidden="true"></i></span>',
                             '<span class="we-app-drawer-copy"><span class="we-app-drawer-name">' +
                                 app.name +
-                                (selected ? '<span class="we-app-drawer-current">Current</span>' : '') +
                                 '</span><span class="we-app-drawer-description">' +
                                 app.description +
                                 '</span></span></a>',
@@ -192,7 +203,10 @@
                         '" aria-hidden="true"></i></button>',
                     '<nav class="we-app-drawer-popover" id="' +
                         id +
-                        '" popover="auto" aria-label="Apps"><div class="we-app-drawer-title">Apps</div><div class="we-app-drawer-list">',
+                        '" popover="auto" aria-label="Apps"><div class="we-app-drawer-title"><span>Apps</span>',
+                    '<a class="we-app-drawer-properties" href="/nav_to.do?uri=' +
+                        encodeURIComponent('ui_page.do?sys_id=47cb4ac08e0d4437b5c0a482d8411e30') +
+                        '" title="Properties" aria-label="Properties"><i class="icon-cog" aria-hidden="true"></i></a></div><div class="we-app-drawer-list">',
                     rows,
                     '</div></nav>',
                 ].join('');
@@ -225,7 +239,7 @@
                     return;
                 }
                 if (
-                    !link.classList.contains('we-app-drawer-link') ||
+                    !link.matches('.we-app-drawer-link, .we-app-drawer-properties') ||
                     event.button !== 0 ||
                     event.metaKey ||
                     event.ctrlKey ||
@@ -238,7 +252,7 @@
                     cancelable: true,
                     detail: {
                         href: link.getAttribute('href'),
-                        name: link.querySelector('.we-app-drawer-name').firstChild.textContent,
+                        name: link.title || link.querySelector('.we-app-drawer-name').firstChild.textContent,
                     },
                 });
                 if (!drawer.dispatchEvent(navigation)) event.preventDefault();
@@ -285,15 +299,15 @@
                     var row = drawer.querySelector('[data-app="' + app.id + '"]');
                     if (!row) return;
                     var recordApp = ['widget-editor', 'compare', 'credit', 'assistant'].indexOf(app.id) !== -1;
-                    var href = '/ui_page.do?sys_id=' + app.page;
+                    var uri = 'ui_page.do?sys_id=' + app.page;
                     if (supported[app.id]) {
                         if (app.id === 'widget-editor' || app.id === 'assistant')
-                            href += '&record_table=' + encodeURIComponent(table) + '&record_sys_id=' + record;
-                        if (app.id === 'compare')
-                            href += '&table=' + encodeURIComponent(table) + '&record_id=' + record;
+                            uri += '&record_table=' + encodeURIComponent(table) + '&record_sys_id=' + record;
+                        if (app.id === 'compare') uri += '&table=' + encodeURIComponent(table) + '&record_id=' + record;
                         if (app.id === 'credit')
-                            href += '&sysparm_table=' + encodeURIComponent(table) + '&sysparm_record=' + record;
+                            uri += '&sysparm_table=' + encodeURIComponent(table) + '&sysparm_record=' + record;
                     }
+                    var href = '/nav_to.do?uri=' + encodeURIComponent(uri);
                     row.querySelectorAll('a').forEach(function (link) {
                         if (pending && recordApp) {
                             link.removeAttribute('href');

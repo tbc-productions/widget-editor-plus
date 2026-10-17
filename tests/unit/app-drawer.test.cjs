@@ -14,6 +14,15 @@ const pages = [
     ['widget_editor_credit', 'credit', 'Credit+', 'icon-history'],
     ['widget_editor_plus_properties', 'properties', 'Widget Editor+ Properties', 'icon-cog'],
 ];
+function drawerDestination(href, base = 'http://widget-editor.test/') {
+    const link = new URL(href, base);
+    assert.equal(link.pathname, '/nav_to.do');
+    assert.equal(link.searchParams.size, 1, 'record parameters belong inside the encoded destination');
+    const destination = new URL(link.searchParams.get('uri'), link.origin);
+    assert.equal(destination.pathname, '/ui_page.do');
+    return destination;
+}
+
 let browser;
 before(async () => { browser = await chromium.launch({ headless: true }); });
 after(async () => { if (browser) await browser.close(); });
@@ -25,7 +34,7 @@ async function mount({ current = 'widget-editor', admin = true, width = 1024, to
         body: `<style>html {font-size:${rootSize}px} body {margin:0;font-family:Arial}
             article,aside,details,figcaption,figure,footer,header,hgroup,main,nav,section,summary {display:block}
             header {display:flex;align-items:center;gap:10px;padding:12px 20px;background:#ddede9}
-            .clipped {overflow:hidden;height:70px} #outside {margin-top:450px}</style>
+            .clipped {overflow:hidden;height:70px} #outside {margin-top:500px}</style>
             <div class="clipped"><header>${host || `<we-app-drawer current-app="${current}" credit-available="${admin}"></we-app-drawer>`}<span>App title</span></header></div>
             <button id="outside">Outside</button>`,
     }));
@@ -141,13 +150,14 @@ test('all six existing pages bundle the drawer and select their approved Retina 
                 assert.equal(await selected.locator('i.' + icon).count(), 1);
             }
             assert.equal(await nav.locator('[data-app="properties"]').count(), 0);
+            assert.equal(await nav.getByText('Current', { exact: true }).count(), 0);
             assert.equal(await nav.locator('.icon-open-document-new-tab').count(), 5);
             assert.equal(await page.locator('button .' + icon).count(), 1);
             for (const link of await nav.locator('a').all()) {
                 const newTab = await link.evaluate(el => el.classList.contains('we-app-drawer-new-tab'));
                 assert.equal(await link.getAttribute('target'), newTab ? '_blank' : null);
                 assert.equal(await link.getAttribute('rel'), newTab ? 'noopener noreferrer' : null);
-                assert.match(await link.getAttribute('href'), /^\/ui_page\.do\?sys_id=[a-f0-9]{32}$/);
+                assert.match(drawerDestination(await link.getAttribute('href')).search, /^\?sys_id=[a-f0-9]{32}$/);
             }
             assert.equal(await nav.getByText('Widget Editor+ suite', { exact: true }).count(), 0);
             assert.equal(await nav.getByText('Apps open in a new tab', { exact: true }).count(), 0);
@@ -166,7 +176,7 @@ test('Credit+ stays admin-only and links open a separate tab without changing th
         await page.getByRole('link', { name: 'Open Compare+ in a new tab', exact: true }).click();
         const popup = await popupPromise;
         await popup.waitForLoadState();
-        assert.equal(popup.url(), 'http://widget-editor.test/ui_page.do?sys_id=51ec3d258363b61070b8b5dfeeaad36b');
+        assert.equal(popup.url(), 'http://widget-editor.test/nav_to.do?uri=ui_page.do%3Fsys_id%3D51ec3d258363b61070b8b5dfeeaad36b');
         assert.equal(page.url(), 'http://widget-editor.test/');
         assert.equal(await popup.evaluate(() => window.opener), null);
     } finally { await page.context().close(); }
@@ -183,6 +193,8 @@ test('keyboard and hover reveal the new-tab action; Escape and outside clicks di
         await page.keyboard.press('Enter');
         await expect(nav).toBeVisible();
         await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+        await page.keyboard.press('Tab');
+        await expect(page.getByRole('link', { name: 'Properties', exact: true })).toBeFocused();
         await page.keyboard.press('Tab');
         await expect(firstLink).toBeFocused();
         await expect(action).toBeVisible();
@@ -301,7 +313,7 @@ test('record apps retain compatible context in both actions and primary clicks u
                 const row = page.locator('[data-app="' + app + '"]');
                 const href = await row.locator('.we-app-drawer-link').getAttribute('href');
                 assert.equal(await row.locator('.we-app-drawer-new-tab').getAttribute('href'), href);
-                const url = new URL(href, page.url());
+                const url = drawerDestination(href, page.url());
                 assert.equal(url.searchParams.get(tableParam), table);
                 assert.equal(url.searchParams.get(recordParam), record);
                 assert.equal(url.searchParams.size, 3, 'historical versions must not carry across');
@@ -344,7 +356,7 @@ test('unsupported, missing and malformed record context opens apps fresh', async
             for (const app of ['widget-editor', 'credit']) {
                 const row = page.locator('[data-app="' + app + '"]');
                 for (const link of await row.locator('a').all()) {
-                    assert.match(await link.getAttribute('href'), /^\/ui_page\.do\?sys_id=[a-f0-9]{32}$/);
+                    assert.match(drawerDestination(await link.getAttribute('href')).search, /^\?sys_id=[a-f0-9]{32}$/);
                 }
             }
         } finally { await page.close(); }
@@ -369,11 +381,11 @@ test('context checks ignore stale responses and refresh after Credit+ selects a 
         await page.getByRole('button', { name: 'Apps', exact: true }).click();
         await expect(page.locator('nav')).toHaveAttribute('aria-busy', 'false');
         await page.waitForTimeout(300);
-        assert.match(await link.getAttribute('href'), /^\/ui_page\.do\?sys_id=[a-f0-9]{32}$/);
-        assert.ok((await page.locator('[data-app="compare"] .we-app-drawer-link').getAttribute('href')).includes('&table=incident&record_id=' + 'b'.repeat(32)));
+        assert.match(drawerDestination(await link.getAttribute('href')).search, /^\?sys_id=[a-f0-9]{32}$/);
+        assert.ok(drawerDestination(await page.locator('[data-app="compare"] .we-app-drawer-link').getAttribute('href')).search.includes('&table=incident&record_id=' + 'b'.repeat(32)));
         await page.evaluate(() => { history.replaceState({}, '', '?sysparm_update=only-update-id'); document.querySelector('nav').hidePopover(); });
         await page.getByRole('button', { name: 'Apps', exact: true }).click();
-        assert.match(await page.locator('[data-app="compare"] .we-app-drawer-link').getAttribute('href'), /^\/ui_page\.do\?sys_id=[a-f0-9]{32}$/);
+        assert.match(drawerDestination(await page.locator('[data-app="compare"] .we-app-drawer-link').getAttribute('href')).search, /^\?sys_id=[a-f0-9]{32}$/);
     } finally { await page.close(); }
 });
 
@@ -390,10 +402,61 @@ test('failed compatibility checks restore usable fresh links', async () => {
         await page.getByRole('button', { name: 'Apps', exact: true }).click();
         await expect(page.locator('nav')).toHaveAttribute('aria-busy', 'false');
         assert.equal(await page.locator('a[aria-disabled="true"]').count(), 0);
-        for (const link of await page.locator('nav a').all()) assert.match(await link.getAttribute('href'), /^\/ui_page\.do\?sys_id=[a-f0-9]{32}$/);
+        for (const link of await page.locator('nav a').all()) assert.match(drawerDestination(await link.getAttribute('href')).search, /^\?sys_id=[a-f0-9]{32}$/);
     } finally { await page.close(); }
 });
 
+
+test('the drawer uses the modal surface and keeps separators clear of highlighted rows in both themes', async () => {
+    const html = readFluentField(directory + 'sys_ui_page_8b2e70458373fe1070b8b5dfeeaad35e.now.ts', 'html');
+    const css = html.match(/<style>([\s\S]*?)<\/style>/)[1];
+    for (const [width, surface, text, background] of [[1024, '242,247,248', '23,43,49', '255,255,255'], [320, '39,45,48', '227,233,231', '29,34,37']]) {
+        const page = await mount({ current: 'compare', width });
+        try {
+            await page.addStyleTag({ content: css + ':root { --now-color_background--secondary: ' + surface + '; --now-color_text--primary: ' + text + '; --now-color_background--primary: ' + background + '; }' });
+            await page.evaluate(() => {
+                const reference = document.createElement('div'); reference.className = 'we-modal-header'; document.body.appendChild(reference);
+            });
+            await page.getByRole('button', { name: 'Apps', exact: true }).click();
+            assert.equal(await page.locator('.we-app-drawer-title').evaluate(node => getComputedStyle(node).backgroundColor), await page.locator('.we-modal-header').evaluate(node => getComputedStyle(node).backgroundColor));
+            const separators = () => page.locator('.we-app-drawer-option').evaluateAll(rows => rows.slice(1).map(row => getComputedStyle(row, '::before').opacity));
+            assert.deepEqual(await separators(), ['0', '0', '1', '1'], 'No separator crosses the current app highlight');
+            await page.locator('[data-app="credit"]').hover();
+            assert.deepEqual(await separators(), ['0', '0', '0', '0'], 'Hover hides both neighbouring separators too');
+            await page.mouse.move(0, 700);
+            await page.locator('[data-app="code-search"] .we-app-drawer-link').focus();
+            assert.deepEqual(await separators(), ['0', '0', '1', '0'], 'Keyboard focus uses the same treatment');
+            await page.getByRole('link', { name: 'Properties', exact: true }).focus();
+            await page.screenshot({ path: '/tmp/app-drawer-polish-' + width + '.png' });
+        } finally { await page.close(); }
+    }
+});
+
+test('the header Properties cog uses the existing page and allows unsaved navigation to be cancelled', async () => {
+    const page = await mount();
+    try {
+        await page.getByRole('button', { name: 'Apps', exact: true }).click();
+        const properties = page.getByRole('link', { name: 'Properties', exact: true });
+        assert.equal(await properties.locator('i.icon-cog[aria-hidden="true"]').count(), 1);
+        assert.equal(drawerDestination(await properties.getAttribute('href')).searchParams.get('sys_id'), '47cb4ac08e0d4437b5c0a482d8411e30');
+        const heading = await page.locator('.we-app-drawer-title span').boundingBox(), cog = await properties.boundingBox();
+        assert.ok(cog.x > heading.x + heading.width, 'Properties sits on the right of the heading');
+        await page.evaluate(() => {
+            window.cancelProperties = event => { window.navigation = event.detail; event.preventDefault(); };
+            document.addEventListener('we-app-navigate', window.cancelProperties);
+        });
+        await properties.click();
+        assert.equal(page.url(), 'http://widget-editor.test/');
+        assert.equal(await page.evaluate(() => window.navigation.name), 'Properties');
+        await expect(page.locator('nav')).toBeHidden();
+        await page.evaluate(() => document.removeEventListener('we-app-navigate', window.cancelProperties));
+        await page.getByRole('button', { name: 'Apps', exact: true }).click();
+        const destination = new URL(await properties.getAttribute('href'), page.url()).href;
+        await properties.click();
+        await expect(page).toHaveURL(destination);
+        assert.equal(page.context().pages().length, 1);
+    } finally { await page.close(); }
+});
 
 test('tagline colour matches the real Open modal list subtext in light and dark themes', async () => {
     const html = readFluentField(directory + 'sys_ui_page_8b2e70458373fe1070b8b5dfeeaad35e.now.ts', 'html');
@@ -462,7 +525,7 @@ test('Properties keeps its heading and search, uses a cog drawer button and stay
             const bounds = await nav.boundingBox();
             assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width);
             await nav.getByRole('link', { name: 'Compare+', exact: true }).click();
-            await expect(page).toHaveURL('http://properties.test/ui_page.do?sys_id=51ec3d258363b61070b8b5dfeeaad36b');
+            await expect(page).toHaveURL('http://properties.test/nav_to.do?uri=ui_page.do%3Fsys_id%3D51ec3d258363b61070b8b5dfeeaad36b');
             assert.equal(page.context().pages().length, 1);
             assert.deepEqual(errors, []);
         } finally { await page.context().close(); }

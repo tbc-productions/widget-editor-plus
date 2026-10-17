@@ -1211,7 +1211,7 @@ test('the real editor keeps its drawer clickable in the initial Open modal and g
     const types = serverHarness().api.getEditorRecordTypes().types;
     const browser = await chromium.launch({ headless: true });
     try {
-        for (const mode of ['initial', 'discard', 'save']) {
+        for (const mode of ['initial', 'discard', 'save', 'properties']) {
             const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
             await context.route('https://instance.test/**', route => route.fulfill({ contentType: 'text/html', body: '<html><body>Destination</body></html>' }));
             const page = await context.newPage();
@@ -1272,9 +1272,10 @@ test('the real editor keeps its drawer clickable in the initial Open modal and g
             }
             await trigger.click();
             const row = page.locator('[data-app="compare"]');
-            await row.locator('.we-app-drawer-link').hover();
-            const destination = new URL(await row.locator('.we-app-drawer-link').getAttribute('href'), page.url()).href;
-            if (mode !== 'initial') {
+            const primary = mode === 'properties' ? page.getByRole('link', { name: 'Properties', exact: true }) : row.locator('.we-app-drawer-link');
+            await primary.hover();
+            const destination = new URL(await primary.getAttribute('href'), page.url()).href;
+            if (mode !== 'initial' && mode !== 'properties') {
                 const popupPromise = page.waitForEvent('popup');
                 await row.locator('.we-app-drawer-new-tab').click();
                 const popup = await popupPromise;
@@ -1283,15 +1284,15 @@ test('the real editor keeps its drawer clickable in the initial Open modal and g
                 await expect(unsaved).toBeHidden();
                 await popup.close();
             }
-            await row.locator('.we-app-drawer-link').click();
+            await primary.click();
             if (mode !== 'initial') {
                 await expect(unsaved).toBeVisible();
-                await expect(unsaved.locator('strong')).toHaveText('Compare+');
+                await expect(unsaved.locator('strong')).toHaveText(mode === 'properties' ? 'Properties' : 'Compare+');
                 await unsaved.getByRole('button', { name: 'Cancel', exact: true }).click();
                 await expect(unsaved).toBeHidden();
                 await expect(page.locator('#record-field-name')).toHaveValue('Changed record');
                 await trigger.click();
-                await row.locator('.we-app-drawer-link').click();
+                await primary.click();
                 await expect(unsaved).toBeVisible();
                 await page.evaluate(() => { window.failSave = true; });
                 await unsaved.getByRole('button', { name: 'Save & Open', exact: true }).click();
