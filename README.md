@@ -21,6 +21,7 @@ The installed application uses libraries and APIs already available in ServiceNo
 - [End-to-End Testing](#end-to-end-testing)
 - [Configuration](#configuration)
 - [AI Disclosure](#ai-disclosure)
+- [Licence](#licence)
 
 ---
 
@@ -173,3 +174,9 @@ Admins can edit settings in **Widget Editor+ → Properties**. See the [configur
 ## AI Disclosure
 
 This project was developed with assistance from OpenAI GPT, Anthropic Claude and Google Gemini.
+
+---
+
+## Licence
+
+Copyright (c) 2026 TBC Productions. Licensed under the [MIT Licence](LICENSE).

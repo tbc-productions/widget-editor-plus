@@ -49,6 +49,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 fields: [
                     { name: 'name', required: true },
                     { name: 'active', type: 'boolean' },
+                    { name: 'turn_off_scss_compilation', type: 'boolean', more: true },
                     { name: 'css', language: 'scss' },
                 ],
             },

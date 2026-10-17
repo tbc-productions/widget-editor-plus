@@ -1126,8 +1126,8 @@ test('the real Angular page preserves widgets and opens and saves the six additi
             }), ['8px', '12px', 'none', 'rgb(29, 49, 56)']);
             await firstOption.hover();
             assert.equal(await firstOption.evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(224, 238, 241)');
-            assert.equal(await menu.locator('[aria-current="true"]').innerText(), types.find(type => type.table === table).label);
-            assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), types.map(type => type.label).sort((a, b) => a.localeCompare(b)));
+            assert.equal(await menu.locator('[aria-current="true"]').innerText(), types.find(type => type.table === table).singular);
+            assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), types.map(type => type.singular).sort((a, b) => a.localeCompare(b)));
             if (table === 'sp_css') {
                 await page.evaluate(({ id }) => editorScope.$apply(() => {
                     editorScope.userPrefs.showRecentlyOpenedWidgets = true;
@@ -1146,15 +1146,15 @@ test('the real Angular page preserves widgets and opens and saves the six additi
                 assert.equal(await recent.nth(2).locator('.we-picker-item-icon i').getAttribute('class'), 'icon-locked');
                 assert.equal(await page.locator('.we-picker-col-main .we-picker-item-id').count(), 0);
             }
-            await menu.getByRole('menuitem', { name: 'UI Pages', exact: true }).click();
+            await menu.getByRole('menuitem', { name: 'UI Page', exact: true }).click();
             await page.waitForFunction(() => calls.some(call => call.sysparm_name === 'getEditorRecords' && call.record_table === 'sys_ui_page'));
             assert.equal(await trigger.textContent(), 'UI Page');
             assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
             await page.waitForFunction(() => document.activeElement.id === 'we-picker-search');
             await trigger.press('ArrowDown');
-            await page.waitForFunction(() => document.activeElement.textContent === 'Angular HTML templates');
+            await page.waitForFunction(() => document.activeElement.textContent === 'Angular HTML Template');
             await page.keyboard.press('ArrowDown');
-            assert.equal(await page.evaluate(() => document.activeElement.textContent), 'Angular Providers');
+            assert.equal(await page.evaluate(() => document.activeElement.textContent), 'Angular Provider');
             await page.keyboard.press('Escape');
             assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
             assert.equal(await page.evaluate(() => editorScope.showWidgetPickerModal), true);
@@ -1487,4 +1487,14 @@ test('the real editor keeps its drawer clickable in the initial Open modal and g
             await context.close();
         }
     } finally { await browser.close(); }
+});
+
+test('Style Sheet SCSS compilation is a permission-aware More field', () => {
+    const result = serverHarness('sp_css', { row: { turn_off_scss_compilation: '0' }, noWrite: ['turn_off_scss_compilation'] }).api.getWidget();
+    const field = result.additional_widget_fields.find(def => def.name === 'turn_off_scss_compilation');
+    assert.equal(field.type, 'boolean');
+    assert.equal(field.more, true);
+    assert.equal(field.canWrite, false);
+    const hidden = serverHarness('sp_css', { row: { turn_off_scss_compilation: '0' }, noRead: ['turn_off_scss_compilation'] }).api.getWidget();
+    assert.equal(hidden.additional_widget_fields.some(def => def.name === 'turn_off_scss_compilation'), false);
 });
