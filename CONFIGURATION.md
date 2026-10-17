@@ -1,5 +1,13 @@
 # Configuration
 
+## Continuous integration
+
+Checks and releases use the official Playwright container with browsers and Linux dependencies already installed. Keep the image version in both `.github/workflows/*.yaml` files aligned with the Playwright version in `package-lock.json` when upgrading. Node.js 24 is selected from `.nvmrc` and verified before installing dependencies.
+
+Both workflows cache npm downloads and run `npm ci --prefer-offline`, retaining clean installs and dependency auditing.
+
+Credit+ and scrolling browser tests reuse one Chromium process per file and close each test's browser context in a `finally` block. Tests retain separate cookies, storage and page state. For local unit tests, install only the headless browser with `npx playwright install --only-shell chromium` (add `--with-deps` on Linux if system dependencies are missing).
+
 [Back to README](README.md)
 
 ## App drawer

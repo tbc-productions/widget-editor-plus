@@ -1,17 +1,22 @@
 const { readUiPageSource } = require('../helpers/fluent-source.cjs');
-const { test } = require('node:test');
+const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { chromium } = require('@playwright/test');
+
+let browser;
+before(async () => { browser = await chromium.launch({ headless: true }); });
+after(async () => { await browser?.close(); });
 
 const source = readUiPageSource('src/fluent/generated/other/sys-ui-page/sys_ui_page_widget_editor_code_search.now.ts');
 const css = source.match(/<style>([\s\S]*?)<\/style>/)[1];
 const scrollCode = source.slice(source.indexOf('var tableScrollRequest = 0;'), source.indexOf('vm.openConfig = function'));
 
 test('table navigation scrolls only results across viewport and header sizes', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
         for (const size of [{ width: 1280, height: 800 }, { width: 800, height: 500 }]) {
-            const page = await browser.newPage({ viewport: size });
+            const page = await context.newPage();
+            await page.setViewportSize(size);
             await page.setContent(`<style>${css}</style>
                 <div class="cs-app"><header class="dc-header" style="height:123px"><input placeholder="Search" /></header>
                 <div class="cs-body"><aside class="cs-sidebar">Tables</aside><main class="cs-main">
@@ -104,14 +109,15 @@ test('table navigation scrolls only results across viewport and header sizes', a
             await page.close();
         }
     } finally {
-        await browser.close();
+        await context.close();
     }
 });
 
 test('sticky table header paints over Monaco widgets from a scrolled result card', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     try {
-        const page = await browser.newPage({ viewport: { width: 900, height: 600 } });
+        const page = await context.newPage();
+        await page.setViewportSize({ width: 900, height: 600 });
         await page.setContent(`<style>${css}</style>
             <div class="cs-results" style="width:800px;height:300px">
                 <section class="cs-table-group">
@@ -138,16 +144,17 @@ test('sticky table header paints over Monaco widgets from a scrolled result card
         assert.equal(layers.overlap, true, 'The fixture should put Monaco\'s widget behind the sticky header');
         assert.equal(layers.topmostInsideHeader, true, 'The sticky header should be the topmost painted layer');
     } finally {
-        await browser.close();
+        await context.close();
     }
 });
 
 test('advanced conditions get their own row and results keep the remaining height', async () => {
-    const browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
     const advancedForm = source.match(/<form class="cs-advanced"[\s\S]*?<\/form>/)[0];
     try {
         for (const height of [800, 500]) {
-            const page = await browser.newPage({ viewport: { width: 1280, height } });
+            const page = await context.newPage();
+            await page.setViewportSize({ width: 1280, height });
             await page.setContent(`<style>${css}</style><div class="cs-app">
                 <header class="dc-header" style="height:80px">Search</header>
                 <div class="cs-body"><aside class="cs-sidebar">Tables</aside><main class="cs-main">
@@ -192,6 +199,6 @@ test('advanced conditions get their own row and results keep the remaining heigh
             await page.close();
         }
     } finally {
-        await browser.close();
+        await context.close();
     }
 });
