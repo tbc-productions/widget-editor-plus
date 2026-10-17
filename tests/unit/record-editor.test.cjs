@@ -396,6 +396,7 @@ function clientFunction(name, context) {
     }
     visit(ast);
     assert.ok(found, name);
+    if (['_buildSavePayload', '_acceptWidgetSave'].includes(name)) clientFunction('_editorValuesEqual', context);
     vm.runInContext(found.getText(ast), context);
     return context[name];
 }

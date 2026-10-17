@@ -216,7 +216,7 @@ test('draft summaries use configured field labels and group related record chang
         'HTML · CSS · Name · Option Schema · Demo Data · Custom code · Angular provider · Angular template · Script Include');
 });
 
-test('draft picker keeps its selection when discard fails and clears it after widget Save', () => {
+test('draft picker keeps its selection when discard fails and clears obsolete copies after widget Save', () => {
     const h = harness();
     const draft = recovered(h);
     const remove = h.localStorage.removeItem;
@@ -224,6 +224,7 @@ test('draft picker keeps its selection when discard fails and clears it after wi
     h.$scope.discardLocalDraft(h.$scope.localDraftSelection.draft);
     assert.equal(h.$scope.localDraftSelection.draft, draft);
     h.localStorage.removeItem = remove;
+    h.context.originalValues.template = 'draft';
     h.run('_clearWidgetDrafts()');
     assert.equal(h.$scope.localDraftSelection.draft, null);
 });
@@ -793,7 +794,7 @@ test('per-field save preserves newer typing and failed saves retain the entire c
     }
 });
 
-test('whole-widget save clears drafts while keeping newer and related edits dirty', () => {
+test('whole-widget save immediately preserves newer and related edits in its draft', () => {
     const h = harness();
     h.$scope.widget.template = 'submitted';
     h.$scope.widget.name = 'submitted name';
@@ -810,8 +811,7 @@ test('whole-widget save clears drafts while keeping newer and related edits dirt
     assert.equal(h.$scope.visibleItems[1].dirty, true);
     assert.equal(h.$scope.visibleItems[1].externalChange.user, 'someone');
     assert.equal(h.$scope.headerDirty.name, true);
-    assert.equal(h.draft(), null);
-    h.run('_writeLocalDraft()');
+    assert.equal(h.draft().entries.find(e => e.field === 'template').value, 'typed during request');
     assert.equal(h.draft().entries.find(e => e.field === 'template').base, 'submitted');
 });
 
@@ -833,10 +833,11 @@ test('whole-widget save normalises empty headers and still detects newer edits',
         h.run('_acceptWidgetSave(payload)');
         for (const field of ['name', 'id', 'controller_as', 'static', 'roles']) assert.equal(h.$scope.headerDirty[field], false, field);
         for (const field of ['description', 'is_public', 'extra_text', 'extra_boolean']) assert.equal(h.$scope.headerDirty[field], newerEdits, field);
+        if (!newerEdits) assert.equal(h.draft(), null, 'normalised headers must not create a phantom draft');
     }
 });
 
-test('widget Save removes every draft for this widget and user, even with autosave off', () => {
+test('widget Save removes already-saved drafts for this widget and user, even with autosave off', () => {
     const h = harness();
     const draft = recovered(h);
     h.$scope.widget.template = 'draft';
@@ -866,7 +867,7 @@ test('widget Save reports a storage cleanup failure without discarding the remai
     h.localStorage.removeItem = () => { throw new Error('Storage unavailable'); };
     h.run('_clearWidgetDrafts()');
     assert.ok(h.localStorage.getItem(draft.key));
-    assert.match(h.$scope.localDraftError, /widget was saved.*could not be removed/);
+    assert.match(h.$scope.localDraftError, /could not be saved|unavailable/);
 });
 
 test('explicit discard is not recreated when navigating away', () => {
@@ -1210,4 +1211,239 @@ test('Credit preferences export fresh shared values, import on Save and stay out
     vm.runInContext(source.slice(saveStart, source.indexOf('                $scope.cancelUserPrefsModal', saveStart)), h.context);
     h.$scope.saveUserPrefsModal();
     assert.deepEqual(saves.at(-1).credit, downloads[0].credit, 'Save includes the imported choices');
+});
+
+function loadUnsavedGuard(h) {
+    h.$scope.headerDirty = {};
+    h.$scope.visibleItems = [];
+    const start = source.indexOf('                function hasUnsavedChanges()');
+    vm.runInContext(source.slice(start, source.indexOf('                $scope.openInPlatform', start)), h.context);
+}
+
+function loadSaveAcceptance(h) {
+    h.$scope.headerDirty = {};
+    h.$scope.visibleItems = [];
+    h.context._captureAdditionalHeaderValues = () => {};
+    const start = source.indexOf('                function _acceptWidgetSave(');
+    vm.runInContext(source.slice(start, source.indexOf('                $scope.saveAll =', start)), h.context);
+}
+
+test('unchanged mixed line endings and BOMs never create drafts across discard and repeated reloads', () => {
+    const shared = storage();
+    const original = '\uFEFFone\r\ntwo\nthree\r';
+    const normalised = 'one\ntwo\nthree\n';
+    for (let page = 0; page < 3; page++) {
+        const h = harness(shared);
+        h.context.originalValues.template = h.$scope.widget.template = original;
+        h.context.monacoEditors.html = { getValue: () => normalised };
+        loadUnsavedGuard(h);
+        assert.equal(h.$scope.hasUnsavedChanges(), false);
+        if (!page) {
+            recovered(h, [{ type: 'widget', id: widgetId, key: 'html', field: 'template', base: original, value: normalised }]);
+        }
+        h.run('_findLocalDrafts()');
+        assert.equal(h.$scope.localDrafts.length, 0);
+        h.listeners.pagehide();
+        assert.equal(shared.length, 0);
+        assert.equal(h.context.originalValues.template, original, 'retain the raw server value for save conflicts');
+    }
+    const h = harness();
+    for (const value of ['saved ', ' saved', 'saved\n', 'Saved']) {
+        h.$scope.widget.template = value;
+        assert.equal(h.run('_collectLocalDraft().entries.length'), 1, 'real whitespace and code edits remain changes');
+    }
+    assert.equal(h.run('_editorValuesEqual(false, "")'), false);
+    assert.equal(h.run('_editorValuesEqual(false, "false")'), false);
+});
+
+test('discarding another active tab’s draft survives capture and reload until fresh edits are made', () => {
+    const owner = harness();
+    owner.$scope.widget.template = 'unsaved work';
+    owner.run('_writeLocalDraft()');
+    const picker = harness(owner.localStorage);
+    picker.run('_findLocalDrafts()');
+    picker.$scope.discardLocalDraft(picker.$scope.localDrafts[0]);
+    for (let capture = 0; capture < 3; capture++) {
+        owner.listeners.pagehide();
+        assert.equal(owner.draft(), null);
+        const reload = harness(owner.localStorage);
+        reload.run('_findLocalDrafts()');
+        assert.equal(reload.$scope.localDrafts.length, 0);
+    }
+    owner.$scope.widget.template = 'fresh work after discard';
+    owner.listeners.pagehide();
+    assert.equal(owner.draft().entries[0].value, 'fresh work after discard');
+});
+
+test('discard keeps a changed draft visible, reports the conflict and requires review of the updated copy', () => {
+    const h = harness();
+    const selected = recovered(h);
+    const changed = JSON.parse(selected.raw);
+    changed.entries[0].value = 'new work in another tab';
+    const raw = JSON.stringify(changed);
+    h.localStorage.setItem(selected.key, raw);
+    h.$scope.openDropdown = 'alert-draft';
+    h.$scope.discardLocalDraft(selected);
+    assert.equal(h.localStorage.getItem(selected.key), raw);
+    assert.equal(h.$scope.localDrafts.length, 1);
+    assert.equal(h.$scope.localDraftSelection.draft.entries[0].value, changed.entries[0].value);
+    assert.match(h.$scope.localDraftError, /changed in another tab/);
+    assert.equal(h.$scope.openDropdown, 'alert-draft');
+    h.$scope.discardLocalDraft(h.$scope.localDraftSelection.draft);
+    assert.equal(h.localStorage.getItem(selected.key), null);
+    assert.equal(h.$scope.localDraftError, null);
+});
+
+test('storage notifications refresh recovery choices and ignore unrelated storage', () => {
+    const h = harness();
+    const draft = recovered(h);
+    h.localStorage.removeItem(draft.key);
+    h.listeners.storage({ key: 'unrelated', storageArea: h.localStorage });
+    h.flush();
+    assert.equal(h.$scope.localDrafts.length, 1);
+    h.listeners.storage({ key: draft.key, storageArea: h.localStorage });
+    h.flush();
+    assert.equal(h.$scope.localDrafts.length, 0);
+    h.destroyed.$destroy();
+    assert.equal(h.listeners.storage, undefined);
+});
+
+test('older copies matching saved content expire while older differing edits remain recoverable', () => {
+    const h = harness();
+    h.$scope.widget.sys_updated_on = '2026-10-17 10:00:00';
+    const saved = [{ type: 'widget', id: widgetId, key: 'html', field: 'template', base: 'old', value: 'saved' }];
+    const key = `we_local_draft:v1:${userId}:${widgetId}:already-saved`;
+    h.localStorage.setItem(key, JSON.stringify({ version: 1, updatedAt: 1000, entries: saved }));
+    const genuine = recovered(h);
+    assert.equal(h.localStorage.getItem(key), null);
+    assert.equal(h.$scope.localDrafts.length, 1);
+    assert.equal(h.$scope.localDrafts[0].key, genuine.key);
+});
+
+test('discovery checks saved JSON and related records once and removes already-saved recovery content', async () => {
+    const h = harness();
+    const id = 'c'.repeat(32);
+    const calls = [];
+    h.context.ajax = async action => {
+        calls.push(action);
+        return action === 'getOptionSchema' ? { success: true, option_schema: '{"saved":true}' }
+            : action === 'getScriptInclude' ? { success: true, si: { sys_id: id, script: 'saved script' } }
+            : { success: true, widget: { ...h.$scope.widget } };
+    };
+    const entries = [
+        { type: 'widget', id: widgetId, key: '', field: 'option_schema', base: '{}', value: '{\n    "saved": true\n}' },
+        { type: 'script_include', id, key: `si-${id}`, field: 'content', base: 'old script', value: 'saved script' },
+    ];
+    const key = `we_local_draft:v1:${userId}:${widgetId}:already-saved-related`;
+    const raw = JSON.stringify({ version: 1, updatedAt: 1000, entries });
+    h.localStorage.setItem(key, raw);
+    h.localStorage.setItem(key + '-copy', raw);
+    h.run('_findLocalDrafts()');
+    await new Promise(setImmediate);
+    assert.equal(h.$scope.localDrafts.length, 0);
+    assert.equal(h.localStorage.length, 0);
+    assert.equal(calls.filter(action => action === 'getScriptInclude').length, 1);
+    assert.equal(calls.filter(action => action === 'getOptionSchema').length, 1);
+    assert.equal(calls.filter(action => action === 'getWidget').length, 1);
+});
+
+test('discovery keeps unavailable saved content and cannot remove a draft changed while checks are pending', async () => {
+    for (const failed of [false, true]) {
+        const h = harness();
+        let finish;
+        h.context.ajax = () => new Promise(resolve => { finish = resolve; });
+        const draft = recovered(h, [{ type: 'widget', id: widgetId, key: '', field: 'demo_data', base: '{}', value: '{"work":true}' }]);
+        const updated = JSON.parse(draft.raw);
+        updated.entries[0].value = '{"newer":true}';
+        const raw = failed ? draft.raw : JSON.stringify(updated);
+        h.localStorage.setItem(draft.key, raw);
+        finish({ success: !failed, widget: { ...h.$scope.widget }, error: 'Unavailable' });
+        // Subsequent JSON requests fail; the earlier copy must remain either way.
+        h.context.ajax = async () => ({ success: false });
+        await new Promise(setImmediate);
+        assert.equal(h.localStorage.getItem(draft.key), raw);
+        assert.equal(h.$scope.localDrafts.length, 1);
+    }
+});
+
+test('widget Save preserves unsaved JSON, related work and older mixed copies with capture off', async () => {
+    const h = harness();
+    const id = 'c'.repeat(32);
+    h.run("_draftJson.option_schema = { base: '{}', value: '{invalid' }");
+    h.context.extraPanes.push({ key: `si-${id}`, recordType: 'script_include', sys_id: id, lastServerContent: 'saved script', content: 'unfinished script' });
+    h.$scope.widget.template = 'submitted HTML';
+    h.run('_writeLocalDraft()');
+    const olderKey = h.ownKey() + '-older';
+    h.localStorage.setItem(olderKey, JSON.stringify(h.draft()));
+    h.$scope.userPrefs.autosaveInterval = 0;
+    loadSaveAcceptance(h);
+    h.run('_acceptWidgetSave({ ...$scope.widget, public: false })');
+    h.listeners.pagehide();
+    assert.deepEqual(h.draft().entries.map(entry => entry.field), ['content', 'option_schema']);
+    assert.ok(h.localStorage.getItem(olderKey));
+    assert.deepEqual(Array.from(h.$scope.localDrafts[0].entries, entry => entry.field), ['content', 'option_schema']);
+    assert.equal(h.$scope.localDrafts[0].fieldsLabel.includes('HTML'), false);
+    await new Promise(setImmediate);
+    assert.ok(h.localStorage.getItem(olderKey));
+});
+
+test('already-saved draft cleanup reports storage failures and retains the stored copy', () => {
+    const h = harness();
+    const draft = recovered(h);
+    h.context.originalValues.template = 'draft';
+    h.localStorage.removeItem = () => { throw Error('Storage unavailable'); };
+    h.run('_findLocalDrafts()');
+    assert.equal(h.localStorage.getItem(draft.key), draft.raw);
+    assert.match(h.$scope.localDraftError, /unavailable/);
+});
+
+test('hidden code recovered without a mounted editor still reports unsaved work', async () => {
+    const h = harness();
+    await h.$scope.restoreLocalDraft(recovered(h), true);
+    h.flush();
+    loadUnsavedGuard(h);
+    assert.equal(h.$scope.hasUnsavedChanges(), true);
+    assert.equal(h.draft().entries[0].value, 'draft');
+});
+
+test('a manually recovered copy discarded from another tab is not recreated when capture is enabled', async () => {
+    const owner = harness();
+    owner.$scope.userPrefs.autosaveInterval = 0;
+    await owner.$scope.restoreLocalDraft(recovered(owner), true);
+    owner.flush();
+    assert.ok(owner.draft());
+    const picker = harness(owner.localStorage);
+    picker.run('_findLocalDrafts()');
+    picker.$scope.discardLocalDraft(picker.$scope.localDrafts[0]);
+    owner.$scope.userPrefs.autosaveInterval = 30;
+    owner.listeners.pagehide();
+    assert.equal(owner.draft(), null);
+});
+
+test('compact JSON already saved on the server is removed even when the open modal formats its baseline', async () => {
+    const h = harness();
+    h.run(`_draftJson.option_schema = { base: '{\\n    "saved": true\\n}', value: '{\\n    "saved": true\\n}' }`);
+    h.context.ajax = async action => action === 'getOptionSchema'
+        ? { success: true, option_schema: '{"saved":true}' }
+        : { success: true, widget: { ...h.$scope.widget } };
+    const draft = recovered(h, [{ type: 'widget', id: widgetId, key: '', field: 'option_schema', base: '{}', value: '{"saved":true}' }]);
+    await new Promise(setImmediate);
+    assert.equal(h.localStorage.getItem(draft.key), null);
+    assert.equal(h.$scope.localDrafts.length, 0);
+});
+
+test('recovery skips JSON already saved rather than overwriting newer local modal edits', async () => {
+    const h = harness();
+    h.context.ajax = async action => action === 'getOptionSchema'
+        ? { success: true, option_schema: '{"saved":true}' }
+        : { success: true, widget: { ...h.$scope.widget, template: 'saved' } };
+    const draft = recovered(h, [
+        { type: 'widget', id: widgetId, key: '', field: 'option_schema', base: '{}', value: '{"saved":true}' },
+        { type: 'widget', id: widgetId, key: 'html', field: 'template', base: 'saved', value: 'recovered HTML' },
+    ]);
+    h.run(`_draftJson.option_schema = { base: '{"saved":true}', value: '{"newer":true}' }`);
+    await h.$scope.restoreLocalDraft(draft, true);
+    h.flush();
+    assert.equal(h.run('_draftJson.option_schema.value'), '{"newer":true}');
+    assert.equal(h.$scope.widget.template, 'recovered HTML');
 });

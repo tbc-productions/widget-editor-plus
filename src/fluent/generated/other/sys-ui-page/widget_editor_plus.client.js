@@ -1511,7 +1511,10 @@
                         var recordPayload = {};
                         $scope.coreEditorDefs.forEach(function (def) {
                             var value = $scope.widget[def.field] || '';
-                            if (!def.readOnly && ($scope.isNewWidget || value !== originalValues[def.field]))
+                            if (
+                                !def.readOnly &&
+                                ($scope.isNewWidget || !_editorValuesEqual(value, originalValues[def.field]))
+                            )
                                 recordPayload[def.field] = value;
                         });
                         $scope.additionalWidgetFields.forEach(function (def) {
@@ -3796,7 +3799,7 @@
                                 ed.onDidChangeModelContent(function () {
                                     $scope.$apply(function () {
                                         var cur = ed.getValue();
-                                        pane.dirty = cur !== originalValues[pane.field];
+                                        pane.dirty = !_editorValuesEqual(cur, originalValues[pane.field]);
                                         if (pane.dirty) {
                                             pane.savedAt = null;
                                         }
@@ -3808,16 +3811,8 @@
                                         return;
                                     }
                                     $scope.$apply(function () {
-                                        if (isSI) {
-                                            var cur = ed.getValue();
-                                            pane.dirty = cur !== pane.lastServerContent;
-                                            if (pane.dirty) {
-                                                pane.savedAt = null;
-                                            }
-                                        } else {
-                                            pane.dirty = true;
-                                            pane.savedAt = null;
-                                        }
+                                        pane.dirty = !_editorValuesEqual(ed.getValue(), pane.lastServerContent);
+                                        if (pane.dirty) pane.savedAt = null;
                                     });
                                 });
                             }
@@ -5186,7 +5181,10 @@
                             if (data.sys_updated_on) {
                                 $scope.widget.sys_updated_on = data.sys_updated_on;
                             }
-                            pane.dirty = (editor ? editor.getValue() : $scope.widget[pane.field] || '') !== value;
+                            pane.dirty = !_editorValuesEqual(
+                                editor ? editor.getValue() : $scope.widget[pane.field] || '',
+                                value
+                            );
                             pane.externalChange = null;
                             _writeLocalDraft(true);
                             if ($scope.isWidgetRecord === false) {
@@ -5296,9 +5294,10 @@
                                 originalValues[name] = lastServerValues[name] = payload[name];
                                 var pane = paneMap[name];
                                 if (pane) {
-                                    pane.dirty =
-                                        (monacoEditors[name] ? monacoEditors[name].getValue() : $scope.widget[name]) !==
-                                        payload[name];
+                                    pane.dirty = !_editorValuesEqual(
+                                        monacoEditors[name] ? monacoEditors[name].getValue() : $scope.widget[name],
+                                        payload[name]
+                                    );
                                     pane.savedAt = null;
                                     pane.externalChange = null;
                                 }
@@ -5322,10 +5321,12 @@
                     });
                     $scope.visibleItems.forEach(function (item) {
                         if (item.type === 'pane' && item.field) {
-                            item.dirty =
-                                (monacoEditors[item.key]
+                            item.dirty = !_editorValuesEqual(
+                                monacoEditors[item.key]
                                     ? monacoEditors[item.key].getValue()
-                                    : $scope.widget[item.field] || '') !== originalValues[item.field];
+                                    : $scope.widget[item.field] || '',
+                                originalValues[item.field]
+                            );
                             item.savedAt = null;
                             item.externalChange = null;
                         }
@@ -6874,7 +6875,7 @@
                             }
                             pane.lastServerContent = value;
                             delete pane._pendingSaveContent;
-                            pane.dirty = (editor ? editor.getValue() : pane.content || '') !== value;
+                            pane.dirty = !_editorValuesEqual(editor ? editor.getValue() : pane.content || '', value);
                             _writeLocalDraft(true);
                             if (!hasUnsavedChanges()) {
                                 pane.savedAt = null;
@@ -6926,7 +6927,7 @@
                         delete pane._pendingSaveContent;
                         pane._draftOriginalId = isTemplate ? dataObj.id : dataObj.name;
                         pane._draftOriginalType = dataObj.type || '';
-                        pane.dirty = (editor ? editor.getValue() : pane.content || '') !== value;
+                        pane.dirty = !_editorValuesEqual(editor ? editor.getValue() : pane.content || '', value);
                         pane.idDirty =
                             pane.recordId !== pane._draftOriginalId ||
                             (!isTemplate && pane.providerType !== pane._draftOriginalType);
@@ -7798,6 +7799,7 @@
                 var _draftCaptureStopped = false;
                 var _draftRetentionLoaded = false;
                 var _draftJson = {};
+                var _lastDraftEntries = null;
                 $scope.localDrafts = [];
                 $scope.localDraftSelection = { draft: null };
                 $scope.localDraftError = null;
@@ -7807,6 +7809,17 @@
                     records: [],
                     busy: false,
                 };
+
+                function _editorValuesEqual(left, right) {
+                    function normalise(value) {
+                        return typeof value === 'string'
+                            ? value.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n')
+                            : value == null
+                              ? ''
+                              : value;
+                    }
+                    return normalise(left) === normalise(right);
+                }
 
                 function _validAutosaveInterval(value) {
                     return Number.isSafeInteger(value) && value >= 0;
@@ -7978,7 +7991,7 @@
                     function add(type, id, key, field, base, value) {
                         base = base == null ? '' : base;
                         value = value == null ? '' : value;
-                        if (value !== base) {
+                        if (!_editorValuesEqual(value, base)) {
                             entries.push({
                                 type: type,
                                 id: id,
@@ -8006,6 +8019,8 @@
                         if (extra) {
                             value = _normaliseExtraWidgetFieldValue(extra, value);
                         }
+                        if (field === 'controller_as' && $scope.isWidgetRecord !== false) value = value || 'c';
+                        if (field === 'is_public' || field === 'static') value = !!value;
                         add('widget', SYS_ID, def ? def.key : '', field, base, value);
                     });
                     extraPanes.forEach(function (pane) {
@@ -8062,22 +8077,32 @@
                         var key = _draftPrefix() + _draftPageId;
                         // Saving with autosave off may clean up an existing draft, but must not create one.
                         if (cleanup && !$scope.userPrefs.autosaveInterval && !localStorage.getItem(key)) {
+                            _findLocalDrafts();
                             return;
                         }
                         var draft = _collectLocalDraft();
+                        var entries = JSON.stringify(draft.entries);
+                        var old = localStorage.getItem(key);
+                        // A different tab discarded this copy; capture again only after a content change.
+                        if (!old && entries === _lastDraftEntries) {
+                            $scope.lastDraftSaveTime = null;
+                            return;
+                        }
                         if (!draft.entries.length) {
                             localStorage.removeItem(key);
                             $scope.lastDraftSaveTime = null;
+                            _lastDraftEntries = null;
                         } else {
-                            var old = localStorage.getItem(key);
                             var saved = old ? JSON.parse(old) : null;
-                            if (!saved || JSON.stringify(saved.entries) !== JSON.stringify(draft.entries)) {
+                            if (!saved || JSON.stringify(saved.entries) !== entries) {
                                 localStorage.setItem(key, JSON.stringify(draft));
                                 saved = draft;
                             }
+                            _lastDraftEntries = entries;
                             $scope.lastDraftSaveTime = new Date(saved.updatedAt);
                         }
                         $scope.localDraftError = null;
+                        if (cleanup) _findLocalDrafts();
                     } catch (e) {
                         $scope.localDraftError =
                             'Local drafts could not be saved. Check browser storage settings or available space.';
@@ -8098,31 +8123,75 @@
                 }
 
                 function _clearWidgetDrafts() {
-                    if (!SYS_ID || !$scope.currentUserId) {
-                        return;
-                    }
                     try {
-                        for (var i = localStorage.length - 1; i >= 0; i--) {
-                            var key = localStorage.key(i);
-                            if (key.indexOf(_draftPrefix()) === 0) {
-                                localStorage.removeItem(key);
-                            }
-                        }
-                        $scope.localDrafts = [];
-                        $scope.localDraftSelection.draft = null;
-                        $scope.lastDraftSaveTime = null;
-                        if ($scope.versionDiffModal.localDraft) {
+                        _writeLocalDraft(true);
+                        if (
+                            $scope.versionDiffModal.localDraft &&
+                            !$scope.localDrafts.some(function (draft) {
+                                return draft.key === $scope.versionDiffModal.localDraft.key;
+                            })
+                        ) {
                             $scope.closeVersionDiffModal();
                         }
-                        $scope.draftRecovery = {
-                            entries: [],
-                            records: [],
-                            busy: false,
-                        };
-                        $scope.localDraftError = null;
                     } catch (e) {
-                        $scope.localDraftError = 'The widget was saved, but its local drafts could not be removed.';
+                        $scope.localDraftError = 'The record was saved, but its local drafts could not be updated.';
                     }
+                }
+
+                function _savedDraftValue(entry) {
+                    if (entry.type === 'widget') {
+                        if (Object.prototype.hasOwnProperty.call(originalValues, entry.field))
+                            return originalValues[entry.field];
+                        if (Object.prototype.hasOwnProperty.call(originalHeader, entry.field))
+                            return originalHeader[entry.field];
+                        return undefined;
+                    }
+                    if (!entry.id) return undefined;
+                    var pane = extraPanes.find(function (p) {
+                        return p.recordType === entry.type && p.sys_id === entry.id;
+                    });
+                    if (pane)
+                        return entry.field === 'content'
+                            ? pane.lastServerContent
+                            : entry.field === 'recordId'
+                              ? pane._draftOriginalId
+                              : pane._draftOriginalType;
+                    var record = ((entry.type === 'template' ? $scope.templates : $scope.providers) || []).find(
+                        function (r) {
+                            return r.sys_id === entry.id;
+                        }
+                    );
+                    if (!record || entry.type === 'script_include') return undefined;
+                    return record[
+                        entry.field === 'content'
+                            ? entry.type === 'template'
+                                ? 'template'
+                                : 'script'
+                            : entry.field === 'recordId'
+                              ? entry.type === 'template'
+                                  ? 'id'
+                                  : 'name'
+                              : 'type'
+                    ];
+                }
+
+                function _refreshLocalDraft(draft, requests) {
+                    return _readLocalDraft(draft, requests)
+                        .then(function (entries) {
+                            if (
+                                $scope.localDrafts.indexOf(draft) === -1 ||
+                                localStorage.getItem(draft.key) !== draft.raw
+                            )
+                                return;
+                            draft.entries = entries.filter(function (entry) {
+                                return !_editorValuesEqual(entry.value, entry.current);
+                            });
+                            draft.fieldsLabel = _localDraftFieldSummary(draft);
+                            if (!draft.entries.length) _removeRecoveredDraft(draft);
+                        })
+                        .catch(function () {
+                            /* Keep recovery copies when saved content cannot be checked. */
+                        });
                 }
 
                 function _validLocalDraft(draft) {
@@ -8180,25 +8249,45 @@
                             return;
                         }
                         $scope.localDrafts = [];
-                        for (var i = 0; i < localStorage.length; i++) {
+                        var requests = Object.create(null);
+                        for (var i = localStorage.length - 1; i >= 0; i--) {
                             var key = localStorage.key(i);
                             if (key.indexOf(_draftPrefix()) !== 0 || key === _draftPrefix() + _draftPageId) {
                                 continue;
                             }
+                            var raw = localStorage.getItem(key);
+                            var draft;
                             try {
-                                var raw = localStorage.getItem(key);
-                                var draft = JSON.parse(raw);
-                                if (_validLocalDraft(draft)) {
-                                    $scope.localDrafts.push({
-                                        key: key,
-                                        raw: raw,
-                                        updatedAt: draft.updatedAt,
-                                        entries: draft.entries,
-                                        fieldsLabel: _localDraftFieldSummary(draft),
-                                    });
-                                }
+                                draft = JSON.parse(raw);
                             } catch (e) {
-                                /* Leave unreadable drafts untouched. */
+                                continue;
+                            }
+                            if (_validLocalDraft(draft)) {
+                                var entries = draft.entries.filter(function (entry) {
+                                    var saved = _savedDraftValue(entry);
+                                    return (
+                                        !_editorValuesEqual(entry.value, entry.base) &&
+                                        (saved === undefined || !_editorValuesEqual(entry.value, saved))
+                                    );
+                                });
+                                if (!entries.length) {
+                                    if (localStorage.getItem(key) === raw) localStorage.removeItem(key);
+                                    continue;
+                                }
+                                var recovery = {
+                                    key: key,
+                                    raw: raw,
+                                    updatedAt: draft.updatedAt,
+                                    entries: entries,
+                                    fieldsLabel: _localDraftFieldSummary({ entries: entries }),
+                                };
+                                $scope.localDrafts.push(recovery);
+                                if (
+                                    entries.some(function (entry) {
+                                        return _savedDraftValue(entry) === undefined;
+                                    })
+                                )
+                                    _refreshLocalDraft(recovery, requests);
                             }
                         }
                         $scope.localDrafts.sort(function (a, b) {
@@ -8230,13 +8319,8 @@
                     }
                 }
 
-                function _loadDraftRecovery(draft) {
-                    if (!_canDraft() || $scope.draftRecovery.busy) {
-                        return $q.reject('Draft recovery is unavailable.');
-                    }
-                    $scope.draftRecovery.busy = true;
-                    $scope.localDraftError = null;
-                    var requests = Object.create(null);
+                function _readLocalDraft(draft, requests) {
+                    requests = requests || Object.create(null);
                     function request(action, params) {
                         var key = action + ':' + (params.sys_id || '');
                         if (!requests[key]) {
@@ -8249,107 +8333,126 @@
                         }
                         return requests[key];
                     }
-                    return request('getWidget', { sys_id: SYS_ID })
-                        .then(function (data) {
-                            if (data.widget.canWrite === false || data.widget.sys_policy || data.widget.deleted) {
-                                throw new Error('This widget is no longer editable.');
-                            }
-                            return $q.all(
-                                draft.entries.map(function (entry) {
-                                    var load;
-                                    if (entry.type === 'widget') {
-                                        var action =
-                                            entry.field === 'option_schema'
-                                                ? 'getOptionSchema'
-                                                : entry.field === 'demo_data'
-                                                  ? 'getDemoData'
-                                                  : 'getWidget';
-                                        load = request(action, {
-                                            sys_id: SYS_ID,
-                                        }).then(function (data) {
-                                            if (action !== 'getWidget') {
-                                                return {
-                                                    value: _draftPrettyJson(data[entry.field] || ''),
-                                                };
-                                            }
-                                            if ($scope.isWidgetRecord === false) {
-                                                var header = (data.additional_widget_fields || []).find(function (def) {
-                                                    return def.name === entry.field;
-                                                });
-                                                var code = (data.core_editor_defs || []).find(function (def) {
-                                                    return def.field === entry.field;
-                                                });
-                                                if (!(header && header.canWrite) && !(code && !code.readOnly))
-                                                    throw new Error('A draft field is no longer editable.');
-                                            }
+                    return request('getWidget', { sys_id: SYS_ID }).then(function (data) {
+                        if (data.widget.canWrite === false || data.widget.sys_policy || data.widget.deleted) {
+                            throw new Error('This widget is no longer editable.');
+                        }
+                        return $q.all(
+                            draft.entries.map(function (entry) {
+                                var load;
+                                if (entry.type === 'widget') {
+                                    var action =
+                                        entry.field === 'option_schema'
+                                            ? 'getOptionSchema'
+                                            : entry.field === 'demo_data'
+                                              ? 'getDemoData'
+                                              : 'getWidget';
+                                    load = request(action, {
+                                        sys_id: SYS_ID,
+                                    }).then(function (data) {
+                                        if (action !== 'getWidget') {
+                                            var raw = data[entry.field] || '';
                                             return {
-                                                value: data.widget[entry.field],
-                                                record: data.widget,
+                                                value:
+                                                    _editorValuesEqual(entry.value, raw) ||
+                                                    _editorValuesEqual(entry.base, raw)
+                                                        ? raw
+                                                        : _draftPrettyJson(raw),
                                             };
-                                        });
-                                    } else if (!entry.id) {
-                                        load = $q.resolve({
-                                            value: '',
-                                            record: {},
-                                        });
-                                    } else if (entry.type === 'script_include') {
-                                        load = request('getScriptInclude', {
-                                            sys_id: entry.id,
-                                        }).then(function (data) {
-                                            return {
-                                                value: data.si.script,
-                                                record: data.si,
-                                            };
-                                        });
-                                    } else {
-                                        load = request(entry.type === 'template' ? 'getTemplates' : 'getProviders', {
-                                            sys_id: SYS_ID,
-                                        }).then(function (data) {
-                                            var record = (data.templates || data.providers).find(function (r) {
-                                                return r.sys_id === entry.id;
+                                        }
+                                        if ($scope.isWidgetRecord === false) {
+                                            var header = (data.additional_widget_fields || []).find(function (def) {
+                                                return def.name === entry.field;
                                             });
-                                            if (!record) {
-                                                throw new Error(
-                                                    'A draft record was deleted, unlinked or is no longer accessible.'
-                                                );
-                                            }
-                                            var field =
-                                                entry.field === 'content'
-                                                    ? entry.type === 'template'
-                                                        ? 'template'
-                                                        : 'script'
-                                                    : entry.field === 'recordId'
-                                                      ? entry.type === 'template'
-                                                          ? 'id'
-                                                          : 'name'
-                                                      : 'type';
-                                            return {
-                                                value: record[field],
-                                                record: record,
-                                            };
-                                        });
-                                    }
-                                    return load.then(function (loaded) {
-                                        if (loaded.record && loaded.record.readOnly) {
-                                            throw new Error('A draft record is no longer editable.');
+                                            var code = (data.core_editor_defs || []).find(function (def) {
+                                                return def.field === entry.field;
+                                            });
+                                            if (!(header && header.canWrite) && !(code && !code.readOnly))
+                                                throw new Error('A draft field is no longer editable.');
                                         }
-                                        var current = loaded.value == null ? '' : loaded.value;
-                                        if (typeof entry.value === 'boolean') {
-                                            current = current === true || current === 'true' || current === '1';
-                                        }
-                                        if (entry.field === 'roles') {
-                                            current = parseRoles(current).join(',');
-                                        }
-                                        return Object.assign({}, entry, {
-                                            current: current,
-                                            record: loaded.record,
-                                            conflict: current !== entry.base && current !== entry.value,
-                                        });
+                                        return {
+                                            value: data.widget[entry.field],
+                                            record: data.widget,
+                                        };
                                     });
-                                })
-                            );
-                        })
+                                } else if (!entry.id) {
+                                    load = $q.resolve({
+                                        value: '',
+                                        record: {},
+                                    });
+                                } else if (entry.type === 'script_include') {
+                                    load = request('getScriptInclude', {
+                                        sys_id: entry.id,
+                                    }).then(function (data) {
+                                        return {
+                                            value: data.si.script,
+                                            record: data.si,
+                                        };
+                                    });
+                                } else {
+                                    load = request(entry.type === 'template' ? 'getTemplates' : 'getProviders', {
+                                        sys_id: SYS_ID,
+                                    }).then(function (data) {
+                                        var record = (data.templates || data.providers).find(function (r) {
+                                            return r.sys_id === entry.id;
+                                        });
+                                        if (!record) {
+                                            throw new Error(
+                                                'A draft record was deleted, unlinked or is no longer accessible.'
+                                            );
+                                        }
+                                        var field =
+                                            entry.field === 'content'
+                                                ? entry.type === 'template'
+                                                    ? 'template'
+                                                    : 'script'
+                                                : entry.field === 'recordId'
+                                                  ? entry.type === 'template'
+                                                      ? 'id'
+                                                      : 'name'
+                                                  : 'type';
+                                        return {
+                                            value: record[field],
+                                            record: record,
+                                        };
+                                    });
+                                }
+                                return load.then(function (loaded) {
+                                    if (loaded.record && loaded.record.readOnly) {
+                                        throw new Error('A draft record is no longer editable.');
+                                    }
+                                    var current = loaded.value == null ? '' : loaded.value;
+                                    if (typeof entry.value === 'boolean') {
+                                        current = current === true || current === 'true' || current === '1';
+                                    }
+                                    if (entry.field === 'roles') {
+                                        current = parseRoles(current).join(',');
+                                    }
+                                    return Object.assign({}, entry, {
+                                        current: current,
+                                        record: loaded.record,
+                                        conflict:
+                                            !_editorValuesEqual(current, entry.base) &&
+                                            !_editorValuesEqual(current, entry.value),
+                                    });
+                                });
+                            })
+                        );
+                    });
+                }
+
+                function _loadDraftRecovery(draft) {
+                    if (!_canDraft() || $scope.draftRecovery.busy) {
+                        return $q.reject('Draft recovery is unavailable.');
+                    }
+                    $scope.draftRecovery.busy = true;
+                    $scope.localDraftError = null;
+                    return _readLocalDraft(draft)
                         .then(function (entries) {
+                            entries = entries.filter(function (entry) {
+                                return !_editorValuesEqual(entry.value, entry.current);
+                            });
+                            if (!entries.length) _removeRecoveredDraft(draft);
                             $scope.draftRecovery = {
                                 draft: draft,
                                 entries: entries,
@@ -8444,18 +8547,25 @@
 
                 function _removeRecoveredDraft(draft) {
                     // Another tab may have updated this draft since the recovery prompt appeared.
-                    if (localStorage.getItem(draft.key) === draft.raw) {
-                        localStorage.removeItem(draft.key);
-                    }
+                    var raw = localStorage.getItem(draft.key);
+                    if (raw !== null && raw !== draft.raw) return false;
+                    localStorage.removeItem(draft.key);
                     $scope.localDrafts = $scope.localDrafts.filter(function (d) {
                         return d !== draft;
                     });
                     _syncLocalDraftSelection();
+                    return true;
                 }
 
                 $scope.discardLocalDraft = function (draft) {
                     try {
-                        _removeRecoveredDraft(draft);
+                        if (!_removeRecoveredDraft(draft)) {
+                            _findLocalDrafts();
+                            $scope.localDraftError =
+                                'This draft changed in another tab. Review its latest contents before discarding it.';
+                            return;
+                        }
+                        $scope.localDraftError = null;
                         $scope.openDropdown = null;
                         if ($scope.versionDiffModal.localDraft === draft) {
                             $scope.closeVersionDiffModal();
@@ -8529,7 +8639,7 @@
                                     pane[entry.field] = entry.value;
                                     if (entry.field === 'content') {
                                         pane.lastServerContent = entry.current;
-                                        pane.dirty = entry.value !== entry.current;
+                                        pane.dirty = !_editorValuesEqual(entry.value, entry.current);
                                         if (monacoEditors[pane.key]) {
                                             $timeout(
                                                 function () {
@@ -8557,9 +8667,10 @@
                                     var copy = _collectLocalDraft();
                                     if (copy.entries.length) {
                                         localStorage.setItem(_draftPrefix() + _draftPageId, JSON.stringify(copy));
+                                        _lastDraftEntries = JSON.stringify(copy.entries);
                                         $scope.lastDraftSaveTime = new Date(copy.updatedAt);
                                     }
-                                    _removeRecoveredDraft(draft);
+                                    if (!_removeRecoveredDraft(draft)) _findLocalDrafts();
                                 } catch (e) {
                                     $scope.localDraftError =
                                         'The recovered draft could not be copied. Its original recovery copy has been retained.';
@@ -8598,6 +8709,14 @@
                         _flushLocalDraft();
                     }
                 }
+                function _draftStorageChanged(event) {
+                    if (event.storageArea && event.storageArea !== localStorage) return;
+                    if (event.key !== null && event.key.indexOf(_draftPrefix()) !== 0) return;
+                    $scope.$evalAsync(function () {
+                        _findLocalDrafts();
+                    });
+                }
+                window.addEventListener('storage', _draftStorageChanged);
                 document.addEventListener('visibilitychange', _draftVisibilityChanged);
                 window.addEventListener('pagehide', _flushLocalDraft);
                 $scope.$on('$destroy', function () {
@@ -8606,6 +8725,7 @@
                     }
                     document.removeEventListener('visibilitychange', _draftVisibilityChanged);
                     window.removeEventListener('pagehide', _flushLocalDraft);
+                    window.removeEventListener('storage', _draftStorageChanged);
                 });
 
                 // Unsaved changes guard
@@ -8628,7 +8748,7 @@
 
                     return (
                         Object.keys(_draftJson).some(function (field) {
-                            return _draftJson[field].value !== _draftJson[field].base;
+                            return !_editorValuesEqual(_draftJson[field].value, _draftJson[field].base);
                         }) ||
                         hasHeaderChanges ||
                         $scope.visibleItems.some(function (item) {
@@ -8636,7 +8756,10 @@
                         }) ||
                         $scope.coreEditorDefs.some(function (def) {
                             var ed = monacoEditors[def.key];
-                            return ed && ed.getValue() !== originalValues[def.field];
+                            return !_editorValuesEqual(
+                                ed ? ed.getValue() : $scope.widget[def.field],
+                                originalValues[def.field]
+                            );
                         })
                     );
                 }
