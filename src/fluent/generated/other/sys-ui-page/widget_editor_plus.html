@@ -486,12 +486,6 @@
             cursor: not-allowed !important;
         }
 
-        .we-header-sep {
-            width: 1px;
-            height: 1.375rem;
-            background: rgba(var(--now-color--neutral-0), 0.1);
-        }
-
         .we-spacer {
             flex: 1;
         }
@@ -3177,7 +3171,6 @@
 
                 <!-- Open widget -->
                 <button class="btn btn-default" ng-click="openWidgetPickerModal()" title="Open another {{isWidgetRecord ? 'widget' : 'record'}}">Open…</button>
-                <div class="we-header-sep"></div>
 
                 <!-- Metadata fields -->
                 <div class="we-header-group" ng-if="isWidgetRecord">
@@ -3283,7 +3276,6 @@
                     </div>
                 </div>
 
-                <div class="we-header-sep"></div>
 
                 <div class="we-header-group" ng-if="!isWidgetRecord">
                     <div class="we-field we-record-field we-field-with-popover" ng-repeat="field in additionalWidgetFields track by field.name" ng-if="!field.more">
@@ -3377,7 +3369,6 @@
                 <!-- Related Lists button -->
                 <button class="btn btn-default we-header-wide-only" ng-if="isWidgetRecord &amp;&amp; !isVersionView" ng-click="openRelatedModal()" ng-disabled="isNewWidget">Related Lists</button>
 
-                <div class="we-header-sep we-header-wide-only"></div>
 
                 <!-- Editor visibility -->
                 <div class="we-dropdown" ng-if="!isVersionView &amp;&amp; coreEditorDefs.length > 1" we-close-on-outside-click="openDropdown" close-key="'editorPicker'">
@@ -4369,7 +4360,7 @@
                         <div class="we-picker-title">Open<div class="dropdown we-dropdown we-picker-type" ng-class="{'open': openDropdown === 'pickerType'}">
                             <button type="button" id="we-picker-type-toggle" class="dropdown-toggle we-picker-type-toggle" ng-click="toggleDropdown('pickerType'); $event.stopPropagation()" ng-keydown="onDropdownTriggerKeydown($event, 'pickerType')" aria-haspopup="true" aria-expanded="{{openDropdown === 'pickerType'}}" aria-controls="we-picker-type-menu" aria-label="Record type: {{pickerType().singular}}">{{pickerType().singular}}</button>
                             <div id="we-picker-type-menu" class="we-dropdown-menu we-picker-type-menu" ng-show="openDropdown === 'pickerType'" role="menu" aria-labelledby="we-picker-type-toggle" we-dropdown-auto-pos="we-dropdown-auto-pos">
-                                <a href="" class="we-dropdown-item" ng-repeat="type in recordTypes | orderBy:'label' track by type.table" role="menuitem" ng-class="{'active': picker.table === type.table}" aria-current="{{picker.table === type.table}}" ng-click="selectPickerRecordType(type.table); $event.stopPropagation()">{{type.label}}</a>
+                                <a href="" class="we-dropdown-item" ng-repeat="type in recordTypes | orderBy:'singular' track by type.table" role="menuitem" ng-class="{'active': picker.table === type.table}" aria-current="{{picker.table === type.table}}" ng-click="selectPickerRecordType(type.table); $event.stopPropagation()">{{type.singular}}</a>
                             </div>
                         </div></div>
                     </div>
