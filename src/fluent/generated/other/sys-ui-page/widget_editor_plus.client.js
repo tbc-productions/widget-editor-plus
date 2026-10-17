@@ -7667,6 +7667,7 @@
                     }
 
                     event.preventDefault();
+                    event.stopPropagation();
                     $scope.openDropdown = name;
                     if (name !== 'compactMenu') {
                         $scope.openCompactSubmenu = null;
