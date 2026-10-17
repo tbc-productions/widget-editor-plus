@@ -465,13 +465,7 @@
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
         }
-        input[type="checkbox"].we-checkbox {
-            margin: 0;
-            cursor: pointer;
-            width: 1rem;
-            height: 1rem;
-            vertical-align: middle;
-        }
+        .we-cell-check .input-group-checkbox, .we-cell-check .checkbox-label { margin: 0; }
 
         /* Recommended Pill Badge */
         .we-pill-suggested {
@@ -659,9 +653,6 @@
             gap: 0.4rem;
         }
         .we-sidebar-checkbox-row {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
             margin: 0;
             font-size: 0.8125rem;
             font-weight: 600;
@@ -1608,7 +1599,10 @@
                             <thead>
                                 <tr>
                                     <th class="we-cell-check">
-                                        <input type="checkbox" class="we-checkbox" ng-checked="ctrl.isAllSelected()" ng-click="ctrl.toggleSelectAll()" title="Select / deselect all" />
+                                        <div class="input-group-checkbox">
+                                            <input type="checkbox" class="checkbox" id="we-assistant-select-all" ng-checked="ctrl.isAllSelected()" ng-click="ctrl.toggleSelectAll()" title="Select / deselect all" />
+                                            <label class="checkbox-label" for="we-assistant-select-all"><span class="sr-only">Select / deselect all</span></label>
+                                        </div>
                                     </th>
                                     <th>Table</th>
                                     <th>Name</th>
@@ -1621,7 +1615,10 @@
                                      same column layout as every other row (checkbox, open-in-new-tab, remove). -->
                                 <tr class="we-primary-row we-update-set-summary-row" ng-repeat="us in ctrl.updateSets" style="--we-sticky-top: {{2.75 + $index * 2.75}}rem;" data-update-set-key="{{us.sys_id}}">
                                     <td class="we-cell-check">
-                                        <input type="checkbox" class="we-checkbox" ng-checked="ctrl.isUpdateSetChecked(us)" ng-click="ctrl.toggleUpdateSetChecked(us)" title="Select / deselect all records from this update set" />
+                                        <div class="input-group-checkbox">
+                                            <input type="checkbox" class="checkbox" id="we-assistant-select-set-{{us.sys_id}}" ng-checked="ctrl.isUpdateSetChecked(us)" ng-click="ctrl.toggleUpdateSetChecked(us)" title="Select / deselect all records from this update set" />
+                                            <label class="checkbox-label" for="we-assistant-select-set-{{us.sys_id}}"><span class="sr-only">Select / deselect all records from {{us.name}}</span></label>
+                                        </div>
                                     </td>
                                     <td>
                                         <strong>Update Set</strong>
@@ -1666,7 +1663,10 @@
                                 </tr>
                                 <tr ng-repeat-end="ng-repeat-end" ng-if="!row.placeholder" ng-class="{'we-primary-row': row.primary, 'we-row-just-added': row._justAdded}" style="--we-sticky-top: {{2.75 + ctrl.updateSets.length * 2.75}}rem;" data-row-key="{{row.table}}:{{row.sys_id}}">
                                     <td class="we-cell-check">
-                                        <input type="checkbox" class="we-checkbox" ng-model="row.checked" ng-disabled="row.primary || ctrl.isExportBlocked(row.table, row)" ng-change="ctrl.onSelectionChange(row)" />
+                                        <div class="input-group-checkbox">
+                                            <input type="checkbox" class="checkbox" id="we-assistant-select-record-{{row.table}}-{{row.sys_id}}" ng-model="row.checked" ng-disabled="row.primary || ctrl.isExportBlocked(row.table, row)" ng-change="ctrl.onSelectionChange(row)" />
+                                            <label class="checkbox-label" for="we-assistant-select-record-{{row.table}}-{{row.sys_id}}"><span class="sr-only">Include {{row.label}}</span></label>
+                                        </div>
                                     </td>
                                     <td>
                                         <span ng-class="{'we-lookup-link': !(row.primary &amp;&amp; ctrl.embeddedInModal) &amp;&amp; !row.updateSetSysId, 'we-record-name-deleted': row.updateSetAction === 'DELETE'}" ng-click="!(row.primary &amp;&amp; ctrl.embeddedInModal) &amp;&amp; !row.updateSetSysId &amp;&amp; ctrl.openLookupForRow(row, 'table')" title="{{((row.primary &amp;&amp; ctrl.embeddedInModal) || row.updateSetSysId) ? '' : 'Click to change table'}}">
@@ -1792,10 +1792,10 @@
                             <div class="we-sidebar-footer">
                                 <!-- Update Set Options — only relevant once at least one update set has been added -->
                                 <div class="we-update-set-options" ng-if="ctrl.updateSets.length">
-                                    <label class="we-sidebar-checkbox-row">
-                                        <input type="checkbox" class="we-checkbox" ng-model="ctrl.includePreviousUpdates" ng-change="ctrl.toggleIncludePreviousUpdates()" />
-                                        <span>Include previous version</span>
-                                    </label>
+                                    <div class="input-group-checkbox">
+                                        <input type="checkbox" class="checkbox" id="we-assistant-include-previous" ng-model="ctrl.includePreviousUpdates" ng-change="ctrl.toggleIncludePreviousUpdates()" />
+                                        <label class="checkbox-label we-sidebar-checkbox-row" for="we-assistant-include-previous">Include previous version</label>
+                                    </div>
                                     <i class="icon-help we-update-set-options-help" aria-hidden="true" title="Include previous update set versions for comparison."></i>
                                 </div>
 

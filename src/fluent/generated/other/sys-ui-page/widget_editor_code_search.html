@@ -307,7 +307,6 @@
         .cs-toggle-label {
             display: inline-flex;
             align-items: center;
-            gap: 0.45rem;
             font-weight: 500;
             color: rgb(var(--now-color--neutral-0, var(--now-color--neutral-12, 38, 50, 56)));
             cursor: pointer;
@@ -323,13 +322,7 @@
             background: rgba(var(--now-color--neutral-0, 0, 0, 0), 0.05);
         }
 
-        .cs-toggle-label input[type="checkbox"] {
-            margin: 0;
-            cursor: pointer;
-            accent-color: rgb(var(--now-color--primary-2, 23, 103, 91));
-            width: 1rem;
-            height: 1rem;
-        }
+        .cs-toggle-label .checkbox-label { margin: 0; font: inherit; color: inherit; }
 
         /* Body Layout */
         .cs-body {
@@ -531,13 +524,8 @@
             background: rgb(var(--now-color_background--tertiary, 238, 240, 242));
         }
 
-        .cs-check {
-            accent-color: rgb(var(--now-color--primary-2, 23, 103, 91));
-            width: 0.95rem;
-            height: 0.95rem;
-            cursor: pointer;
-            flex-shrink: 0;
-        }
+        .cs-table-item .input-group-checkbox { margin: 0; flex-shrink: 0; }
+        .cs-table-item .checkbox-label { margin: 0; }
 
         .cs-table-info {
             flex: 1;
@@ -1640,15 +1628,14 @@
 
                 <!-- Options / Toggles -->
                 <div class="cs-header-toggles">
-                    <label class="cs-toggle-label" title="Match case exactly">
-                        <input type="checkbox" ng-model="ctrl.caseSensitive" ng-change="ctrl.onOptionChange()" />
-                        <span class="sr-only">Case sensitive</span>
-                        <span aria-hidden="true">Aa</span>
-                    </label>
-                    <label class="cs-toggle-label" title="Only show active records">
-                        <input type="checkbox" ng-model="ctrl.activeOnly" ng-change="ctrl.onOptionChange()" />
-                        <span>Active</span>
-                    </label>
+                    <div class="input-group-checkbox cs-toggle-label" title="Match case exactly">
+                        <input type="checkbox" class="checkbox" id="cs-case-sensitive" ng-model="ctrl.caseSensitive" ng-change="ctrl.onOptionChange()" />
+                        <label class="checkbox-label" for="cs-case-sensitive"><span class="sr-only">Case sensitive</span><span aria-hidden="true">Aa</span></label>
+                    </div>
+                    <div class="input-group-checkbox cs-toggle-label" title="Only show active records">
+                        <input type="checkbox" class="checkbox" id="cs-active-only" ng-model="ctrl.activeOnly" ng-change="ctrl.onOptionChange()" />
+                        <label class="checkbox-label" for="cs-active-only">Active</label>
+                    </div>
                 </div>
             </div>
         </header>
@@ -1706,7 +1693,10 @@
 
                         <div class="cs-table-list">
                             <div class="cs-table-item" ng-repeat="table in ctrl.filteredConfigTables track by table.sysId" ng-class="{active: ctrl.editing === table}" ng-click="ctrl.toggleTable(table)" title="Click to {{table.enabled ? 'disable' : 'enable'}} {{table.label}}">
-                                <input class="cs-check" type="checkbox" ng-model="table.enabled" ng-click="$event.stopPropagation()" aria-label="Include {{table.label}} in search" />
+                                <div class="input-group-checkbox" ng-click="$event.stopPropagation()">
+                                    <input type="checkbox" class="checkbox" id="cs-include-table-{{table.sysId}}" ng-model="table.enabled" />
+                                    <label class="checkbox-label" for="cs-include-table-{{table.sysId}}"><span class="sr-only">Include {{table.label}} in search</span></label>
+                                </div>
                                 <div class="cs-table-info">
                                     <div class="cs-table-name">
                                         <span class="cs-table-name-label">{{table.label}}</span>

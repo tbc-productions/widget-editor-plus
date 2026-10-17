@@ -296,7 +296,8 @@
         #cp-whitespace-control { position: relative; }
         #cp-whitespace-popover { position: absolute; display: block; top: 100%; left: auto; right: 0; width: 27rem; max-width: calc(100vw - 3rem); }
         #cp-whitespace-popover .arrow { left: auto; right: 0.65rem; }
-        #cp-whitespace-popover .radio label { white-space: normal; }
+        #cp-whitespace-popover .input-group-radio { display: block; margin: 0.5rem 0; }
+        #cp-whitespace-popover .radio-label { white-space: normal; }
         .cp-settings-control { margin-left: auto; flex-shrink: 0; }
         #cp-statistics { --cp-icon-accent: var(--now-color--primary-1, 0, 118, 204); padding: 16px; background: rgb(var(--now-color_background--secondary, 246 247 250)); }
         .da-section.cp-statistics-section { overflow: visible; --cp-icon-accent: var(--now-color--primary-1, 0, 118, 204); }
@@ -786,8 +787,11 @@
                         <button id="cp-whitespace-button" type="button" class="btn btn-default" ng-click="ctrl.toggleWhitespace()" ng-class="{active: ctrl.whitespaceOpen}" aria-label="Whitespace settings" ng-attr-aria-expanded="{{ctrl.whitespaceOpen}}" aria-controls="cp-whitespace-popover"><i class="icon-indent" aria-hidden="true"></i></button>
                         <div id="cp-whitespace-popover" class="popover bottom" ng-show="ctrl.whitespaceOpen" role="dialog" aria-label="Attribution and Statistics whitespace settings">
                             <div class="arrow"></div>
-                            <div class="popover-content">
-                                <div class="radio" ng-repeat="option in ctrl.whitespaceOptions"><label><input type="radio" name="credit-whitespace" ng-model="ctrl.whitespaceMode" ng-value="option.value" ng-change="ctrl.changeWhitespace()" />{{option.label}}</label></div>
+                            <div class="popover-content" role="radiogroup" aria-label="Whitespace comparison mode">
+                                <div class="input-group-radio" ng-repeat="option in ctrl.whitespaceOptions">
+                                    <input type="radio" class="radio" id="cp-whitespace-{{option.value}}" name="credit-whitespace" ng-model="ctrl.whitespaceMode" ng-value="option.value" ng-change="ctrl.changeWhitespace()" />
+                                    <label class="radio-label" for="cp-whitespace-{{option.value}}" ng-bind="option.label"></label>
+                                </div>
                             </div>
                         </div>
                     </div></div>
