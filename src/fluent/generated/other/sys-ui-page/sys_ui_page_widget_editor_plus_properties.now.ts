@@ -525,7 +525,7 @@ UiPage({
           <summary class="panel-heading"><span class="glyphicon glyphicon-chevron-right wep-accordion-chevron" aria-hidden="true"></span><span class="panel-title">Embed widget</span></summary>
           <div class="panel-body">
             <p class="wep-description">Add to a Service Portal header or footer widget.</p>
-            <code id="wep-debug-menu-code" class="wep-embed-code" tabindex="0" aria-label="Debug Menu embed code">&lt;sp-widget id="widget_editor_debug_menu"&gt;&lt;/sp-widget&gt;</code>
+            <code id="wep-debug-menu-code" class="wep-embed-code" tabindex="0" aria-label="Debug Menu embed code">&lt;widget id="widget_editor_debug_menu"&gt;&lt;/widget&gt;</code>
             <div class="wep-maintenance-actions">
               <button id="wep-copy-debug-menu" type="button" class="btn btn-default">Copy code</button>
               <p id="wep-copy-debug-menu-error" class="alert alert-danger" role="alert" hidden="hidden">Unable to copy.</p>

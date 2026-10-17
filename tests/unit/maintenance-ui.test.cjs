@@ -106,9 +106,9 @@ test('Debug Menu has navigation, searchable accordions and an exact copyable emb
             await expect(heading).toBeFocused();
             await expect(page.getByRole('searchbox')).toHaveValue('');
             await page.locator('#wep-debug-menu summary').filter({hasText:'Embed widget'}).click();
-            const snippet='<sp-widget id="widget_editor_debug_menu"></sp-widget>';
+            const snippet='<widget id="widget_editor_debug_menu"></widget>';
             await expect(page.locator('#wep-debug-menu-code')).toHaveText(snippet);
-            await expect(page.locator('#wep-debug-menu sp-widget')).toHaveCount(0);
+            await expect(page.locator('#wep-debug-menu widget')).toHaveCount(0);
             await page.evaluate(()=>{
                 Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{
                     if(window.clipboardDenied) throw new Error('Denied');
