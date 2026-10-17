@@ -1498,19 +1498,19 @@
                                 </td>
                             </tr>
 
-                            <tr class="sft-row" ng-if="ctrl.metaLeft.by || ctrl.metaRight.by">
+                            <tr class="sft-row">
                                 <td class="sft-label">
-                                    <div class="sft-label-main" we-tooltip="sys_created_by">
-                                        <span>Created by</span>
+                                    <div class="sft-label-main" we-tooltip="sys_updated_by">
+                                        <span>Updated by</span>
                                     </div>
                                 </td>
                                 <td class="sft-val" ng-class="{'sft-col-loading': ctrl.loadingLeft}">
                                     <input type="text" class="form-control" readonly="readonly" ng-model="ctrl.metaLeft.by"
-                                           aria-label="Created by (left)" />
+                                           aria-label="Updated by (left)" />
                                 </td>
                                 <td class="sft-val" ng-class="{'sft-col-loading': ctrl.loadingRight}">
                                     <input type="text" class="form-control" readonly="readonly" ng-model="ctrl.metaRight.by"
-                                           aria-label="Created by (right)" />
+                                           aria-label="Updated by (right)" />
                                 </td>
                             </tr>
 
