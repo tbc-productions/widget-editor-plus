@@ -783,8 +783,15 @@ test('the real Angular page preserves widgets and opens and saves the six additi
             assert.equal(await page.getByText('Default editors', { exact: true }).count(), 0, table);
             const primary = fixture.primary_field;
             assert.equal(await page.locator('#record-field-' + primary).inputValue(), fixture.widget[primary], table);
-            const primaryWidth = await page.locator('#record-field-' + primary).evaluate(element => element.getBoundingClientRect().width);
-            assert.ok(primaryWidth >= 300 && primaryWidth <= 330, table);
+            const primaryInput = page.locator('#record-field-' + primary);
+            await primaryInput.fill('x');
+            const shortWidth = await primaryInput.evaluate(element => element.getBoundingClientRect().width);
+            assert.equal(shortWidth, 80, table);
+            await primaryInput.fill('A very long record name '.repeat(10));
+            const longWidth = await primaryInput.evaluate(element => element.getBoundingClientRect().width);
+            assert.equal(longWidth, 320, table);
+            assert.ok(longWidth > shortWidth, table);
+            await primaryInput.fill(fixture.widget[primary]);
             if (table === 'sys_script_include') {
                 const rows = await page.locator('.we-record-field').evaluateAll(fields => fields.map(field => {
                     const label = field.querySelector('label').getBoundingClientRect();
