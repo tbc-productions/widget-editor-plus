@@ -179,4 +179,4 @@ This project was developed with assistance from OpenAI GPT, Anthropic Claude and
 
 ## Licence
 
-Copyright (c) 2026 TBC Productions. Licensed under the [MIT Licence](LICENSE).
+Copyright (c) 2026 [TBC Productions](https://tbcproductions.net/widget-editor-plus). Licensed under the [MIT Licence](LICENSE).
