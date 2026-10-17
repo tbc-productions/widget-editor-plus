@@ -32,6 +32,18 @@ Recent history identifies records by table and sys_id, retaining existing widget
 
 Existing widget links using `widget_id` continue to work. Links to another record use the same UI Page with `record_table=<supported table>&record_sys_id=<record sys_id>`; for example, `ui_page.do?sys_id=8b2e70458373fe1070b8b5dfeeaad35e&record_table=sys_ui_page&record_sys_id=<record sys_id>`. These links open records for editing and do not execute the target UI Page or script.
 
+## Backup and uninstall
+
+Administrators can use **Backup and uninstall** at the bottom of Properties. Uninstall requires active elevation to **security_admin**; use the profile menu to elevate before reviewing records.
+
+- **Export preferences** downloads preferences for all users of Widget Editor+ apps, including shared defaults. It covers `monaco_plus.user_prefs`, `we_debug_menu_prefs`, `widget_editor.visible_editors`, `widget_editor_assistant.favourite_tables` and `widget_editor_assistant.favourite_groups`.
+- **Restore preferences** accepts a preferences XML export up to 10 MiB. Restore matches by user and preference name, updating existing records and creating missing ones. User sys_ids must match; missing users and duplicate preferences block review. Review the counts and confirm before restoring. Interrupted imports can be reviewed and retried safely. Reload Widget Editor+ apps afterwards.
+- **Uninstall Widget Editor+ apps** shows linked records with all selected by default. Uncheck records to preserve them; their required parents are preserved automatically. Preferences are kept unless **Delete all users’ app preferences** is selected. The recommended backup includes all app records and preferences, including preserved records. Save the XML file, acknowledge it and type `UNINSTALL` before deleting the selected records.
+
+Uninstall covers current and retired source records, all records owned by the application, and `monaco.plus.*` system properties. Local and test records appear in the same selection table. Records edited using Widget Editor+ apps remain. Permissions and selections are validated on the server before deletion; changed records require a fresh review.
+
+Backups contain current record values, not attachments, update history or browser-only settings and drafts. Save exports outside the instance before a clone or upgrade. If deletion fails, removal stops and reports partial progress. Keep the page open until it finishes. To recover app configuration, reinstall Widget Editor+ apps, then load the complete backup using ServiceNow’s standard [Import XML](https://www.servicenow.com/docs/r/platform-administration/table-administration-and-data-management/import-xml-file.html) action. Use the preferences-only export with the preference restore controls. Backups contain user settings and application scripts.
+
 ## System Properties
 All system properties are managed under the `monaco.plus.*` namespace:
 

@@ -4,6 +4,483 @@ WidgetEditorMarkdownAjax.prototype = Object.extendsObject(AbstractAjaxProcessor,
     GROUPS_PREFIX: 'monaco.plus.update_sets.markdown_groups.',
     DISPLAY_PROPERTY: 'monaco.plus.update_sets.markdown_display',
     PAGE_SIZE: 100,
+    _suitePreferenceNames: function () {
+        return [
+            'monaco_plus.user_prefs',
+            'widget_editor.visible_editors',
+            'we_debug_menu_prefs',
+            'widget_editor_assistant.favourite_tables',
+            'widget_editor_assistant.favourite_groups',
+        ];
+    },
+    _preferenceImportTarget: function (row) {
+        if (row.user) {
+            var user = new GlideRecord('sys_user');
+            if (!/^[0-9a-f]{32}$/.test(row.user) || !user.get(row.user) || !user.canRead())
+                throw new Error(
+                    'User ' +
+                        row.user +
+                        ' is missing or unreadable. Restore the matching user before importing preferences.'
+                );
+        }
+        var gr = new GlideRecord('sys_user_preference');
+        gr.addQuery('name', row.name);
+        gr.addQuery('user', row.user);
+        gr.setLimit(2);
+        gr.query();
+        var id = '',
+            revision = '';
+        if (gr.next()) {
+            if (!gr.canRead() || !gr.canWrite())
+                throw new Error(
+                    'Cannot update preference ' + row.name + ' for ' + (row.user || 'Shared default') + '.'
+                );
+            id = String(gr.getUniqueValue());
+            revision = String(gr.getValue('sys_mod_count') || '0');
+            if (gr.next())
+                throw new Error(
+                    'Duplicate existing preference ' +
+                        row.name +
+                        ' for ' +
+                        (row.user || 'Shared default') +
+                        '. Resolve duplicates before importing.'
+                );
+        } else {
+            gr.initialize();
+            if (!gr.canCreate()) throw new Error('Cannot create preferences.');
+        }
+        return { id: id, revision: revision };
+    },
+    previewSuitePreferenceImport: function () {
+        if (!gs.hasRole('admin')) return this._answer({ success: false, error: 'Admin role required.' });
+        try {
+            var xml = String(this.getParameter('xml') || '');
+            if (!xml || xml.length > 10485760 || /<!DOCTYPE|<!ENTITY/i.test(xml))
+                throw new Error('Choose a preferences XML export under 10 MiB without DTDs or entities.');
+            var doc = new XMLDocument2();
+            if (doc.parseXML(xml) === false) throw new Error('The XML file is malformed.');
+            var root = doc.getDocumentElement();
+            if (!root || String(root.getNodeName()) !== 'unload') throw new Error('Choose a preferences XML export.');
+            var children = root.getChildNodeIterator(),
+                rows = [],
+                seen = {},
+                updated = 0;
+            while (children.hasNext()) {
+                var record = children.next(),
+                    tag = String(record.getNodeName());
+                if (tag === '#text' || tag === '#comment') continue;
+                if (tag !== 'sys_user_preference' || String(record.getAttribute('action') || '') !== 'INSERT_OR_UPDATE')
+                    throw new Error(
+                        'This file contains records other than preferences. Choose the preferences-only export.'
+                    );
+                var fields = record.getChildNodeIterator(),
+                    values = Object.create(null);
+                while (fields.hasNext()) {
+                    var field = fields.next(),
+                        name = String(field.getNodeName());
+                    if (name === '#text' || name === '#comment') continue;
+                    if (Object.prototype.hasOwnProperty.call(values, name))
+                        throw new Error('Duplicate XML field ' + name + '.');
+                    values[name] = String(field.getTextContent() || '');
+                }
+                if (
+                    this._suitePreferenceNames().indexOf(values.name) === -1 ||
+                    values.user === undefined ||
+                    values.value === undefined
+                )
+                    throw new Error('The file contains an unsupported or incomplete preference.');
+                var key = values.name + ':' + values.user;
+                if (seen[key]) throw new Error('The file contains duplicate preferences for ' + key + '.');
+                seen[key] = true;
+                if (values.system && !/^(true|false|0|1)$/.test(values.system))
+                    throw new Error('Invalid shared-default flag.');
+                if (values.type && values.type.length > 40) throw new Error('Invalid preference type.');
+                var row = {
+                    name: values.name,
+                    user: values.user,
+                    value: values.value,
+                    type: values.type || 'string',
+                    system: /^(true|1)$/.test(values.system || '') ? 'true' : 'false',
+                };
+                row.target = this._preferenceImportTarget(row);
+                if (row.target.id) updated++;
+                rows.push(row);
+            }
+            if (!rows.length) throw new Error('The file contains no Widget Editor+ apps preferences.');
+            var plan = { token: String(gs.generateGUID()), created: Date.now(), offset: 0, rows: rows };
+            gs.getSession().putClientData('we_suite_preference_import', JSON.stringify(plan));
+            return this._answer({
+                success: true,
+                token: plan.token,
+                total: rows.length,
+                updated: updated,
+                created: rows.length - updated,
+            });
+        } catch (e) {
+            return this._answer({ success: false, error: e.message || String(e) });
+        }
+    },
+    importSuitePreferences: function () {
+        if (!gs.hasRole('admin')) return this._answer({ success: false, error: 'Admin role required.' });
+        var plan = null;
+        try {
+            var raw = gs.getSession().getClientData('we_suite_preference_import');
+            plan = raw ? JSON.parse(String(raw)) : null;
+            if (
+                !plan ||
+                plan.token !== String(this.getParameter('token') || '') ||
+                Date.now() - plan.created > 1800000 ||
+                String(this.getParameter('confirmation') || '') !== 'RESTORE'
+            )
+                throw new Error('Review the preferences file and confirm restore again.');
+            if (String(plan.offset) !== String(this.getParameter('offset')))
+                throw new Error('The import has advanced. Review the file again.');
+            var end = Math.min(plan.offset + 20, plan.rows.length);
+            while (plan.offset < end) {
+                var row = plan.rows[plan.offset],
+                    target = this._preferenceImportTarget(row);
+                if (JSON.stringify(target) !== JSON.stringify(row.target))
+                    throw new Error('A preference changed since review. Review the file again.');
+                var gr = new GlideRecord('sys_user_preference');
+                if (target.id) {
+                    if (!gr.get(target.id)) throw new Error('A preference disappeared. Review the file again.');
+                } else gr.initialize();
+                ['name', 'user', 'value', 'type', 'system'].forEach(function (field) {
+                    if (!gr.getElement(field).canWrite())
+                        throw new Error('Cannot restore preference field ' + field + '.');
+                    gr.setValue(field, row[field]);
+                });
+                if (!(target.id ? gr.update() : gr.insert())) throw new Error('Could not restore ' + row.name + '.');
+                plan.offset++;
+                gs.getSession().putClientData('we_suite_preference_import', JSON.stringify(plan));
+            }
+            var done = plan.offset === plan.rows.length;
+            if (done) gs.getSession().putClientData('we_suite_preference_import', '');
+            return this._answer({ success: true, next: plan.offset, total: plan.rows.length, done: done });
+        } catch (e) {
+            return this._answer({
+                success: false,
+                error:
+                    (e.message || String(e)) +
+                    (plan
+                        ? ' Restored ' + plan.offset + ' preferences so far. Re-select the file to review and retry.'
+                        : ''),
+            });
+        }
+    },
+    _maintenanceRow: function (gr, table) {
+        if (!gr.canRead()) throw new Error('Cannot read ' + table + ':' + gr.getUniqueValue() + '.');
+        var elements = gr.getElements(),
+            references = [];
+        for (var i = 0; i < elements.size(); i++) {
+            var field = elements.get(i);
+            if (String(field.getED().getInternalType()) === 'reference') {
+                var value = String(gr.getValue(String(field.getName())) || '');
+                if (/^[0-9a-f]{32}$/.test(value) && references.indexOf(value) === -1) references.push(value);
+            }
+        }
+        return {
+            table: table,
+            sys_id: String(gr.getUniqueValue()),
+            label: String(gr.getDisplayValue() || gr.getUniqueValue()),
+            name: String(gr.getValue('name') || ''),
+            user: table === 'sys_user_preference' ? String(gr.getDisplayValue('user') || 'Shared default') : '',
+            updated: String(gr.getValue('sys_updated_on') || ''),
+            revision: String(gr.getValue('sys_mod_count') || '0'),
+            canDelete: !!gr.canDelete(),
+            references: references,
+        };
+    },
+    _maintenanceInventory: function (preferencesOnly) {
+        var self = this,
+            records = [],
+            preferences = [],
+            seen = {};
+        function collect(gr, table, target) {
+            gr.query();
+            while (gr.next()) {
+                var recordTable = table === 'sys_metadata' ? String(gr.getRecordClassName()) : table;
+                var key = recordTable + ':' + gr.getUniqueValue();
+                if (seen[key]) continue;
+                seen[key] = true;
+                var record = gr;
+                if (recordTable !== table) {
+                    // Read subclass fields too, so preservation includes their references.
+                    record = new GlideRecord(recordTable);
+                    if (!record.get(gr.getUniqueValue())) throw new Error('Cannot read ' + key + '.');
+                }
+                target.push(self._maintenanceRow(record, recordTable));
+            }
+        }
+        if (!preferencesOnly) {
+            Object.keys(WidgetEditorUninstallRecords).forEach(function (table) {
+                var gr = new GlideRecord(table);
+                if (!gr.isValid()) throw new Error('Cannot inspect table ' + table + '.');
+                gr.addQuery('sys_id', 'IN', WidgetEditorUninstallRecords[table].join(','));
+                collect(gr, table, records);
+            });
+            var metadata = new GlideRecord('sys_metadata');
+            if (!metadata.isValidField('sys_scope') || !metadata.isValidField('sys_package'))
+                throw new Error('Cannot inspect application ownership.');
+            metadata
+                .addQuery('sys_scope', 'd65bb60783e7321070b8b5dfeeaad3b2')
+                .addOrCondition('sys_package', 'd65bb60783e7321070b8b5dfeeaad3b2');
+            collect(metadata, 'sys_metadata', records);
+            // Table-specific settings can be added from Properties after installation.
+            var properties = new GlideRecord('sys_properties');
+            properties.addQuery('name', 'STARTSWITH', 'monaco.plus.');
+            collect(properties, 'sys_properties', records);
+            var propertyIds = records
+                .filter(function (row) {
+                    return row.table === 'sys_properties';
+                })
+                .map(function (row) {
+                    return row.sys_id;
+                })
+                .join(',');
+            if (propertyIds) {
+                var links = new GlideRecord('sys_properties_category_m2m');
+                if (!links.isValidField('property')) throw new Error('Cannot inspect property-category links.');
+                links.addQuery('property', 'IN', propertyIds);
+                collect(links, 'sys_properties_category_m2m', records);
+            }
+        }
+        var prefs = new GlideRecord('sys_user_preference');
+        prefs.addQuery('name', 'IN', this._suitePreferenceNames().join(','));
+        collect(prefs, 'sys_user_preference', preferences);
+        function byId(a, b) {
+            return (a.table + ':' + a.sys_id).localeCompare(b.table + ':' + b.sys_id);
+        }
+        return { records: records.sort(byId), preferences: preferences.sort(byId) };
+    },
+    _maintenanceSignature: function (rows) {
+        return JSON.stringify(
+            rows.map(function (row) {
+                return [row.table, row.sys_id, row.updated, row.revision];
+            })
+        );
+    },
+    _maintenanceBlockers: function (rows) {
+        var blockers = [];
+        if (rows.length) {
+            var attachment = new GlideRecord('sys_attachment');
+            attachment.addQuery(
+                'table_sys_id',
+                'IN',
+                rows
+                    .map(function (row) {
+                        return row.sys_id;
+                    })
+                    .join(',')
+            );
+            attachment.setLimit(1);
+            attachment.query();
+            if (attachment.next()) blockers.push('Uninstall blocked by related records outside the removal list.');
+        }
+        return blockers;
+    },
+    _maintenancePlan: function () {
+        var raw = gs.getSession().getClientData('we_suite_maintenance');
+        var plan = raw ? JSON.parse(String(raw)) : null;
+        if (!plan || plan.token !== String(this.getParameter('token') || '') || Date.now() - plan.created > 1800000)
+            throw new Error('The preview has expired. Review the records again.');
+        return plan;
+    },
+    _maintenanceSecurityAdmin: function () {
+        return (
+            String(gs.getSession().getActivatedElevatedRoles() || '')
+                .split(',')
+                .map(function (role) {
+                    return role.trim();
+                })
+                .indexOf('security_admin') !== -1
+        );
+    },
+    getMaintenanceAccess: function () {
+        if (!gs.hasRole('admin')) return this._answer({ success: false, error: 'Admin role required.' });
+        return this._answer({ success: true, securityAdmin: this._maintenanceSecurityAdmin() });
+    },
+    previewSuiteMaintenance: function () {
+        if (!gs.hasRole('admin')) return this._answer({ success: false, error: 'Admin role required.' });
+        try {
+            var preferencesOnly = String(this.getParameter('preferences_only')) === 'true';
+            if (!preferencesOnly && !this._maintenanceSecurityAdmin())
+                throw new Error('Elevated security_admin is required.');
+            var inventory = this._maintenanceInventory(preferencesOnly);
+            var plan = {
+                token: String(gs.generateGUID()),
+                created: Date.now(),
+                preferencesOnly: preferencesOnly,
+                deletePreferences: String(this.getParameter('delete_preferences')) === 'true',
+                backupRequired: String(this.getParameter('backup_required')) !== 'false',
+                records: inventory.records,
+                preferences: inventory.preferences,
+            };
+            gs.getSession().putClientData('we_suite_maintenance', JSON.stringify(plan));
+            var blockers = preferencesOnly ? [] : this._maintenanceBlockers(plan.records);
+            return this._answer({
+                success: true,
+                token: plan.token,
+                records: plan.records,
+                preferences: plan.preferences,
+                blockers: blockers,
+                deletePreferences: plan.deletePreferences,
+                securityAdmin: this._maintenanceSecurityAdmin(),
+            });
+        } catch (e) {
+            return this._answer({ success: false, error: e.message || String(e) });
+        }
+    },
+    _maintenanceXml: function (gr, table) {
+        function escape(value) {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/\r/g, '&#13;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&apos;');
+        }
+        var elements = gr.getElements(),
+            xml = '<' + table + ' action="INSERT_OR_UPDATE">';
+        for (var i = 0; i < elements.size(); i++) {
+            var field = elements.get(i),
+                name = String(field.getName());
+            if (!field.canRead()) throw new Error('Cannot back up field ' + table + '.' + name + '.');
+            var value = gr.getValue(name);
+            xml += value === null ? '<' + name + ' nil="true"/>' : '<' + name + '>' + escape(value) + '</' + name + '>';
+        }
+        return xml + '</' + table + '>\n';
+    },
+    exportSuiteMaintenance: function () {
+        if (!gs.hasRole('admin')) return this._answer({ success: false, error: 'Admin role required.' });
+        try {
+            var plan = this._maintenancePlan(),
+                mode = String(this.getParameter('mode') || ''),
+                offset = Number(this.getParameter('offset'));
+            if (mode !== 'preferences' && mode !== 'backup') throw new Error('Invalid export mode.');
+            if (mode === 'backup' && plan.preferencesOnly) throw new Error('Review the uninstall records first.');
+            var rows = mode === 'preferences' ? plan.preferences : plan.records.concat(plan.preferences);
+            if (!isFinite(offset) || offset < 0 || Math.floor(offset) !== offset || offset > rows.length)
+                throw new Error('Invalid export offset.');
+            if (offset === 0) {
+                plan.exportMode = mode;
+                plan.exportOffset = 0;
+                plan.backupComplete = false;
+            }
+            if (plan.exportMode !== mode || offset !== plan.exportOffset) throw new Error('Restart the export.');
+            var end = Math.min(offset + 20, rows.length),
+                xml = '';
+            for (var i = offset; i < end; i++) {
+                var row = rows[i],
+                    gr = new GlideRecord(row.table);
+                if (
+                    !gr.get(row.sys_id) ||
+                    this._maintenanceSignature([row]) !==
+                        this._maintenanceSignature([this._maintenanceRow(gr, row.table)])
+                )
+                    throw new Error('Records changed during export. Review the records and export again.');
+                xml += this._maintenanceXml(gr, row.table);
+            }
+            plan.exportOffset = end;
+            plan.backupComplete = mode === 'backup' && end === rows.length;
+            gs.getSession().putClientData('we_suite_maintenance', JSON.stringify(plan));
+            return this._answer({ success: true, xml: xml, next: end, total: rows.length, done: end === rows.length });
+        } catch (e) {
+            return this._answer({ success: false, error: e.message || String(e) });
+        }
+    },
+    uninstallSuite: function () {
+        if (!gs.hasRole('admin')) return this._answer({ success: false, error: 'Admin role required.' });
+        var deleted = 0;
+        try {
+            if (!this._maintenanceSecurityAdmin())
+                throw new Error('Elevate to security_admin before uninstalling Widget Editor+ apps.');
+            var plan = this._maintenancePlan();
+            if (plan.preferencesOnly || String(this.getParameter('confirmation') || '') !== 'UNINSTALL')
+                throw new Error('Review the uninstall records and type UNINSTALL to confirm.');
+            if (plan.backupRequired && !plan.backupComplete) throw new Error('Download the complete backup first.');
+            var current = this._maintenanceInventory(false),
+                rows = plan.records.concat(plan.deletePreferences ? plan.preferences : []),
+                latest = current.records.concat(plan.deletePreferences ? current.preferences : []);
+            if (this._maintenanceSignature(rows) !== this._maintenanceSignature(latest))
+                throw new Error('The removal list changed. Review the records and back up again.');
+            if (
+                plan.backupRequired &&
+                this._maintenanceSignature(plan.preferences) !== this._maintenanceSignature(current.preferences)
+            )
+                throw new Error('Preferences changed since backup. Review the records and back up again.');
+            var selected = JSON.parse(String(this.getParameter('selected_records') || 'null'));
+            if (!Array.isArray(selected) || !selected.length || selected.length > rows.length)
+                throw new Error('Select at least one reviewed record to remove.');
+            var known = {},
+                selectedIds = {};
+            rows.forEach(function (row) {
+                known[row.sys_id] = row;
+            });
+            selected.forEach(function (id) {
+                if (typeof id !== 'string' || !known[id] || selectedIds[id])
+                    throw new Error('The selection contains an unreviewed or duplicate record.');
+                selectedIds[id] = true;
+            });
+            latest.forEach(function (row) {
+                if (selectedIds[row.sys_id]) return;
+                row.references.forEach(function (id) {
+                    if (selectedIds[id])
+                        throw new Error(
+                            'A selected record is required by a preserved record. Update the selection before uninstalling.'
+                        );
+                });
+            });
+            var kept = rows.length - selected.length;
+            rows = latest.filter(function (row) {
+                return !!selectedIds[row.sys_id];
+            });
+            var blockers = this._maintenanceBlockers(current.records);
+            if (blockers.length) throw new Error(blockers.join(' '));
+            // Preflight everything before deletion, including ACLs that may need security_admin.
+            rows.forEach(function (row) {
+                if (!row.canDelete)
+                    throw new Error(
+                        'Cannot delete ' +
+                            row.table +
+                            ':' +
+                            row.sys_id +
+                            '. Check your elevated roles, then review again.'
+                    );
+            });
+            function priority(row) {
+                if (row.table === 'sys_app') return 100;
+                if (row.table === 'sys_script_include' && row.sys_id === '8c1af74f04814c0b8cfe761dfe6e4bde') return 90;
+                if (row.table === 'sys_security_acl') return 80;
+                if (/_role$|_m2m$/.test(row.table) || row.table === 'sys_claim') return 0;
+                return 10;
+            }
+            rows.sort(function (a, b) {
+                return priority(a) - priority(b);
+            });
+            gs.getSession().putClientData('we_suite_maintenance', '');
+            for (var i = 0; i < rows.length; i++) {
+                var row = rows[i],
+                    gr = new GlideRecord(row.table);
+                if (!gr.get(row.sys_id)) continue; // A previously removed parent can cascade to a listed child.
+                if (!gr.canDelete() || !gr.deleteRecord())
+                    throw new Error('Could not delete ' + row.table + ':' + row.sys_id + '. Uninstall stopped.');
+                deleted++;
+            }
+            return this._answer({ success: true, deleted: deleted, total: rows.length, kept: kept });
+        } catch (e) {
+            return this._answer({
+                success: false,
+                deleted: deleted,
+                error:
+                    (e.message || String(e)) +
+                    (deleted
+                        ? ' ' + deleted + ' records were already deleted. Review the remaining records before retrying.'
+                        : ''),
+            });
+        }
+    },
     _sortRules: function (rules) {
         function sort(nodes) {
             nodes.sort(function (a, b) {

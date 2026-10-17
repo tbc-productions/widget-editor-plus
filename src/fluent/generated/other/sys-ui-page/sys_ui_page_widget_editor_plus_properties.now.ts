@@ -179,6 +179,9 @@ UiPage({
       margin: 0 0 2.5rem;
       scroll-margin-top: calc(var(--wep-header-height, 0px) + 16px);
     }
+    .wep-section:last-child {
+      min-height: calc(100vh - var(--wep-header-height, 0px) - 16px);
+    }
     .wep-feature-heading {
       margin: 0 0 1rem;
       color: rgb(var(--now-color_text--primary, 29, 29, 29));
@@ -389,6 +392,67 @@ UiPage({
       margin: 0;
       color: rgb(var(--now-color_text--secondary, 91, 101, 111));
     }
+    [hidden] { display: none !important; }
+    .wep-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem; min-height: 60vh; color: rgba(var(--now-color_text--primary, 29, 29, 29), 0.65); font-size: var(--now-font-size--lg, 1.25rem); }
+    #wep-loading .stroke-element { fill: none; stroke: url(#wep-loading-gradient); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+    #wep-loading .fill-element { fill: url(#wep-loading-gradient); }
+    #wep-loading .container { animation: wep-fadeOut 3s ease-in-out infinite; }
+    #wep-loading .frame { animation: wep-drawFrame 3s ease-in-out infinite; stroke-dasharray: 320; stroke-dashoffset: 320; }
+    #wep-loading .header { animation: wep-dropHeader 3s ease-in-out infinite; }
+    #wep-loading .block1 { animation: wep-popBlock1 3s ease-in-out infinite; transform-origin: 32.5px 60px; }
+    #wep-loading .block2 { animation: wep-popBlock2 3s ease-in-out infinite; transform-origin: 66px 47.5px; }
+    #wep-loading .block3 { animation: wep-popBlock3 3s ease-in-out infinite; transform-origin: 66px 71px; }
+    @keyframes wep-drawFrame { 0%, 5% { stroke-dashoffset: 320; } 30%, 90% { stroke-dashoffset: 0; } 90.1%, 100% { stroke-dashoffset: 320; } }
+    @keyframes wep-dropHeader { 0%, 20% { opacity: 0; transform: translateY(-10px); } 35%, 90% { opacity: 1; transform: translateY(0); } 90.1%, 100% { opacity: 0; transform: translateY(-10px); } }
+    @keyframes wep-popBlock1 { 0%, 30% { opacity: 0; transform: scale(0.5); } 45%, 90% { opacity: 1; transform: scale(1); } 90.1%, 100% { opacity: 0; transform: scale(0.5); } }
+    @keyframes wep-popBlock2 { 0%, 40% { opacity: 0; transform: scale(0.5); } 55%, 90% { opacity: 1; transform: scale(1); } 90.1%, 100% { opacity: 0; transform: scale(0.5); } }
+    @keyframes wep-popBlock3 { 0%, 50% { opacity: 0; transform: scale(0.5); } 65%, 90% { opacity: 1; transform: scale(1); } 90.1%, 100% { opacity: 0; transform: scale(0.5); } }
+    @keyframes wep-fadeOut { 0%, 80% { opacity: 1; } 90%, 100% { opacity: 0; } }
+    @media (prefers-reduced-motion: reduce) { #wep-loading .container, #wep-loading .frame, #wep-loading .header, #wep-loading .block1, #wep-loading .block2, #wep-loading .block3 { animation: none; stroke-dashoffset: 0; } }
+    .wep-maintenance .panel-heading .panel-title { font-family: inherit !important; font-size: 0.875rem !important; letter-spacing: normal; }
+    .wep-maintenance fieldset { border: 0; padding: 0; margin: 1rem 0; min-width: 0; }
+    .wep-maintenance label { display: block; margin: 0.75rem 0; font-weight: 600; }
+    .wep-maintenance .input-group-checkbox input.checkbox ~ label.checkbox-label { font-weight: 600; }
+    .wep-maintenance .input-group-checkbox { display: flex; margin: 0.75rem 0; }
+    .wep-maintenance summary.panel-heading { cursor: pointer; list-style: none; justify-content: flex-start; }
+    .wep-maintenance summary.panel-heading::-webkit-details-marker { display: none; }
+    .wep-maintenance .wep-accordion-chevron { display: inline-block; }
+    .wep-maintenance details[open] .wep-accordion-chevron { transform: rotate(90deg); }
+    .wep-maintenance-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin: 1rem 0; }
+    .wep-maintenance-actions p { margin: 0; font-size: 0.8125rem; }
+    .wep-maintenance-progress { max-width: 24rem; height: 8px; margin-top: 0.75rem; }
+    .wep-maintenance-progress .progress-bar { width: 100%; height: 100%; }
+    .wep-maintenance-list { max-height: 25rem; overflow: auto; margin: 1rem 0; border: 1px solid rgb(var(--now-color_border--secondary, 205, 212, 217)); border-radius: var(--now-form-field--border-radius, 4px); }
+    .wep-maintenance .wep-records-table { width: 100%; min-width: 44rem; table-layout: fixed; font-size: 0.8125rem; margin: 0; }
+    .wep-records-table th:first-child { width: 32%; }
+    .wep-records-table th:nth-child(2) { width: 26%; }
+    .wep-records-table th:nth-child(3) { width: 28%; }
+    .wep-selection-table th:first-child { width: 44px; }
+    .wep-selection-table th:nth-child(2) { width: 30%; }
+    .wep-selection-table th:nth-child(3) { width: 24%; }
+    .wep-selection-table th:nth-child(4) { width: 30%; }
+    .wep-records-table .input-group-checkbox { margin: 0; }
+    .wep-records-table td { text-align: left; vertical-align: top; padding: 10px; overflow-wrap: anywhere; border-bottom: 1px solid rgb(var(--now-color_border--secondary, 205, 212, 217)); }
+    .wep-maintenance-list .wep-properties-table thead tr th { top: 0; }
+    .wep-maintenance-feedback { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-top: 0.875rem; }
+    .wep-maintenance-feedback p { margin: 0; font-size: 0.8125rem; }
+    .wep-maintenance-feedback .alert { width: 100%; }
+    .wep-maintenance-warning { font-size: 0.8125rem; margin: 1rem 0; }
+    .wep-maintenance-warning p { margin: 0.5rem 0; }
+    .wep-maintenance .form-control { max-width: 24rem; }
+    .wep-maintenance input[type="file"] { height: auto; padding: 0; }
+    .wep-maintenance input[type="file"]::file-selector-button {
+      padding: 0.5rem 0.75rem;
+      margin-right: 0.75rem;
+      border: 0;
+      border-right: 1px solid rgb(var(--now-color_border--secondary, 205, 212, 217));
+      background: rgb(var(--now-color_background--secondary, 246, 247, 249));
+      color: inherit;
+      font: inherit;
+    }
+    .wep-maintenance .btn, .wep-maintenance summary { min-height: 44px; }
+    .wep-maintenance :focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+    .wep-maintenance [hidden] { display: none !important; }
 
     @media (max-width: 767px) {
       .dc-header-row.wep-header-row {
@@ -427,6 +491,8 @@ UiPage({
       </div>
     </header>
     <main class="container-fluid wep-app">
+      ${Now.include('./widget_editor_properties_loading.html')}
+      <div id="wep-content" hidden="hidden">
       <div class="wep-nav-container">
         <ul id="wep-nav" class="wep-nav" aria-label="Features"></ul>
       </div>
@@ -436,9 +502,84 @@ UiPage({
         <p>Try adjusting your search query.</p>
       </div>
       <div id="wep-sections"></div>
+      <section id="wep-maintenance" class="wep-section wep-maintenance" data-feature="Backup and uninstall" aria-labelledby="wep-maintenance-title">
+        <h2 id="wep-maintenance-title" class="wep-feature-heading">Backup and uninstall</h2>
+        <details id="wep-export-details" class="panel panel-default wep-card" data-search="backup and uninstall export preferences all users shared defaults clone upgrade xml">
+          <summary class="panel-heading"><span class="glyphicon glyphicon-chevron-right wep-accordion-chevron" aria-hidden="true"></span><span class="panel-title">Export preferences</span></summary>
+          <div class="panel-body">
+            <p class="wep-description">Export Widget Editor+ apps preferences for all users, including shared defaults.</p>
+            <div class="wep-maintenance-actions">
+              <button id="wep-export-preferences" type="button" class="btn btn-default">Export all users’ preferences</button>
+              <p id="wep-export-status" role="status" aria-live="polite" tabindex="-1" hidden="hidden"></p>
+            </div>
+          </div>
+        </details>
+        <details id="wep-restore-details" class="panel panel-default wep-card" data-search="backup and uninstall restore import preferences all users clone upgrade xml">
+          <summary class="panel-heading"><span class="glyphicon glyphicon-chevron-right wep-accordion-chevron" aria-hidden="true"></span><span class="panel-title">Restore preferences</span></summary>
+          <div class="panel-body">
+            <p class="wep-description">Matches preferences by <code>sys_user.sys_id</code>.</p>
+            <label for="wep-preference-file">Preferences XML file (up to 10 MiB)</label>
+            <input id="wep-preference-file" class="form-control" type="file" accept=".xml,application/xml,text/xml" />
+            <div class="wep-maintenance-actions"><button id="wep-review-import" type="button" class="btn btn-default" disabled="disabled">Review import</button></div>
+            <div id="wep-import-preview" hidden="hidden">
+              <p id="wep-import-count"></p>
+              <div class="input-group-checkbox"><input id="wep-import-confirm" class="checkbox" type="checkbox" /><label class="checkbox-label" for="wep-import-confirm">Overwrite matching preferences</label></div>
+              <button id="wep-import-preferences" type="button" class="btn btn-default" disabled="disabled">Restore preferences</button>
+            </div>
+            <div class="wep-maintenance-feedback" hidden="hidden">
+              <button id="wep-restore-cancel" type="button" class="btn btn-default" hidden="hidden">Stop import</button>
+              <p id="wep-restore-status" role="status" aria-live="polite" tabindex="-1" hidden="hidden"></p>
+            </div>
+          </div>
+        </details>
+        <details id="wep-uninstall-details" class="panel panel-default wep-card" data-search="backup and uninstall remove delete records preferences all users xml">
+          <summary class="panel-heading"><span class="glyphicon glyphicon-chevron-right wep-accordion-chevron" aria-hidden="true"></span><span class="panel-title">Uninstall Widget Editor+ apps</span></summary>
+          <div class="panel-body">
+          <div class="alert alert-warning" role="alert">
+            <p>Permanently remove Widget Editor+ apps (including local changes). Elevated&#160;<code>security_admin</code>&#160;is required.</p>
+          </div>
+          <fieldset id="wep-uninstall-options" disabled="disabled">
+            <legend class="sr-only">Uninstall options</legend>
+            <div class="input-group-checkbox"><input id="wep-delete-preferences" class="checkbox" type="checkbox" /><label class="checkbox-label" for="wep-delete-preferences">Delete all users’ app preferences</label></div>
+            <div class="input-group-checkbox"><input id="wep-backup-required" class="checkbox" type="checkbox" checked="checked" /><label class="checkbox-label" for="wep-backup-required">Back up records and preferences first (recommended)</label></div>
+            <button id="wep-review-uninstall" type="button" class="btn btn-default" disabled="disabled">Review records to remove</button>
+          </fieldset>
+          <div id="wep-uninstall-preview" hidden="hidden">
+            <p id="wep-uninstall-count"></p>
+            <div class="wep-maintenance-list" tabindex="0" role="region" aria-label="Records to remove">
+              <table class="table wep-properties-table wep-records-table wep-selection-table">
+                <caption class="sr-only">All records that will be removed</caption>
+                <thead><tr><th scope="col"><div class="input-group-checkbox"><input id="wep-select-all-records" class="checkbox" type="checkbox" checked="checked" /><label class="checkbox-label" for="wep-select-all-records"><span class="sr-only">Select all records for removal</span></label></div></th><th scope="col">Record</th><th scope="col">Table</th><th scope="col">Sys ID</th><th scope="col">User</th></tr></thead>
+                <tbody id="wep-uninstall-records"></tbody>
+              </table>
+            </div>
+            <p id="wep-preserved-dependencies" class="wep-description" hidden="hidden">Required parent records are also preserved.</p>
+            <div id="wep-uninstall-warnings" class="alert alert-warning wep-maintenance-warning" role="alert" hidden="hidden">
+              <p id="wep-uninstall-blocked"></p>
+            </div>
+            <div class="wep-maintenance-actions">
+              <button id="wep-download-backup" type="button" class="btn btn-default">Download backup</button>
+              <p id="wep-backup-status" role="status" aria-live="polite" tabindex="-1" hidden="hidden"></p>
+            </div>
+            <div id="wep-backup-saved-label" class="input-group-checkbox" hidden="hidden"><input id="wep-backup-saved" class="checkbox" type="checkbox" /><label class="checkbox-label" for="wep-backup-saved">I have saved the backup</label></div>
+            <label for="wep-uninstall-confirmation">Type <code>UNINSTALL</code> to confirm</label>
+            <input id="wep-uninstall-confirmation" class="form-control" type="text" autocomplete="off" spellcheck="false" aria-describedby="wep-uninstall-count wep-uninstall-blocked" disabled="disabled" />
+            <div class="wep-maintenance-actions"><button id="wep-uninstall" type="button" class="btn btn-danger" disabled="disabled">Uninstall Widget Editor+ apps</button></div>
+          </div>
+            <div class="wep-maintenance-feedback" hidden="hidden">
+              <p id="wep-uninstall-status" role="status" aria-live="polite" tabindex="-1" hidden="hidden"></p>
+            </div>
+            <div id="wep-uninstall-progress" class="progress wep-maintenance-progress" hidden="hidden">
+              <div class="progress-bar progress-bar-striped active" role="progressbar" aria-label="Uninstalling Widget Editor+ apps"></div>
+            </div>
+          </div>
+        </details>
+      </section>
+      </div>
     </main>
   </div>
 </j:jelly>`,
     clientScript: `${Now.include('./widget_editor_app_drawer.js')}
-${Now.include('./widget_editor_plus_properties.client.js')}`,
+${Now.include('./widget_editor_plus_properties.client.js')}
+${Now.include('./widget_editor_maintenance.client.js')}`,
 })
