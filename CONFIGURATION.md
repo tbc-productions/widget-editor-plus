@@ -51,7 +51,7 @@ These links edit the record; they do not execute the target UI Page or script.
 Properties includes a **Debug Menu** section with a copyable embed snippet for a Service Portal header or footer widget:
 
 ```html
-<sp-widget id="widget_editor_debug_menu"></sp-widget>
+<widget id="widget_editor_debug_menu"></widget>
 ```
 
 No instance options or dedicated system properties are required. Default editor, timing indicators and console variables are per-user Debug Menu preferences; context-menu mode and Assistant visibility use Widget Editor+ user preferences.
