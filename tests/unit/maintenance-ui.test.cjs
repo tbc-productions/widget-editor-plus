@@ -201,6 +201,7 @@ test('both exports use their original button to cancel and keep status alongside
         await expect(page.getByRole('button',{name:buttonName})).toBeEnabled();
         await expect(page.locator(statusId)).toHaveText('Export cancelled.');
         await expect(page.locator(statusId)).toHaveClass('alert alert-danger');
+        assert.equal(await page.locator(statusId).evaluate(el=>el.getBoundingClientRect().top>=el.previousElementSibling.getBoundingClientRect().bottom),true);
         await expect(page.locator('#wep-backup-saved-label')).toBeHidden();
         assert.equal(batches,2);
         assert.equal(downloads,0);
@@ -209,9 +210,41 @@ test('both exports use their original button to cancel and keep status alongside
         await download;
         await expect(page.locator(statusId)).toContainText('Exported '+(backup?46:38)+' records.');
         await expect(page.locator(statusId)).toHaveClass('alert alert-info');
+        assert.equal(await page.locator(statusId).evaluate(el=>el.getBoundingClientRect().top>=el.previousElementSibling.getBoundingClientRect().bottom),true);
         await expect(page.getByRole('button',{name:buttonName})).toBeEnabled();
         assert.deepEqual(errors,[]);
     } finally {release();await page.close();}
+    }
+});
+
+test('empty preference exports show an info alert without downloading; shared defaults still export', async () => {
+    for(const width of [1280,390]){
+        const h=harness({securityAdmin:false});
+        h.database.sys_user_preference=h.database.sys_user_preference.filter(row=>row.name==='unrelated.preference');
+        const {page,errors}=await mount(h,width);
+        let downloads=0,exports=0;
+        page.on('download',()=>downloads++);
+        await page.route('**/maintenance',async route=>{
+            if(route.request().postDataJSON().method==='exportSuiteMaintenance') exports++;
+            await route.fallback();
+        });
+        try {
+            await page.locator('#wep-export-details summary').click();
+            await page.getByRole('button',{name:'Export all users’ preferences'}).click();
+            await expect(page.locator('#wep-export-status')).toHaveText('No preferences found.');
+            await expect(page.locator('#wep-export-status')).toHaveClass('alert alert-info');
+            await expect(page.getByRole('button',{name:'Export all users’ preferences'})).toBeEnabled();
+            assert.equal(downloads,0);
+            assert.equal(exports,0);
+            assert.equal(await page.locator('#wep-export-status').evaluate(el=>el.getBoundingClientRect().top>=el.previousElementSibling.getBoundingClientRect().bottom),true);
+            h.database.sys_user_preference.push({sys_id:id(1000),name:'monaco_plus.user_prefs',user:'',value:'{}'});
+            const download=page.waitForEvent('download');
+            await page.getByRole('button',{name:'Export all users’ preferences'}).click();
+            await download;
+            await expect(page.locator('#wep-export-status')).toHaveText('Exported 1 record.');
+            assert.equal(downloads,1);
+            assert.deepEqual(errors,[]);
+        }finally{await page.close();}
     }
 });
 

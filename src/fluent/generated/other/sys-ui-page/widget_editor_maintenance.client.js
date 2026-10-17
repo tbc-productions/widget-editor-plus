@@ -201,6 +201,10 @@
             try {
                 data = await data;
                 if (cancelled) throw new Error('Export cancelled.');
+                if (!backup && !data.preferences.length) {
+                    status('No preferences found.', 'info');
+                    return;
+                }
                 while (true) {
                     var batch = await ajax('exportSuiteMaintenance', { token: data.token, mode: mode, offset: offset });
                     if (cancelled) throw new Error('Export cancelled.');
@@ -226,7 +230,7 @@
                     backupReady = true;
                     node('backup-saved-label').hidden = false;
                 }
-                status('Exported ' + batch.total + ' records.', 'info');
+                status('Exported ' + batch.total + (batch.total === 1 ? ' record.' : ' records.'), 'info');
             } finally {
                 exporting.textContent = label;
                 exporting = null;

@@ -420,6 +420,7 @@ UiPage({
     .wep-maintenance details[open] .wep-accordion-chevron { transform: rotate(90deg); }
     .wep-maintenance-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin: 1rem 0; }
     .wep-maintenance-actions p { margin: 0; font-size: 0.8125rem; }
+    .wep-maintenance-actions .alert { flex-basis: 100%; }
     .wep-maintenance-progress { max-width: 24rem; height: 8px; margin-top: 0.75rem; }
     .wep-maintenance-progress .progress-bar { width: 100%; height: 100%; }
     .wep-maintenance-list { max-height: 25rem; overflow: auto; margin: 1rem 0; border: 1px solid rgb(var(--now-color_border--secondary, 205, 212, 217)); border-radius: var(--now-form-field--border-radius, 4px); }
