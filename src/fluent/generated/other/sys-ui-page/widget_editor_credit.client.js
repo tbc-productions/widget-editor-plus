@@ -2484,7 +2484,7 @@
                     }
                     function failed(message, emptyHistory) {
                         ctrl.error = !emptyHistory;
-                        ctrl.empty = !!emptyHistory;
+                        ctrl.empty = true;
                         changed();
                         if (emptyHistory) {
                             ctrl.updateSets = [];

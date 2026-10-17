@@ -443,6 +443,7 @@ WidgetEditorCreditAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         gr.initialize();
         // Effective elements include inherited dictionary fields and overrides.
         var languages = {
+            css: 'css',
             email_script: 'javascript',
             html_script: 'html',
             script: 'javascript',

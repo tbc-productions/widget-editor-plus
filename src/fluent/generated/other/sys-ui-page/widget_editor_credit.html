@@ -822,7 +822,7 @@
                         </g>
                     </g>
                     </svg><span ng-bind="ctrl.status"></span></div>
-                <div id="cp-status-wrap" ng-show="!ctrl.loading" ng-class="{'dc-no-versions-overlay': ctrl.empty}"><div id="cp-status-content" ng-class="{'dc-no-versions-content': ctrl.empty}"><p id="cp-status" ng-class="{'alert alert-danger': ctrl.error}" ng-bind="ctrl.status" role="status" aria-live="polite"></p></div></div>
+                <div id="cp-status-wrap" ng-show="!ctrl.loading" ng-class="{'dc-no-versions-overlay': ctrl.empty}"><div id="cp-status-content" ng-class="{'dc-no-versions-content': ctrl.empty}"><p id="cp-status" ng-class="{'alert alert-danger': ctrl.error &amp;&amp; !ctrl.empty}" ng-bind="ctrl.status" role="status" aria-live="polite"></p></div></div>
                 <details class="alert alert-warning" id="cp-warnings" ng-show="ctrl.data.warnings.length"><summary>History gaps</summary><div id="cp-warning-text"><p ng-repeat="warning in ctrl.data.warnings track by $index" ng-bind="warning"></p></div></details>
                 <details id="cp-statistics-container" class="da-section cp-statistics-section" ng-show="ctrl.data" credit-statistics="">
                     <summary id="cp-statistics-button" class="da-summary" role="button" aria-label="Statistics" aria-controls="cp-statistics" ng-attr-aria-expanded="{{ctrl.statistics.open}}" ng-click="$event.preventDefault(); ctrl.toggleStatistics()"><span id="cp-statistics-heading" class="da-label">Statistics</span><i class="fa fa-bar-chart cp-stats-icon" aria-hidden="true"></i></summary>

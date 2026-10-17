@@ -158,15 +158,37 @@ test('all supported script field types are discovered with the correct editor la
         email_script: 'javascript', html_script: 'html', script: 'javascript', script_client: 'javascript',
         script_plain: 'javascript', script_server: 'javascript', conditions: 'plaintext', condition_string: 'javascript',
         variable_conditions: 'plaintext', workflow_conditions: 'plaintext', html: 'html', html_template: 'html',
-        json: 'json', json_translations: 'json',
+        json: 'json', json_translations: 'json', css: 'css',
     };
     const types = Object.keys(expected);
-    const fields = types.concat(['string', 'condition', 'css', 'toString']).map(type => ({ name: 'field_' + type, type }));
+    const fields = types.concat(['string', 'condition', 'toString']).map(type => ({ name: 'field_' + type, type }));
     const { api } = harness([update(0, 'code();')], true, fields);
     const result = JSON.parse(api.getCredit());
     assert.equal(result.success, true, result.error);
     assert.equal(JSON.parse(api.validateLaunch()).success, true);
     assert.deepEqual(Object.fromEntries(result.fields.map(field => [field.name.slice(6), field.language])), expected);
+});
+
+test('Style Sheets with only a CSS field support pickers, record loading and Customer Update launches', () => {
+    const entry = update(0, 'body { color: red; }');
+    entry.name = 'sp_css_' + recordId;
+    entry.payload = entry.payload.replaceAll('sp_widget', 'sp_css').replaceAll('<script>', '<css>').replaceAll('</script>', '</css>');
+    const { api } = harness([entry], true, [{ name: 'css', label: 'CSS', type: 'css' }], [], {
+        tables: [{ name: 'sp_css', label: 'Style Sheet' }],
+        records: { sp_css: [{ sys_id: recordId, name: 'My stylesheet' }] },
+    });
+    api.getParameter = () => '';
+    assert.deepEqual(JSON.parse(api.getTables()).results, [{ id: 'sp_css', text: 'Style Sheet' }]);
+    api.getParameter = key => ({ sysparm_table: 'sp_css', sysparm_record: recordId })[key] || '';
+    assert.deepEqual(JSON.parse(api.getRecords()).results, [{ id: recordId, text: 'My stylesheet' }]);
+    const result = JSON.parse(api.getCredit());
+    assert.equal(result.success, true, result.error);
+    assert.equal(result.table, 'sp_css');
+    assert.deepEqual(result.fields, [{ name: 'css', label: 'CSS', language: 'css' }]);
+    api.getParameter = key => key === 'sysparm_update' ? ids[0] : '';
+    assert.equal(api.canView({ getUniqueValue: () => ids[0] }), true);
+    assert.equal(JSON.parse(api.validateLaunch()).success, true);
+    assert.equal(JSON.parse(api.getCredit()).success, true);
 });
 
 test('customer updates resolve local and retrieved sets directly and respect read access', () => {

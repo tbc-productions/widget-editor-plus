@@ -203,7 +203,12 @@ test('fields start collapsed, author is plain text, and Compare+ links open safe
             assert.equal(await page.evaluate(() => window.calls.length), 3);
             await page.evaluate(() => window.nextAnswer = { success: false, error: 'Administrator access is required.' });
             await page.locator('#cp-retry').click(); assert.equal(await page.locator('#cp-results').isVisible(), false);
-            assert.equal(await page.locator('#cp-status').evaluate(node => node.classList.contains('alert') && node.classList.contains('alert-danger')), true);
+            assert.equal(await page.locator('#cp-status').textContent(), 'Administrator access is required.');
+            assert.equal(await page.locator('#cp-status').evaluate(node => node.classList.contains('alert')), false);
+            assert.equal(await page.locator('#cp-status-wrap').getAttribute('class'), 'dc-no-versions-overlay');
+            assert.equal(await page.locator('#cp-status-content').getAttribute('class'), 'dc-no-versions-content');
+            assert.equal(await page.locator('#cp-status-content').evaluate(node => getComputedStyle(node).textAlign), 'center');
+            await page.screenshot({ path: '/tmp/credit-load-error-' + width + '.png' });
             await page.locator('#cp-retry').click(); assert.equal(await page.locator('.cp-field-section[open]').count(), 0);
             await page.evaluate(() => window.fixture.lines = []);
             const empty = page.locator('.cp-field-section[data-field=script]');
@@ -239,6 +244,9 @@ test('viewer ignores stale responses after a timeout and allows retry', async ()
         await page.evaluate(() => window.expire());
         await settle(page);
         assert.match(await page.locator('#cp-status').textContent(), /timed out/);
+        assert.equal(await page.locator('#cp-status').evaluate(node => node.classList.contains('alert')), false);
+        assert.equal(await page.locator('#cp-status-wrap').getAttribute('class'), 'dc-no-versions-overlay');
+        assert.equal(await page.locator('#cp-status-content').getAttribute('class'), 'dc-no-versions-content');
         await page.locator('#cp-retry').click();
         await page.evaluate(fixture => window.pending[0](JSON.stringify(fixture)), fixture);
         await settle(page);
