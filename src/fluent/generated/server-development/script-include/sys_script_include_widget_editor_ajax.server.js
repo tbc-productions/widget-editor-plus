@@ -198,7 +198,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 table: table,
                 sys_id: gr.getUniqueValue(),
                 name: gr.getValue(profile.primary) || '',
-                id: profile.primary === 'id' ? '' : table,
+                id: '',
                 canWrite: gr.canWrite(),
                 servicenow: false,
             });

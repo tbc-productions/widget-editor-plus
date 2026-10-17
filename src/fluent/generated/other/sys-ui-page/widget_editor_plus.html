@@ -519,6 +519,16 @@
             width: min(20rem, 50vw);
         }
 
+        .we-record-field {
+            display: grid;
+            grid-template-rows: 1rem 1.625rem;
+            align-items: start;
+        }
+        .we-header .we-record-field input[type="checkbox"] {
+            margin: 0;
+            justify-self: center;
+        }
+
         .we-field input[readonly],
         .we-field input:disabled {
             opacity: 0.5;
@@ -594,7 +604,7 @@
 
         /* Popovers (description, roles) */
         .we-field-with-popover { position: relative; }
-        .we-field-label-row { display: flex; align-items: center; gap: 0.1875rem; margin-block-end: 2px; min-height: 1rem; }
+        .we-field-label-row { display: flex; align-items: center; gap: 0.1875rem; margin-block-end: 0; min-height: 1rem; }
 
         #widget-name, #widget-id { field-sizing: content; min-width: 5rem; max-width: 13rem; }
         .we-field-label-row label { margin: 0; }
@@ -2068,10 +2078,15 @@
             cursor: pointer;
         }
         .we-picker-type-menu {
-            display: block;
-            font-size: 0.875rem;
+            font-size: var(--now-global-font-size--md, 14px);
             font-weight: 400;
-            min-width: 14rem;
+        }
+        .we-picker-type-menu a.we-dropdown-item {
+            color: rgb(var(--now-color_text--primary));
+            text-decoration: none;
+        }
+        .we-picker-type-menu .we-dropdown-item.active {
+            font-weight: 600;
         }
         .we-picker-title-actions {
             display: flex;
@@ -2639,10 +2654,8 @@
         html.we-light .we-header.we-header--deprecated {
             background: rgba(var(----now-alert--low--background-color, var(--now-color_alert--low-0)), 0.85);
         }
-        .we-header.we-header--deprecated .icon-cog,
-        .we-header.we-header--deprecated .icon-cog-selected,
-        html.we-light .we-header.we-header--deprecated .icon-cog,
-        html.we-light .we-header.we-header--deprecated .icon-cog-selected {
+        .we-header.we-header--deprecated .we-info-icon,
+        html.we-light .we-header.we-header--deprecated .we-info-icon {
             color: rgb(var(--now-checkbox_required-indicator--color--invalid, var(--now-color_alert--critical-2))) !important;
         }
         .we-pane-header.we-pane-header--deprecated,
@@ -3144,7 +3157,7 @@
                     <div class="we-field we-field-with-popover">
                         <div class="we-field-label-row">
                             <label for="widget-name">Name</label>
-                            <i class="we-info-icon" ng-class="{'icon-cog-selected': openDropdown === 'description' || descDropdownIconHover, 'icon-cog': !(openDropdown === 'description' || descDropdownIconHover)}" ng-mouseenter="descDropdownIconHover = true" ng-mouseleave="descDropdownIconHover = false" ng-click="toggleDropdown('description'); $event.stopPropagation()" ng-keydown="onDropdownTriggerKeydown($event, 'description')" title="More fields" tabindex="0" role="button" aria-haspopup="true" aria-expanded="{{openDropdown === 'description'}}"></i>
+                            <i class="we-info-icon" ng-class="{'icon-arrow-up-rounded': openDropdown === 'description', 'icon-arrow-down-rounded': openDropdown !== 'description'}" ng-click="toggleDropdown('description'); $event.stopPropagation()" ng-keydown="onDropdownTriggerKeydown($event, 'description')" title="More fields" tabindex="0" role="button" aria-haspopup="true" aria-expanded="{{openDropdown === 'description'}}"></i>
                             <span class="we-pane-unsaved-dot" ng-if="!isVersionView &amp;&amp; canWriteWidget &amp;&amp; headerDirty.name" title="Unsaved changes"></span>
                         </div>
                         <input type="text" class="form-control" id="widget-name" ng-model="widget.name" ng-readonly="isVersionView || !canWriteWidget" ng-class="{'we-input-invalid': nameInvalid}" />
@@ -3246,9 +3259,10 @@
                 <div class="we-header-sep"></div>
 
                 <div class="we-header-group" ng-if="!isWidgetRecord">
-                    <div class="we-field" ng-repeat="field in additionalWidgetFields track by field.name" ng-if="!field.more">
+                    <div class="we-field we-record-field we-field-with-popover" ng-repeat="field in additionalWidgetFields track by field.name" ng-if="!field.more">
                         <div class="we-field-label-row">
                             <label ng-attr-for="record-field-{{field.name}}">{{field.label}}</label>
+                            <i ng-if="field.name === recordPrimaryField" class="we-info-icon" ng-class="{'icon-arrow-up-rounded': openDropdown === 'description', 'icon-arrow-down-rounded': openDropdown !== 'description'}" ng-click="toggleDropdown('description'); $event.stopPropagation()" ng-keydown="onDropdownTriggerKeydown($event, 'description')" title="More fields" aria-label="More fields" tabindex="0" role="button" aria-haspopup="true" aria-expanded="{{openDropdown === 'description'}}" aria-controls="we-record-more-fields"></i>
                             <span class="we-pane-unsaved-dot" ng-if="headerDirty[field.name]" title="Unsaved changes"></span>
 
                         </div>
@@ -3256,10 +3270,7 @@
                         <select ng-if="field.type === 'choice'" class="form-control" ng-attr-id="record-field-{{field.name}}" ng-model="widget[field.name]" ng-options="choice.value as choice.label for choice in field.choices" ng-disabled="isVersionView || !canWriteWidget || !field.canWrite"><option value="">-- None --</option></select>
                         <input ng-if="field.type === 'reference'" type="text" class="form-control" ng-attr-id="record-field-{{field.name}}" ng-value="field.displayValue" readonly="readonly" />
                         <input ng-if="field.type !== 'boolean' &amp;&amp; field.type !== 'choice' &amp;&amp; field.type !== 'reference'" type="text" class="form-control" ng-class="{'we-record-primary': field.name === recordPrimaryField}" ng-attr-id="record-field-{{field.name}}" ng-model="widget[field.name]" ng-readonly="isVersionView || !canWriteWidget || !field.canWrite" />
-                    </div>
-                    <div class="we-field we-field-with-popover">
-                        <button type="button" class="btn btn-default" ng-click="toggleDropdown('description'); $event.stopPropagation()" ng-keydown="onDropdownTriggerKeydown($event, 'description')" title="More fields" aria-label="More fields" aria-expanded="{{openDropdown === 'description'}}" aria-controls="we-record-more-fields"><i class="icon-cog" aria-hidden="true"></i></button>
-                        <div id="we-record-more-fields" class="we-popover we-record-more-fields" ng-if="openDropdown === 'description'" ng-click="$event.stopPropagation()" we-dropdown-auto-pos="we-dropdown-auto-pos">
+                        <div id="we-record-more-fields" class="we-popover we-record-more-fields" ng-if="field.name === recordPrimaryField &amp;&amp; openDropdown === 'description'" ng-click="$event.stopPropagation()" we-dropdown-auto-pos="we-dropdown-auto-pos">
                             <div class="we-field" ng-repeat="field in additionalWidgetFields track by field.name" ng-if="field.more">
                                 <div class="we-field-label-row"><label ng-attr-for="record-more-{{field.name}}">{{field.label}}</label></div>
                                 <textarea ng-if="field.multiline" we-auto-resize="we-auto-resize" class="form-control we-desc-textarea" ng-attr-id="record-more-{{field.name}}" ng-model="widget[field.name]" ng-readonly="isVersionView || !canWriteWidget || !field.canWrite" rows="3"></textarea>
@@ -4329,9 +4340,9 @@
                     <div class="we-picker-title-left">
                         <div class="we-picker-title">Open<div class="dropdown we-dropdown we-picker-type" ng-class="{'open': openDropdown === 'pickerType'}">
                             <button type="button" id="we-picker-type-toggle" class="dropdown-toggle we-picker-type-toggle" ng-click="toggleDropdown('pickerType'); $event.stopPropagation()" ng-keydown="onDropdownTriggerKeydown($event, 'pickerType')" aria-haspopup="true" aria-expanded="{{openDropdown === 'pickerType'}}" aria-controls="we-picker-type-menu" aria-label="Record type: {{pickerType().singular}}">{{pickerType().singular}}</button>
-                            <ul id="we-picker-type-menu" class="dropdown-menu we-picker-type-menu" ng-show="openDropdown === 'pickerType'" role="menu" aria-labelledby="we-picker-type-toggle" we-dropdown-auto-pos="we-dropdown-auto-pos">
-                                <li ng-repeat="type in recordTypes | orderBy:'label' track by type.table" role="presentation" ng-class="{'active': picker.table === type.table}"><a href="" role="menuitem" ng-click="selectPickerRecordType(type.table); $event.stopPropagation()">{{type.label}}</a></li>
-                            </ul>
+                            <div id="we-picker-type-menu" class="we-dropdown-menu we-picker-type-menu" ng-show="openDropdown === 'pickerType'" role="menu" aria-labelledby="we-picker-type-toggle" we-dropdown-auto-pos="we-dropdown-auto-pos">
+                                <a href="" class="we-dropdown-item" ng-repeat="type in recordTypes | orderBy:'label' track by type.table" role="menuitem" ng-class="{'active': picker.table === type.table}" aria-current="{{picker.table === type.table}}" ng-click="selectPickerRecordType(type.table); $event.stopPropagation()">{{type.label}}</a>
+                            </div>
                         </div></div>
                     </div>
                     <div class="we-picker-title-actions">
@@ -4378,7 +4389,7 @@
                                 </span>
                                 <div class="we-picker-item-content">
                                     <span class="we-picker-item-name" ng-bind-html="(w.name || '&lt; no name &gt;') | weHighlight:pickerActiveSearch"></span>
-                                    <span class="we-picker-item-id" ng-bind-html="w.id | weHighlight:pickerActiveSearch"></span>
+                                    <span class="we-picker-item-id" ng-if="w.id" ng-bind-html="w.id | weHighlight:pickerActiveSearch"></span>
                                 </div>
                                 <div class="we-picker-item-actions">
                                     <a class="we-picker-action-btn" ng-href="{{w.widgetEditorUrl}}" target="_blank" ng-click="$event.stopPropagation()" title="Open in new tab" aria-label="Open record in new tab">
@@ -4406,7 +4417,7 @@
                                 </span>
                                 <div class="we-picker-item-content">
                                     <span class="we-picker-item-name" ng-bind="w.name || '&lt; no name &gt;'"></span>
-                                    <span class="we-picker-item-id" ng-bind="w.id"></span>
+                                    <span class="we-picker-item-id" ng-if="w.id" ng-bind="w.id"></span>
                                     <span class="we-picker-item-id" ng-if="w.table !== 'sp_widget'">{{recordTypeLabel(w.table)}}</span>
                                 </div>
                                 <div class="we-picker-item-actions">
@@ -4482,17 +4493,19 @@
             </div>
         </dialog>
 
-        <!-- Unsaved changes confirmation — new widget -->
+        <!-- Unsaved changes confirmation — new record -->
         <dialog class="we-modal-backdrop" we-modal-dialog="pendingNewWidget" we-dialog-cancel="cancelNewWidget()" ng-click="cancelNewWidget()">
             <div class="we-modal-box" style="width:25rem" ng-click="$event.stopPropagation()">
                 <div class="we-modal-title">Unsaved Changes</div>
                 <div class="we-modal-body">
                     <p>You have unsaved changes. What would you like to do?</p>
+                    <p ng-if="saveError" role="alert" ng-bind="saveError"></p>
+                    <p ng-if="localDraftError" role="alert" ng-bind="localDraftError"></p>
                 </div>
                 <div class="we-modal-actions">
-                    <button class="btn btn-primary" ng-click="saveAndNewWidget()">Save</button>
-                    <button class="btn btn-danger" ng-click="discardAndNewWidget()">Discard</button>
-                    <button class="btn btn-default" ng-click="cancelNewWidget()">Cancel</button>
+                    <button class="btn btn-primary" ng-click="saveAndNewWidget()" ng-disabled="savingBeforeNewRecord">Save &amp; Continue</button>
+                    <button class="btn btn-danger" ng-click="discardAndNewWidget()" ng-disabled="savingBeforeNewRecord">Discard &amp; Continue</button>
+                    <button class="btn btn-default" ng-click="cancelNewWidget()" ng-disabled="savingBeforeNewRecord">Cancel</button>
                 </div>
             </div>
         </dialog>

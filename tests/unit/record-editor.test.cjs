@@ -321,6 +321,16 @@ test('Script Include sandbox saves respect field access and preserve the script'
     }
 });
 
+test('record picker does not return technical table names as record identifiers', () => {
+    for (const table of supported.slice(1)) {
+        const h = serverHarness(table);
+        const result = h.api.getEditorRecords();
+        assert.equal(result.widgets[0].table, table);
+        assert.equal(result.widgets[0].id, '');
+        assert.equal(result.widgets[0].name, h.row[h.api._getEditorProfiles()[table].primary]);
+    }
+});
+
 test('picker paging continues past unreadable display fields and rejects invalid history IDs', () => {
     for (const noRead of [[], ['name']]) {
         const h = serverHarness('sys_ui_page', { listCount: 3, noRead });
@@ -349,6 +359,107 @@ function clientFunction(name, context) {
     vm.runInContext(found.getText(ast), context);
     return context[name];
 }
+
+test('picker type icons preserve widget, read-only, ServiceNow and deprecated icons', () => {
+    const context = vm.createContext({ $scope: {} });
+    const start = client.indexOf('                $scope.widgetPickerIconClass =');
+    vm.runInContext(client.slice(start, client.indexOf('                function _handleListSearchKeydown', start)), context);
+    const icon = context.$scope.widgetPickerIconClass;
+    for (const [table, expected] of [
+        ['sys_script_include', 'icon-document-code'], ['sp_css', 'icon-marker'],
+        ['sys_ui_script', 'icon-code'], ['sp_angular_provider', 'icon-console'],
+        ['sys_ui_page', 'icon-application-generic'], ['sp_ng_template', 'icon-layout'],
+        ['sp_widget', 'icon-script'], [undefined, 'icon-script'], ['__proto__', 'icon-script'],
+    ]) {
+        assert.equal(icon({ table, canWrite: true }), expected);
+        assert.equal(icon({ table, canWrite: false }), 'icon-locked');
+        assert.equal(icon({ table, canWrite: false, servicenow: true }), 'icon-brand-now');
+        assert.equal(icon({ table, canWrite: false, servicenow: true, deprecated: true }), 'icon-error');
+    }
+    assert.equal(icon(null), 'icon-script');
+});
+
+test('New stays in the current tab and waits for save or discard before navigating', async () => {
+    let dirty = false, discardAllowed = true, response = { success: true }, calls = 0;
+    const scope = { pendingNewWidget: false, recordTypes: supported.map(table => ({ table })) };
+    const context = vm.createContext({
+        $scope: scope, RECORD_TABLE: 'sys_script_include', SYS_ID: id,
+        window: { location: { href: '' } }, _bypassUnloadWarning: false,
+        hasUnsavedChanges: () => dirty, _discardPageDraft: () => discardAllowed,
+        _buildSavePayload: () => ({ name: 'Current record' }),
+        _acceptWidgetSave: () => { dirty = false; },
+        ajax: async () => { calls++; return response; },
+        buildWidgetEditorUrl: (_id, table) => '/ui_page.do?sys_id=page-id' + (table === 'sp_widget' ? '' : '&record_table=' + table),
+    });
+    const start = client.indexOf('                function navigateToNewWidget(');
+    vm.runInContext(client.slice(start, client.indexOf('                $scope.openWidgetPickerModal =', start)), context);
+    for (const table of supported) {
+        const expected = context.buildWidgetEditorUrl('', table) + '&new=1';
+        dirty = false;
+        scope.newRecord(table);
+        assert.equal(context.window.location.href, expected);
+        dirty = true;
+        context.window.location.href = '';
+        context._bypassUnloadWarning = false;
+        scope.newRecord(table);
+        assert.equal(scope.pendingNewWidget, table);
+        assert.equal(context.window.location.href, '');
+        scope.cancelNewWidget();
+        assert.equal(scope.pendingNewWidget, false);
+        assert.equal(dirty, true);
+        scope.newRecord(table);
+        discardAllowed = false;
+        scope.discardAndNewWidget();
+        assert.equal(context.window.location.href, '');
+        assert.equal(scope.pendingNewWidget, table);
+        discardAllowed = true;
+        scope.discardAndNewWidget();
+        assert.equal(context.window.location.href, expected);
+        assert.equal(context._bypassUnloadWarning, true);
+        context.window.location.href = '';
+        scope.newRecord(table);
+        response = { success: false, error: 'Save rejected' };
+        await scope.saveAndNewWidget();
+        assert.equal(context.window.location.href, '');
+        assert.equal(scope.pendingNewWidget, table);
+        assert.equal(scope.saveError, 'Save rejected');
+        assert.equal(dirty, true);
+        response = { success: true };
+        await scope.saveAndNewWidget();
+        assert.equal(context.window.location.href, expected);
+        assert.equal(scope.pendingNewWidget, false);
+    }
+    context.window.location.href = '';
+    scope.newRecord('sys_user');
+    assert.equal(context.window.location.href, '');
+    dirty = true;
+    scope.newRecord('sys_ui_page');
+    let finish;
+    const before = calls;
+    context.ajax = () => { calls++; return new Promise(resolve => { finish = resolve; }); };
+    const saving = scope.saveAndNewWidget();
+    scope.saveAndNewWidget();
+    scope.cancelNewWidget();
+    scope.discardAndNewWidget();
+    assert.equal(scope.pendingNewWidget, 'sys_ui_page');
+    assert.equal(calls, before + 1);
+    finish({ success: false });
+    await saving;
+    assert.equal(scope.savingBeforeNewRecord, false);
+    context.ajax = () => Promise.reject(new Error('Network unavailable'));
+    await scope.saveAndNewWidget();
+    assert.equal(scope.saveError, 'Network unavailable');
+    assert.equal(context.window.location.href, '');
+    context.ajax = async () => ({ success: true });
+    context._acceptWidgetSave = () => {};
+    await scope.saveAndNewWidget();
+    assert.match(scope.saveError, /still have unsaved changes/);
+    assert.equal(context.window.location.href, '');
+    scope.isNewWidget = true;
+    await scope.saveAndNewWidget();
+    assert.match(context.window.location.href, /record_table=sys_ui_page&new=1/);
+    assert.equal(context._bypassUnloadWarning, true);
+});
 
 test('non-widget payloads contain only changed writable fields and preserve false booleans', () => {
     const context = vm.createContext({
@@ -506,13 +617,14 @@ test('the real Angular page preserves widgets and opens and saves the six additi
     const browser = await chromium.launch({ headless: true });
     try {
         const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+        await page.route('https://instance.test/**', route => route.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' }));
         const errors = [];
         page.on('pageerror', error => errors.push(error.message));
         const types = serverHarness().api.getEditorRecordTypes().types;
         for (const table of supported) {
-            await page.goto('about:blank');
+            await page.goto('https://instance.test/editor-fixture');
             await page.setContent(markup);
-            await page.addStyleTag({ content: ':root { --now-color_chrome--brand-5: 3, 45, 62; --now-color--neutral-0: 255, 255, 255; } button:not(.btn) { padding:10px !important; border:1px solid #ccc !important; border-radius:4px !important; min-height:32px !important; background:#eee !important; }' });
+            await page.addStyleTag({ content: ':root { --now-color_chrome--brand-5: 3, 45, 62; --now-color--neutral-0: 255, 255, 255; --now-color_background--secondary: 242, 247, 248; --now-color_text--primary: 29, 49, 56; --now-modal--border-radius: 6px; --now-dropdown-list_search--background-color--hover: 224, 238, 241; } input[type=checkbox].checkbox { display:block; margin:10px 0; } button:not(.btn) { padding:10px !important; border:1px solid #ccc !important; border-radius:4px !important; min-height:32px !important; background:#eee !important; }' });
             const fixture = table === 'sp_widget' ? { success: true, additional_widget_fields: [], widget: {
                 sys_id: id, name: 'Example', id: 'example', description: Array(20).fill('Saved description line').join('\n'), template: 'saved html', css: '', client_script: '', script: '', link: '', canWrite: true,
             } } : serverHarness(table, { row: { description: Array(20).fill('Saved description line').join('\n') } }).api.getWidget();
@@ -529,7 +641,8 @@ test('the real Angular page preserves widgets and opens and saves the six additi
                     this.getXML = callback => {
                         window.calls.push(params);
                         const action = params.sysparm_name;
-                        const answer = action === 'getWidget' ? fixture
+                        if (action === 'saveWidget') sessionStorage.setItem('lastSaveBeforeNew', JSON.stringify(params));
+                        const answer = action === 'saveWidget' && window.failNextSave ? (window.failNextSave = false, { success: false, error: 'Save rejected' }) : action === 'getWidget' ? fixture
                             : action === 'getEditorRecordTypes' ? { success: true, types }
                             : action === 'getUserPrefs' ? { success: true, value: JSON.stringify({ showRecentlyOpenedWidgets: false }) }
                             : action === 'getEditorRecords' ? { success: true, widgets: [{ table: params.record_table, sys_id: id, name: 'Example', canWrite: true }], total: 1 }
@@ -572,9 +685,12 @@ test('the real Angular page preserves widgets and opens and saves the six additi
                 assert.equal(await page.locator('.we-header').evaluate(element => element.getBoundingClientRect().top), headerTop);
                 await page.evaluate(() => editorScope.$apply(() => { editorScope.canWriteWidget = true; }));
                 assert.equal(await page.locator('.we-header').evaluate(element => element.getBoundingClientRect().top), headerTop);
+                assert.equal(await page.locator('.we-info-icon[title="More fields"]').evaluate(element => element.classList.contains('icon-arrow-down-rounded')), true);
                 await page.locator('.we-info-icon[title="More fields"]').press('Enter');
+                assert.equal(await page.locator('.we-info-icon[title="More fields"]').evaluate(element => element.classList.contains('icon-arrow-up-rounded') && !element.classList.contains('icon-arrow-down-rounded')), true);
                 await checkDescriptionSizing(page, '#widget-description');
                 await page.locator('#widget-name').click();
+                assert.equal(await page.locator('.we-info-icon[title="More fields"]').evaluate(element => element.classList.contains('icon-arrow-down-rounded') && !element.classList.contains('icon-arrow-up-rounded')), true);
                 assert.equal(await page.locator('#widget-name').inputValue(), 'Example');
                 await page.locator('#widget-name').fill('Renamed widget');
                 assert.equal(await page.locator('.we-record-name').innerText(), 'Renamed widget');
@@ -629,10 +745,29 @@ test('the real Angular page preserves widgets and opens and saves the six additi
             assert.equal(await page.locator('#record-field-' + primary).inputValue(), fixture.widget[primary], table);
             const primaryWidth = await page.locator('#record-field-' + primary).evaluate(element => element.getBoundingClientRect().width);
             assert.ok(primaryWidth >= 300 && primaryWidth <= 330, table);
-            const cog = page.getByRole('button', { name: 'More fields', exact: true });
-            assert.equal(await cog.getAttribute('title'), 'More fields');
-            await cog.click();
-            assert.equal(await cog.getAttribute('aria-expanded'), 'true');
+            if (table === 'sys_script_include') {
+                const rows = await page.locator('.we-record-field').evaluateAll(fields => fields.map(field => {
+                    const label = field.querySelector('label').getBoundingClientRect();
+                    const labelRow = field.querySelector('.we-field-label-row').getBoundingClientRect();
+                    const control = field.querySelector('input, select').getBoundingClientRect();
+                    return { labelTop: label.top, controlTop: control.top, gap: control.top - labelRow.bottom };
+                }));
+                assert.equal(rows.length, 5);
+                for (const row of rows) {
+                    assert.ok(Math.abs(row.labelTop - rows[0].labelTop) < 1);
+                    assert.ok(Math.abs(row.controlTop - rows[0].controlTop) < 1);
+                    assert.equal(row.gap, 2);
+                }
+            }
+            const moreFieldsButton = page.getByRole('button', { name: 'More fields', exact: true });
+            assert.equal(await moreFieldsButton.getAttribute('title'), 'More fields');
+            assert.equal(await moreFieldsButton.evaluate(element => element.classList.contains('we-info-icon')), true);
+            assert.equal(await moreFieldsButton.locator('..').locator('label').getAttribute('for'), 'record-field-' + primary);
+            assert.equal(await moreFieldsButton.evaluate(element => element.classList.contains('icon-arrow-down-rounded') ? 1 : 0), 1);
+            await moreFieldsButton.press('Enter');
+            assert.equal(await moreFieldsButton.getAttribute('aria-expanded'), 'true');
+            assert.equal(await moreFieldsButton.evaluate(element => element.classList.contains('icon-arrow-up-rounded') ? 1 : 0), 1);
+            assert.equal(await moreFieldsButton.evaluate(element => element.classList.contains('icon-arrow-down-rounded') ? 1 : 0), 0);
             assert.equal(await page.locator('#record-application').isVisible(), true);
             if (table === 'sys_script_include') {
                 assert.equal(await page.locator('#record-more-description').isVisible(), true);
@@ -642,7 +777,9 @@ test('the real Angular page preserves widgets and opens and saves the six additi
                 assert.equal(await page.locator('#record-more-description').evaluate(element => element.tagName), 'TEXTAREA');
             }
             await page.locator('#record-field-' + primary).click();
-            assert.equal(await cog.getAttribute('aria-expanded'), 'false');
+            assert.equal(await moreFieldsButton.getAttribute('aria-expanded'), 'false');
+            assert.equal(await moreFieldsButton.evaluate(element => element.classList.contains('icon-arrow-down-rounded') ? 1 : 0), 1);
+            assert.equal(await moreFieldsButton.evaluate(element => element.classList.contains('icon-arrow-up-rounded') ? 1 : 0), 0);
             if (table === 'sp_ng_template') {
                 assert.equal(await page.locator('#record-field-sp_widget').inputValue(), 'Parent widget');
                 assert.equal(await page.locator('#record-field-sp_widget').getAttribute('readonly'), 'readonly');
@@ -694,6 +831,22 @@ test('the real Angular page preserves widgets and opens and saves the six additi
                 return editorScope.userPrefsEdit.editors.map(def => def.key);
             });
             assert.deepEqual(resetKeys, fixture.core_editor_defs.map(def => def.key), table);
+            if (table === 'sys_script_include') {
+                await page.locator('#record-field-name').fill('Keep these edits');
+                await page.evaluate(() => editorScope.$apply(() => editorScope.newRecord('sp_css')));
+                const confirm = page.locator('dialog[we-modal-dialog="pendingNewWidget"]');
+                assert.equal(await confirm.isVisible(), true);
+                assert.equal(await page.evaluate(() => editorScope.pendingNewWidget), 'sp_css');
+                await page.evaluate(() => { window.failNextSave = true; });
+                await confirm.getByRole('button', { name: 'Save & Continue', exact: true }).click();
+                await page.waitForFunction(() => !editorScope.savingBeforeNewRecord);
+                assert.equal(await confirm.isVisible(), true);
+                assert.match(await confirm.innerText(), /Save rejected/);
+                assert.equal(page.url(), 'https://instance.test/editor-fixture');
+                await confirm.getByRole('button', { name: 'Cancel', exact: true }).click();
+                assert.equal(await page.locator('#record-field-name').inputValue(), 'Keep these edits');
+                await page.locator('#record-field-name').fill('Renamed');
+            }
             await page.evaluate(() => editorScope.$apply(() => {
                 editorScope.canWriteWidget = false;
                 editorScope.visibleItems.forEach(pane => { if (pane.type === 'pane') pane.readOnly = true; });
@@ -716,16 +869,14 @@ test('the real Angular page preserves widgets and opens and saves the six additi
                 await page.evaluate(() => editorScope.$apply(() => { editorScope.widgetSysPolicy = ''; editorScope.widget.name = 'Renamed'; editorScope.openDropdown = null; }));
             }
             assert.equal(await page.locator('[ng-click="newRecord()"]').textContent(), 'New ' + fixture.record_label);
-            await page.evaluate(() => editorScope.newRecord());
-            const creation = await page.evaluate(() => openedRecords[0]);
-            const creationUrl = new URL(creation[0], 'https://instance.test');
-            assert.equal(creationUrl.searchParams.get('record_table'), table);
-            assert.equal(creationUrl.searchParams.get('new'), '1');
-            assert.equal(creationUrl.searchParams.has('record_sys_id'), false);
-            assert.deepEqual(creation.slice(1), ['_blank', 'noopener,noreferrer']);
             await page.evaluate(() => editorScope.newRecord('sys_user'));
-            assert.equal(await page.evaluate(() => openedRecords.length), 1);
+            assert.equal(await page.evaluate(() => openedRecords.length), 0);
             await page.evaluate(() => editorScope.$apply(() => editorScope.openWidgetPickerModal()));
+            const expectedIcon = {
+                sys_script_include: 'icon-document-code', sp_css: 'icon-marker', sys_ui_script: 'icon-code',
+                sp_angular_provider: 'icon-console', sys_ui_page: 'icon-application-generic', sp_ng_template: 'icon-layout',
+            }[table];
+            assert.equal(await page.locator('.we-picker-col-main .we-picker-item-icon i').first().getAttribute('class'), expectedIcon);
             const trigger = page.getByRole('button', { name: /^Record type:/ });
             assert.equal(await page.locator('.we-picker-type').evaluate(element => getComputedStyle(element).marginLeft), '8px');
             const triggerStyle = await trigger.evaluate(element => {
@@ -735,7 +886,38 @@ test('the real Angular page preserves widgets and opens and saves the six additi
             assert.deepEqual(triggerStyle, ['dotted', '0px', '0px', 'rgba(0, 0, 0, 0)', '0px']);
             await trigger.click();
             const menu = page.locator('#we-picker-type-menu');
+            const menuStyles = element => {
+                const style = getComputedStyle(element);
+                return [style.backgroundColor, style.border, style.borderRadius, style.boxShadow, style.minWidth];
+            };
+            assert.deepEqual(await menu.evaluate(menuStyles), await page.locator('.we-dropdown-menu-right').evaluate(menuStyles));
+            const firstOption = menu.getByRole('menuitem').first();
+            assert.deepEqual(await firstOption.evaluate(element => {
+                const style = getComputedStyle(element);
+                return [style.paddingTop, style.paddingRight, style.textDecorationLine, style.color];
+            }), ['8px', '12px', 'none', 'rgb(29, 49, 56)']);
+            await firstOption.hover();
+            assert.equal(await firstOption.evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(224, 238, 241)');
+            assert.equal(await menu.locator('[aria-current="true"]').innerText(), types.find(type => type.table === table).label);
             assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), types.map(type => type.label).sort((a, b) => a.localeCompare(b)));
+            if (table === 'sp_css') {
+                await page.evaluate(({ id }) => editorScope.$apply(() => {
+                    editorScope.userPrefs.showRecentlyOpenedWidgets = true;
+                    editorScope.userPrefs.showOpenHistory = true;
+                    editorScope.recentWidgetsResolved = [
+                        { table: 'sp_css', sys_id: id, name: 'Recent style', id: '', canWrite: true },
+                        { table: 'sp_widget', sys_id: id, name: 'Recent widget', id: 'recent-widget', canWrite: true },
+                        { table: 'sys_script_include', sys_id: id, name: 'Read-only include', id: '', canWrite: false },
+                    ];
+                }), { id });
+                const recent = page.locator('.we-picker-col-recent .we-picker-item');
+                assert.deepEqual(await recent.nth(0).locator('.we-picker-item-id').allTextContents(), ['Style Sheet']);
+                assert.deepEqual(await recent.nth(1).locator('.we-picker-item-id').allTextContents(), ['recent-widget']);
+                assert.equal(await recent.nth(0).locator('.we-picker-item-icon i').getAttribute('class'), 'icon-marker');
+                assert.equal(await recent.nth(1).locator('.we-picker-item-icon i').getAttribute('class'), 'icon-script');
+                assert.equal(await recent.nth(2).locator('.we-picker-item-icon i').getAttribute('class'), 'icon-locked');
+                assert.equal(await page.locator('.we-picker-col-main .we-picker-item-id').count(), 0);
+            }
             await menu.getByRole('menuitem', { name: 'UI Pages', exact: true }).click();
             await page.waitForFunction(() => calls.some(call => call.sysparm_name === 'getEditorRecords' && call.record_table === 'sys_ui_page'));
             assert.equal(await trigger.textContent(), 'UI Page');
@@ -751,11 +933,33 @@ test('the real Angular page preserves widgets and opens and saves the six additi
             await trigger.click();
             await page.locator('.we-picker-title-left').click({ position: { x: 2, y: 2 } });
             assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
-            await page.getByRole('button', { name: '+ New UI Page', exact: true }).click();
-            const pickerCreation = await page.evaluate(() => openedRecords.at(-1)[0]);
-            const pickerUrl = new URL(pickerCreation, 'https://instance.test');
+            if (table === 'sys_script_include') {
+                await page.evaluate(() => editorScope.$apply(() => {
+                    editorScope.canWriteWidget = true;
+                    editorScope.widget.name = 'Saved before New';
+                }));
+                await page.getByRole('button', { name: '+ New UI Page', exact: true }).click();
+                const confirm = page.locator('dialog[we-modal-dialog="pendingNewWidget"]');
+                assert.equal(await confirm.isVisible(), true);
+                assert.equal(await page.evaluate(() => editorScope.pendingNewWidget), 'sys_ui_page');
+                await Promise.all([
+                    page.waitForURL(url => url.pathname === '/ui_page.do' && url.searchParams.get('new') === '1'),
+                    confirm.getByRole('button', { name: 'Save & Continue', exact: true }).click(),
+                ]);
+                const saved = await page.evaluate(() => JSON.parse(sessionStorage.getItem('lastSaveBeforeNew')));
+                assert.equal(saved.record_table, 'sys_script_include');
+                assert.equal(JSON.parse(saved.data).name, 'Saved before New');
+            } else {
+                await Promise.all([
+                    page.waitForURL(url => url.pathname === '/ui_page.do' && url.searchParams.get('new') === '1'),
+                    page.getByRole('button', { name: '+ New UI Page', exact: true }).click(),
+                ]);
+            }
+            const pickerUrl = new URL(page.url());
             assert.equal(pickerUrl.searchParams.get('record_table'), 'sys_ui_page');
             assert.equal(pickerUrl.searchParams.get('new'), '1');
+            assert.equal(pickerUrl.searchParams.has('record_sys_id'), false);
+            assert.equal(page.context().pages().length, 1);
         }
         assert.deepEqual(errors, []);
     } finally {

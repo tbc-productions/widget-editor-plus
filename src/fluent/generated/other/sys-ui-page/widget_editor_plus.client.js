@@ -1741,7 +1741,22 @@
                     if (w.canWrite === false) {
                         return 'icon-locked';
                     }
-                    return 'icon-script';
+                    switch (w.table) {
+                        case 'sys_script_include':
+                            return 'icon-document-code';
+                        case 'sp_css':
+                            return 'icon-marker';
+                        case 'sys_ui_script':
+                            return 'icon-code';
+                        case 'sp_angular_provider':
+                            return 'icon-console';
+                        case 'sys_ui_page':
+                            return 'icon-application-generic';
+                        case 'sp_ng_template':
+                            return 'icon-layout';
+                        default:
+                            return 'icon-script';
+                    }
                 };
 
                 function _handleListSearchKeydown(event, itemSelector, onEnterFirst) {
@@ -2026,60 +2041,72 @@
                     }
                 };
 
-                function navigateToNewWidget() {
-                    window.location.href =
-                        window.location.pathname + '?sys_id=' + window.WE_CONFIG.widgetPageSysId + '&new=1';
+                function navigateToNewWidget(table) {
+                    _bypassUnloadWarning = true;
+                    window.location.href = buildWidgetEditorUrl('', table || 'sp_widget') + '&new=1';
                 }
 
-                $scope.newWidget = function () {
+                $scope.newWidget = function (table) {
+                    table = table || 'sp_widget';
                     $scope.openDropdown = null;
                     $scope.showWidgetPickerModal = false;
                     if (hasUnsavedChanges()) {
-                        $scope.pendingNewWidget = true;
+                        $scope.pendingNewWidget = table;
                     } else {
-                        navigateToNewWidget();
+                        navigateToNewWidget(table);
                     }
                 };
 
                 $scope.newRecord = function (table) {
                     table = table || RECORD_TABLE;
-                    if (table === 'sp_widget') {
-                        $scope.newWidget();
-                        return;
-                    }
                     if (
                         !$scope.recordTypes.some(function (type) {
                             return type.table === table;
                         })
                     )
                         return;
-                    $scope.openDropdown = null;
-                    $window.open(buildWidgetEditorUrl('', table) + '&new=1', '_blank', 'noopener,noreferrer');
+                    $scope.newWidget(table);
                 };
 
                 $scope.cancelNewWidget = function () {
-                    $scope.pendingNewWidget = false;
+                    if (!$scope.savingBeforeNewRecord) $scope.pendingNewWidget = false;
                 };
                 $scope.discardAndNewWidget = function () {
+                    if ($scope.savingBeforeNewRecord || !_discardPageDraft()) return;
+                    var table = $scope.pendingNewWidget || 'sp_widget';
                     $scope.pendingNewWidget = false;
-                    _discardPageDraft();
-                    _bypassUnloadWarning = true;
-                    navigateToNewWidget();
+                    navigateToNewWidget(table);
                 };
                 $scope.saveAndNewWidget = function () {
-                    $scope.pendingNewWidget = false;
+                    if ($scope.savingBeforeNewRecord) return;
+                    var table = $scope.pendingNewWidget || 'sp_widget';
                     var payload = _buildSavePayload();
-                    ajax('saveWidget', {
+                    $scope.savingBeforeNewRecord = true;
+                    $scope.saveError = null;
+                    return ajax('saveWidget', {
                         sys_id: SYS_ID,
                         data: JSON.stringify(payload),
-                    }).then(function (data) {
-                        if (!data.success) {
-                            $scope.saveError = data.error || 'Save failed';
-                            return;
-                        }
-                        _acceptWidgetSave(payload);
-                        navigateToNewWidget();
-                    });
+                    })
+                        .then(function (data) {
+                            if (!data.success) {
+                                $scope.saveError = data.error || 'Save failed';
+                                return;
+                            }
+                            _acceptWidgetSave(payload);
+                            if (!$scope.isNewWidget && hasUnsavedChanges()) {
+                                $scope.saveError =
+                                    'Some fields still have unsaved changes. Save those fields before continuing.';
+                                return;
+                            }
+                            $scope.pendingNewWidget = false;
+                            navigateToNewWidget(table);
+                        })
+                        .catch(function (error) {
+                            $scope.saveError = (error && error.message) || 'Save failed';
+                        })
+                        .finally(function () {
+                            $scope.savingBeforeNewRecord = false;
+                        });
                 };
 
                 $scope.openWidgetPickerModal = function () {
