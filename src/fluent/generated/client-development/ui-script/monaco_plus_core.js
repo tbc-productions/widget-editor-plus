@@ -4926,6 +4926,25 @@
             // _globalSetupDone prevents re-execution on subsequent language inits.
             if (!_globalSetupDone) {
                 _globalSetupDone = true;
+                monaco.editor.addEditorAction({
+                    id: 'we.search-code',
+                    label: 'Search in Code Search+',
+                    contextMenuGroupId: 'navigation',
+                    contextMenuOrder: 3,
+                    precondition: 'editorHasSelection',
+                    run: function (editor) {
+                        var model = editor.getModel();
+                        var selection = editor.getSelection();
+                        if (!model || !selection || selection.isEmpty()) return;
+                        var query = model.getValueInRange(selection).trim();
+                        if (!query) return;
+                        global.open(
+                            '/ui_page.do?sys_id=27a85cdf06a14eba97d2ffc3b57c4a46&q=' + encodeURIComponent(query),
+                            '_blank',
+                            'noopener'
+                        );
+                    },
+                });
                 if (global.SNMonacoPlusBootstrap && global.SNMonacoPlusBootstrap.registerUnicodeHover) {
                     global.SNMonacoPlusBootstrap.registerUnicodeHover(monaco);
                 }
