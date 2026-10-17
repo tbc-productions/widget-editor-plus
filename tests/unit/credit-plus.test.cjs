@@ -23,9 +23,13 @@ function update(index, code, extras = {}) {
     return entry;
 }
 function harness(entries = [], admin = true, scriptFields = ['script', 'client_script'], updateSets = [], catalog = {}) {
-    const queries = [];
+    const queries = [], preferences = catalog.preferences || {};
     const context = { Class: { create: () => function () {} }, AbstractAjaxProcessor: {},
         Object: Object.assign(Object.create(Object), { extendsObject: (_base, methods) => methods }),
+        WidgetEditorAjax: function () {
+            this.getMergedUserPref = (name, key, fallback) => { assert.equal(name, 'monaco_plus.user_prefs'); return preferences[key] ?? fallback; };
+            this.saveMergedUserPref = (name, key, value) => { assert.equal(name, 'monaco_plus.user_prefs'); preferences[key] = value; };
+        },
         gs: { hasRole: role => role === 'admin' && admin, getProperty: (name, fallback) => catalog.properties?.[name] ?? fallback },
         GlideDateTime: function (value) {
             const time = Date.parse((value || '2026-10-14 12:00:00').replace(' ', 'T') + 'Z');
@@ -110,7 +114,7 @@ function harness(entries = [], admin = true, scriptFields = ['script', 'client_s
     vm.runInNewContext(source, context);
     const api = context.WidgetEditorCreditAjax.prototype;
     api.getParameter = name => name === 'sysparm_update' ? entries.at(-1)?.sys_id : '';
-    return { api, queries };
+    return { api, queries, preferences };
 }
 const plain = result => JSON.parse(JSON.stringify(result));
 
@@ -121,6 +125,7 @@ test('admin guards deny every public entry before querying records', () => {
     assert.equal(JSON.parse(api.getCredit()).success, false);
     assert.equal(JSON.parse(api.getComparison()).success, false);
     assert.equal(JSON.parse(api.getStatistics()).success, false);
+    assert.equal(JSON.parse(api.getContributors()).success, false);
     assert.equal(JSON.parse(api.getTables()).success, false);
     assert.equal(JSON.parse(api.getRecords()).success, false);
     assert.equal(api.buildUpdate, undefined);
@@ -153,15 +158,37 @@ test('all supported script field types are discovered with the correct editor la
         email_script: 'javascript', html_script: 'html', script: 'javascript', script_client: 'javascript',
         script_plain: 'javascript', script_server: 'javascript', conditions: 'plaintext', condition_string: 'javascript',
         variable_conditions: 'plaintext', workflow_conditions: 'plaintext', html: 'html', html_template: 'html',
-        json: 'json', json_translations: 'json',
+        json: 'json', json_translations: 'json', css: 'css',
     };
     const types = Object.keys(expected);
-    const fields = types.concat(['string', 'condition', 'css', 'toString']).map(type => ({ name: 'field_' + type, type }));
+    const fields = types.concat(['string', 'condition', 'toString']).map(type => ({ name: 'field_' + type, type }));
     const { api } = harness([update(0, 'code();')], true, fields);
     const result = JSON.parse(api.getCredit());
     assert.equal(result.success, true, result.error);
     assert.equal(JSON.parse(api.validateLaunch()).success, true);
     assert.deepEqual(Object.fromEntries(result.fields.map(field => [field.name.slice(6), field.language])), expected);
+});
+
+test('Style Sheets with only a CSS field support pickers, record loading and Customer Update launches', () => {
+    const entry = update(0, 'body { color: red; }');
+    entry.name = 'sp_css_' + recordId;
+    entry.payload = entry.payload.replaceAll('sp_widget', 'sp_css').replaceAll('<script>', '<css>').replaceAll('</script>', '</css>');
+    const { api } = harness([entry], true, [{ name: 'css', label: 'CSS', type: 'css' }], [], {
+        tables: [{ name: 'sp_css', label: 'Style Sheet' }],
+        records: { sp_css: [{ sys_id: recordId, name: 'My stylesheet' }] },
+    });
+    api.getParameter = () => '';
+    assert.deepEqual(JSON.parse(api.getTables()).results, [{ id: 'sp_css', text: 'Style Sheet' }]);
+    api.getParameter = key => ({ sysparm_table: 'sp_css', sysparm_record: recordId })[key] || '';
+    assert.deepEqual(JSON.parse(api.getRecords()).results, [{ id: recordId, text: 'My stylesheet' }]);
+    const result = JSON.parse(api.getCredit());
+    assert.equal(result.success, true, result.error);
+    assert.equal(result.table, 'sp_css');
+    assert.deepEqual(result.fields, [{ name: 'css', label: 'CSS', language: 'css' }]);
+    api.getParameter = key => key === 'sysparm_update' ? ids[0] : '';
+    assert.equal(api.canView({ getUniqueValue: () => ids[0] }), true);
+    assert.equal(JSON.parse(api.validateLaunch()).success, true);
+    assert.equal(JSON.parse(api.getCredit()).success, true);
 });
 
 test('customer updates resolve local and retrieved sets directly and respect read access', () => {
@@ -294,7 +321,7 @@ test('random duplicate-line diffs never reuse origins or match unequal text', ()
 });
 
 test('context-menu selection validates a single selection server-side before opening the page', () => {
-    const action = fs.readFileSync('src/fluent/generated/server-development/ui-action/credit_plus.client.js', 'utf8');
+    const action = fs.readFileSync('src/fluent/generated/server-development/ui-action/widget_editor_credit.client.js', 'utf8');
     for (const selection of ['', ids[0] + ',' + ids[1], ids[0]]) {
         let calls = 0, opened = '', alert = '';
         const context = { g_list: { getChecked: () => selection }, alert: value => alert = value, g_navigation: { open: value => opened = value },
@@ -312,7 +339,7 @@ test('context-menu selection validates a single selection server-side before ope
 });
 
 test('context launch uses the clicked row even when other records are checked', () => {
-    const action = fs.readFileSync('src/fluent/generated/server-development/ui-action/credit_plus.client.js', 'utf8');
+    const action = fs.readFileSync('src/fluent/generated/server-development/ui-action/widget_editor_credit.client.js', 'utf8');
     let requested;
     const context = { rowSysId: ids[0], g_list: { getChecked: () => ids[1] + ',' + ids[2] }, alert: () => assert.fail('Unexpected selection error'),
         g_navigation: { open: url => { assert.ok(url.startsWith('/nav_to.do?uri=')); assert.equal(decodeURIComponent(url.split('uri=')[1]), 'ui_page.do?sys_id=9c5bf170283e4d6394aa639c79936587&sysparm_update=' + ids[0]); } },
@@ -342,7 +369,7 @@ test('metadata limits retain the selected update and pass browser limits through
 });
 
 test('Credit+ is declared only as an admin list context action', () => {
-    const metadata = fs.readFileSync('src/fluent/generated/server-development/ui-action/sys_ui_action_credit_plus.now.ts', 'utf8');
+    const metadata = fs.readFileSync('src/fluent/generated/server-development/ui-action/sys_ui_action_widget_editor_credit.now.ts', 'utf8');
     assert.match(metadata, /list: \{ showContextMenu: true \}/);
     assert.doesNotMatch(metadata, /showBannerButton|showListChoice|form:|openCreditPlusForm/);
     assert.match(metadata, /condition: "gs.hasRole\('admin'\)"/);
@@ -534,7 +561,7 @@ test('metadata does not parse historical XML and set counts use IDs instead of d
 
 test('Credit Script Include name, ACL and caller metadata stay consistent', () => {
     const metadata = fs.readFileSync('src/fluent/generated/server-development/script-include/sys_script_include_widget_editor_credit_ajax.now.ts','utf8');
-    const acl = fs.readFileSync('src/fluent/generated/security/access-control/sys_security_acl_credit_plus.now.ts','utf8');
+    const acl = fs.readFileSync('src/fluent/generated/security/access-control/sys_security_acl_widget_editor_credit.now.ts','utf8');
     assert.match(metadata, /name: 'WidgetEditorCreditAjax'/); assert.match(metadata, /global.WidgetEditorCreditAjax/);
     assert.match(acl, /name: 'WidgetEditorCreditAjax'/);
     const properties = fs.readFileSync('src/fluent/generated/properties/system-property/sys_properties_widget_editor_credit.now.ts','utf8');
@@ -753,8 +780,12 @@ test('Credit+ module opens its verified UI page below Code Search+ and stays adm
     assert.equal(credit.title, 'Credit+');
     assert.match(credit.metadata, /roles: \['admin'\]/);
     assert.match(credit.metadata, /override_menu_roles: true/);
-    const page = fs.readFileSync('src/fluent/generated/other/sys-ui-page/sys_ui_page_credit_plus.now.ts', 'utf8');
+    const page = fs.readFileSync('src/fluent/generated/other/sys-ui-page/sys_ui_page_widget_editor_credit.now.ts', 'utf8');
+    assert.match(page, /endpoint: 'widget_editor_credit\.do'/);
+    const acl = fs.readFileSync('src/fluent/generated/security/access-control/sys_security_acl_widget_editor_credit.now.ts', 'utf8');
+    assert.match(acl, /name: 'widget_editor_credit'/);
     const pageId = page.match(/\$id: '([0-9a-f]{32})'/)[1];
+    assert.equal(pageId, '9c5bf170283e4d6394aa639c79936587');
     assert.ok(credit.metadata.includes("query: 'ui_page.do?sys_id=" + pageId + "'"));
     assert.equal(new Set(modules.map(module => module.order)).size, modules.length);
 });
@@ -820,4 +851,49 @@ test('statistics use readable live-profile avatars ahead of user photos in one b
     assert.equal(photo(), userPhoto, 'External image URLs remain rejected');
     user.readable = false;
     assert.equal(photo(), undefined, 'An unreadable contributor is not used to query live-profile photos');
+});
+
+
+test('attribution contributors reuse permission-checked photos without loading history and reject invalid input', () => {
+    const userId = '1'.repeat(32), photo = '2'.repeat(32);
+    const user = { sys_id: userId, user_name: 'ada', photo: '3'.repeat(32) };
+    const profile = { sys_id: '4'.repeat(32), document: userId, photo };
+    const { api, queries } = harness([], true, undefined, [], { records: { sys_user: [user], live_profile: [profile] } });
+    let names = ['ada', 'ADA', 'missing'];
+    api.getParameter = () => JSON.stringify(names);
+    let result = JSON.parse(api.getContributors());
+    assert.equal(result.success, true);
+    assert.deepEqual(result.contributors.ada, { name: 'ada', userId, photo });
+    assert.deepEqual(result.contributors.missing, { name: 'missing', userId: '' });
+    assert.deepEqual(queries, ['sys_user', 'live_profile']);
+    user.readable = false;
+    result = JSON.parse(api.getContributors());
+    assert.equal(result.contributors.ada.photo, undefined);
+    assert.equal(queries.filter(table => table === 'live_profile').length, 1);
+    for (names of [{}, [null], ['x'.repeat(257)], Array(5002).fill('ada')]) {
+        const count = queries.length;
+        assert.equal(JSON.parse(api.getContributors()).success, false);
+        assert.equal(queries.length, count);
+    }
+    api.getParameter = () => 'not JSON';
+    assert.equal(JSON.parse(api.getContributors()).success, false);
+});
+
+
+test('Credit preferences validate values, require admin and merge into the existing shared blob', () => {
+    const stored = { fontSize: 18, assistantViewMode: 'graph', credit: { view: 'columns', whitespace: 'eol' } };
+    const { api, preferences } = harness([], true, [], [], { preferences: stored });
+    assert.deepEqual(JSON.parse(api.getPreferences()), { success: true, view: 'columns', whitespace: 'eol' });
+    api.getParameter = () => JSON.stringify({ view: 'grouped', whitespace: 'none', unrelated: 'ignored' });
+    assert.equal(JSON.parse(api.savePreferences()).success, true);
+    assert.deepEqual(plain(preferences), { fontSize: 18, assistantViewMode: 'graph', credit: { view: 'grouped', whitespace: 'none' } });
+    for (const value of ['null', '{', '[]', '{"view":"unknown","whitespace":"all"}', '{"view":"grouped","whitespace":"unknown"}']) {
+        api.getParameter = () => value;
+        assert.equal(JSON.parse(api.savePreferences()).success, false);
+        assert.deepEqual(plain(preferences.credit), { view: 'grouped', whitespace: 'none' });
+    }
+    const denied = harness([], false).api;
+    assert.equal(JSON.parse(denied.getPreferences()).success, false);
+    assert.equal(JSON.parse(denied.savePreferences()).success, false);
+    assert.deepEqual(JSON.parse(harness().api.getPreferences()), { success: true, view: 'grouped', whitespace: 'all' });
 });

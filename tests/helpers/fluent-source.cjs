@@ -14,6 +14,16 @@ function readFluentField(file, property) {
             } else if (ts.isCallExpression(initialiser) && initialiser.expression.getText(source) === 'Now.include'
                 && initialiser.arguments.length === 1 && ts.isStringLiteral(initialiser.arguments[0])) {
                 value = fs.readFileSync(path.resolve(path.dirname(file), initialiser.arguments[0].text), 'utf8');
+            } else if (ts.isTemplateExpression(initialiser)) {
+                value = initialiser.head.text;
+                for (const span of initialiser.templateSpans) {
+                    const include = span.expression;
+                    if (!ts.isCallExpression(include) || include.expression.getText(source) !== 'Now.include'
+                        || include.arguments.length !== 1 || !ts.isStringLiteral(include.arguments[0])) {
+                        throw new Error('Unsupported Fluent template: ' + file + ':' + property);
+                    }
+                    value += fs.readFileSync(path.resolve(path.dirname(file), include.arguments[0].text), 'utf8') + span.literal.text;
+                }
             } else {
                 throw new Error('Unsupported Fluent field: ' + file + ':' + property);
             }

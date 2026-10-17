@@ -636,7 +636,9 @@
                         if (!ctrl.rawFields || !ctrl.rawFields.length) {
                             return;
                         }
-                        var combined = ctrl.rawFields.concat(ctrl.extraFields || []);
+                        var combined = ctrl.rawFields.concat(ctrl.extraFields || []).filter(function (f) {
+                            return f.key !== 'sys_updated_by'; // Shown in the pinned metadata row.
+                        });
                         if (!ctrl.showChangedFieldsFirst) {
                             ctrl.fields = combined;
                         } else {
@@ -830,7 +832,7 @@
                                 usn: lMeta.update_set_name || '',
                                 uss: lMeta.update_set_sys_id || '',
                                 ust: lMeta.update_set_table || 'sys_update_set',
-                                by: lMeta.sys_created_by || '',
+                                by: (lMeta.fields && lMeta.fields.sys_updated_by) || lMeta.sys_created_by || '',
                             };
                         }
                         var rMeta = _rightVersionData;
@@ -841,7 +843,7 @@
                                   usn: rMeta.update_set_name || '',
                                   uss: rMeta.update_set_sys_id || '',
                                   ust: rMeta.update_set_table || 'sys_update_set',
-                                  by: rMeta.sys_created_by || '',
+                                  by: (rMeta.fields && rMeta.fields.sys_updated_by) || rMeta.sys_created_by || '',
                               }
                             : ctrl.currentIsUnsaved
                               ? {

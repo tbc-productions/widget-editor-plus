@@ -1,8 +1,8 @@
 # Widget Editor+
 
-Widget Editor+ is a development and diagnostics suite for ServiceNow Service Portal developers. It replaces the standard widget editor with one built around the Microsoft Monaco Editor and ServiceNow-specific IntelliSense, alongside dedicated tools for version diffing (**Compare+**), historical script attribution (**Credit+**), runtime portal diagnostics (**Debug Context Menu**), cross-table source search (**Code Search+**), and AI context extraction (**Widget Editor+ Assistant**).
+Widget Editor+ is a ServiceNow Service Portal development suite built around Monaco, with tools for editing, version comparison, script attribution, runtime diagnostics, code search and AI context export.
 
-> **Zero External Dependencies**: Built entirely with native ServiceNow platform capabilities. All editor functionality, language tooling, and diagnostics rely strictly on libraries already present within the ServiceNow platform (Monaco Editor, AngularJS, Bootstrap, and standard ServiceNow client/server APIs).
+The installed application uses libraries and APIs already available in ServiceNow; no external runtime dependencies are required.
 
 ---
 
@@ -42,6 +42,7 @@ Widget Editor+ is a development and diagnostics suite for ServiceNow Service Por
 A Monaco-based editor for Service Portal widgets.
 
 - Edit widget templates, styles, scripts and JSON, with per-field saving.
+- Open Script Includes, CSS, UI Scripts, Angular Providers, UI Pages and Angular HTML templates in the same editor.
 - Recover unsaved changes from automatic local drafts.
 - ServiceNow and AngularJS IntelliSense, including table fields, Script Includes and providers.
 - AngularJS expression validation and syntax highlighting.
@@ -97,8 +98,8 @@ Export selected ServiceNow records as XML context for AI tools.
 
 - Open Credit+ from a Customer Update list context menu, including Updates related lists.
 - Trace script lines across update sets to their captured authors, ignoring whitespace and moved blocks.
-- Expand scripts, HTML templates and conditions independently, with syntax colouring, linked update sets, inline attribution filters and Compare+ comparisons.
-- Open Statistics for builder/destroyer and update-set leaderboards, record age, founder and update-set highlights.
+- Inspect scripts, templates and conditions with attribution filters and Compare+ comparisons.
+- View contributor and update-set statistics, record history and an activity chart.
 - Require administrator access for both the viewer and server API.
 
 ---
@@ -131,7 +132,7 @@ Deploy the application directly to your configured ServiceNow instance:
 ```bash
 npm run deploy
 ```
-*(This executes `now-sdk install` to authenticate and apply the application package to the target instance).*
+This runs `now-sdk install` against the configured instance.
 
 Alternatively, deploy the retrieved update set XML artifact located in the latest [GitHub Release](https://github.com/tchris3/widget-editor-plus/releases) via **System Update Sets → Retrieved Update Sets**.
 
@@ -139,7 +140,7 @@ Alternatively, deploy the retrieved update set XML artifact located in the lates
 
 ## End-to-End Testing
 
-Widget Editor+ features a comprehensive Playwright test suite validating editor features, language services, and context menus against a live ServiceNow instance.
+Playwright tests cover editor features, language services and context menus against a live ServiceNow instance.
 
 1. Create a local `.env` configuration:
    ```bash

@@ -13,8 +13,8 @@ function embeddedScript(path, marker) {
         if (ts.isNoSubstitutionTemplateLiteral(node) && node.text.includes(marker)) {
             script = node.text;
         }
-        if (ts.isPropertyAssignment(node) && ts.isCallExpression(node.initializer)
-            && node.initializer.expression.getText(ast) === 'Now.include') {
+        if (ts.isPropertyAssignment(node) && (ts.isTemplateExpression(node.initializer)
+            || (ts.isCallExpression(node.initializer) && node.initializer.expression.getText(ast) === 'Now.include'))) {
             const included = readFluentField(path, node.name.getText(ast));
             if (included.includes(marker)) script = included;
         }

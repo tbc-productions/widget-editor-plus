@@ -23,6 +23,446 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
 
     RELATED_CELL_MAX_LENGTH: 100,
 
+    _getEditorProfiles: function () {
+        return {
+            sys_script_include: {
+                label: 'Script Includes',
+                singular: 'Script Include',
+                primary: 'name',
+                fields: [
+                    { name: 'name', required: true },
+                    { name: 'active', type: 'boolean' },
+                    { name: 'client_callable', shortLabel: 'Client', type: 'boolean' },
+                    { name: 'sandbox_callable', shortLabel: 'Sandbox', type: 'boolean' },
+                    { name: 'access', type: 'choice' },
+                    { name: 'description', multiline: true, more: true },
+                    { name: 'api_name', readOnly: true, more: true },
+                    { name: 'mobile_callable', type: 'boolean', more: true },
+                    { name: 'sys_policy', readOnly: true, more: true },
+                    { name: 'script', language: 'javascript', scriptKind: 'server' },
+                ],
+            },
+            sp_css: {
+                label: 'CSS',
+                singular: 'Style Sheet',
+                primary: 'name',
+                fields: [
+                    { name: 'name', required: true },
+                    { name: 'active', type: 'boolean' },
+                    { name: 'css', language: 'scss' },
+                ],
+            },
+            sys_ui_script: {
+                label: 'UI Scripts',
+                singular: 'UI Script',
+                primary: 'name',
+                fields: [
+                    { name: 'name', required: true },
+                    { name: 'active', type: 'boolean' },
+                    { name: 'global', type: 'boolean' },
+                    { name: 'ui_type', type: 'choice' },
+                    { name: 'description', multiline: true, more: true },
+                    { name: 'script', language: 'javascript', scriptKind: 'client' },
+                ],
+            },
+            sp_angular_provider: {
+                label: 'Angular Providers',
+                singular: 'Angular Provider',
+                primary: 'name',
+                fields: [
+                    { name: 'name', required: true },
+                    { name: 'active', type: 'boolean' },
+                    { name: 'type', type: 'choice' },
+                    { name: 'script', language: 'javascript', scriptKind: 'client' },
+                ],
+            },
+            sys_ui_page: {
+                label: 'UI Pages',
+                singular: 'UI Page',
+                primary: 'name',
+                fields: [
+                    { name: 'name', required: true },
+                    { name: 'active', type: 'boolean' },
+                    { name: 'category', type: 'choice' },
+                    { name: 'direct', type: 'boolean' },
+                    { name: 'description', multiline: true, more: true },
+                    { name: 'html', language: 'html' },
+                    { name: 'client_script', language: 'javascript', scriptKind: 'client' },
+                    {
+                        name: 'processing_script',
+                        language: 'javascript',
+                        scriptKind: 'server',
+                    },
+                ],
+            },
+            sp_ng_template: {
+                label: 'Angular HTML templates',
+                singular: 'Angular HTML Template',
+                primary: 'id',
+                fields: [
+                    { name: 'id', required: true },
+                    { name: 'active', type: 'boolean' },
+                    { name: 'sp_widget', type: 'reference', readOnly: true },
+                    { name: 'template', language: 'html' },
+                ],
+            },
+        };
+    },
+
+    _getEditorTable: function () {
+        return String(this.getParameter('record_table') || 'sp_widget');
+    },
+
+    getEditorRecordTypes: function () {
+        var types = [{ table: 'sp_widget', label: 'Widgets', singular: 'Widget' }];
+        var profiles = this._getEditorProfiles();
+        Object.keys(profiles).forEach(function (table) {
+            types.push({ table: table, label: profiles[table].label, singular: profiles[table].singular });
+        });
+        return this._answer({ success: true, types: types });
+    },
+
+    getAppDrawerContext: function () {
+        var table = String(this.getParameter('table') || '');
+        var recordId = String(this.getParameter('record_id') || '');
+        var apps = {};
+        if (/^[a-z_][a-z0-9_]*$/i.test(table) && /^[0-9a-f]{32}$/i.test(recordId)) {
+            var record = new GlideRecordSecure(table);
+            if (record.isValid() && record.get(recordId) && record.canRead()) {
+                apps.assistant = true;
+                apps['widget-editor'] =
+                    table === 'sp_widget' || Object.prototype.hasOwnProperty.call(this._getEditorProfiles(), table);
+                try {
+                    apps.compare = this._getDiffFieldDefs(table).success === true;
+                } catch (error) {}
+                if (gs.hasRole('admin')) {
+                    try {
+                        apps.credit = new global.WidgetEditorCreditAjax()._fields(table).length > 0;
+                    } catch (error) {}
+                }
+            }
+        }
+        return this._answer({ success: true, apps: apps });
+    },
+
+    _getEditorChoices: function (table, field) {
+        var choices = [];
+        var gr = new GlideRecord('sys_choice');
+        gr.addQuery('name', table);
+        gr.addQuery('element', field);
+        gr.addQuery('inactive', false);
+        gr.addQuery('language', 'en');
+        gr.orderBy('sequence');
+        gr.query();
+        while (gr.next()) {
+            choices.push({ value: gr.getValue('value'), label: gr.getValue('label') });
+        }
+        return choices;
+    },
+
+    _getEditorFieldDefs: function (gr, profile) {
+        var defs = [];
+        for (var i = 0; i < profile.fields.length; i++) {
+            var source = profile.fields[i];
+            if (!gr.isValidField(source.name)) continue;
+            var element = gr.getElement(source.name);
+            if (!element.canRead()) continue;
+            var def = {};
+            Object.keys(source).forEach(function (key) {
+                def[key] = source[key];
+            });
+            def.label = String(element.getLabel());
+            def.type = def.type || 'string';
+            def.canWrite = !def.readOnly && element.canWrite();
+            if (def.type === 'choice') def.choices = this._getEditorChoices(gr.getTableName(), def.name);
+            defs.push(def);
+        }
+        return defs;
+    },
+
+    _editorValue: function (gr, def) {
+        var value = gr.getValue(def.name) || '';
+        return def.type === 'boolean' ? value === '1' || value === 'true' : String(value);
+    },
+
+    _getRecordOrigin: function (table, sysId) {
+        if (!sysId) return null;
+        // Use the oldest readable update version, matching the widget's established date and founder.
+        var gr = new GlideRecordSecure('sys_update_version');
+        gr.addQuery('name', table + '_' + sysId);
+        gr.orderBy('sys_created_on');
+        gr.setLimit(1);
+        gr.query();
+        if (!gr.next() || !gr.getElement('sys_created_on').canRead() || !gr.getElement('sys_created_by').canRead())
+            return null;
+        var founder = gr.getValue('sys_created_by') || '';
+        var user = new GlideRecordSecure('sys_user');
+        user.addQuery('user_name', founder);
+        user.setLimit(1);
+        user.query();
+        if (user.next() && user.getElement('name').canRead()) founder = user.getDisplayValue('name') || founder;
+        return { created_on: gr.getValue('sys_created_on'), founder: founder };
+    },
+
+    getEditorRecords: function () {
+        var table = this._getEditorTable();
+        var profiles = this._getEditorProfiles();
+        if (!Object.prototype.hasOwnProperty.call(profiles, table)) {
+            return this._answer({ success: false, error: 'Record type not supported.' });
+        }
+        var profile = profiles[table];
+        var search = String(this.getParameter('search') || '');
+        var ids = String(this.getParameter('sys_ids') || '');
+        var offset = Math.max(0, parseInt(this.getParameter('offset'), 10) || 0);
+        var limit = Math.max(1, this.RECORD_LIMIT);
+        var records = [];
+        var gr = new GlideRecordSecure(table);
+        if (ids) {
+            var validIds = ids
+                .split(',')
+                .filter(function (id) {
+                    return /^[a-f0-9]{32}$/i.test(id);
+                })
+                .slice(0, 10);
+            if (!validIds.length) return this._answer({ success: true, widgets: [] });
+            gr.addQuery('sys_id', 'IN', validIds.join(','));
+        } else if (search) {
+            var query = gr.addQuery(profile.primary, 'CONTAINS', search);
+            query.addOrCondition('sys_id', search);
+        }
+        gr.orderBy(profile.primary);
+        gr.chooseWindow(offset, offset + limit + 1);
+        gr.query();
+        var scanned = 0,
+            hasMore = false;
+        while (gr.next()) {
+            if (scanned++ === limit) {
+                hasMore = true;
+                break;
+            }
+            var primary = gr.getElement(profile.primary);
+            if (!primary.canRead()) continue;
+            records.push({
+                table: table,
+                sys_id: gr.getUniqueValue(),
+                name: gr.getValue(profile.primary) || '',
+                id: '',
+                canWrite: gr.canWrite(),
+                servicenow: false,
+            });
+        }
+        return this._answer({
+            success: true,
+            widgets: records,
+            total: offset + records.length,
+            has_more: hasMore,
+            next_offset: offset + limit,
+        });
+    },
+
+    _getEditorRecord: function (isNew) {
+        var table = this._getEditorTable();
+        var profiles = this._getEditorProfiles();
+        if (!Object.prototype.hasOwnProperty.call(profiles, table)) {
+            return this._answer({ success: false, error: 'Record type not supported.' });
+        }
+        var sysId = String(this.getParameter('sys_id') || '');
+        if (!isNew && !/^[a-f0-9]{32}$/i.test(sysId))
+            return this._answer({ success: false, error: 'An existing record is required.' });
+        var gr = new GlideRecordSecure(table);
+        if (isNew) {
+            gr.newRecord();
+            if (!gr.canCreate())
+                return this._answer({
+                    success: false,
+                    error: 'You do not have permission to create this record type.',
+                });
+        } else if (!gr.get(sysId) || !gr.canRead())
+            return this._answer({ success: false, error: 'Record not found or access denied.' });
+        return this._answer(this._editorRecordData(gr, profiles[table], isNew ? '' : sysId, isNew));
+    },
+
+    _editorRecordData: function (gr, profile, sysId, isNew) {
+        var defs = this._getEditorFieldDefs(gr, profile);
+        var values = {
+            sys_id: sysId,
+            name: '',
+            application: '',
+            application_sys_id: '',
+            canWrite: isNew ? gr.canCreate() : gr.canWrite(),
+            widgetOrigin: this._getRecordOrigin(gr.getTableName(), sysId),
+        };
+        var editors = [],
+            fields = [];
+        for (var i = 0; i < defs.length; i++) {
+            var def = defs[i];
+            values[def.name] = this._editorValue(gr, def);
+            if (def.type === 'reference' || def.readOnly) def.displayValue = gr.getDisplayValue(def.name) || '';
+            if (def.language) {
+                editors.push({
+                    key: def.name,
+                    field: def.name,
+                    label: def.label,
+                    language: def.language,
+                    scriptKind: def.scriptKind || '',
+                    visible: true,
+                    readOnly: !def.canWrite,
+                });
+            } else fields.push(def);
+        }
+        if (
+            !defs.some(function (def) {
+                return def.name === profile.primary;
+            })
+        ) {
+            return { success: false, error: 'Record not found or access denied.' };
+        }
+        values.es12_supported = editors.some(function (editor) {
+            return editor.scriptKind === 'server';
+        });
+        values.es12 = false;
+        values.es12_record_exists = false;
+        if (sysId && values.es12_supported) {
+            var esGr = new GlideRecordSecure('sys_es_latest_script');
+            esGr.addQuery('id', sysId);
+            esGr.addQuery('table', gr.getTableName());
+            esGr.query();
+            if (esGr.next() && esGr.getElement('use_es_latest').canRead()) {
+                values.es12_record_exists = true;
+                var esValue = esGr.getValue('use_es_latest');
+                values.es12 = esValue === '1' || esValue === 'true';
+            }
+        }
+        if (profile.primary === 'id') values.name = values.id;
+        ['sys_scope', 'sys_policy', 'sys_updated_on', 'sys_updated_by', 'sys_mod_count'].forEach(function (name) {
+            if (gr.isValidField(name) && gr.getElement(name).canRead()) values[name] = gr.getValue(name) || '';
+        });
+        if (gr.isValidField('sys_scope') && gr.getElement('sys_scope').canRead())
+            values.application_label = String(gr.getElement('sys_scope').getLabel());
+        if (values.sys_scope) {
+            values.application_sys_id = values.sys_scope;
+            values.application = gr.getDisplayValue('sys_scope');
+        }
+        if (values.sys_policy) values.sys_policy_display = gr.getDisplayValue('sys_policy') || '';
+        values.canWrite = values.canWrite && !values.sys_policy;
+        return {
+            success: true,
+            widget: values,
+            core_editor_defs: editors,
+            additional_widget_fields: fields,
+            record_label: profile.singular,
+            primary_field: profile.primary,
+        };
+    },
+
+    _saveEditorRecord: function (singleField) {
+        try {
+            var table = this._getEditorTable(),
+                profiles = this._getEditorProfiles();
+            if (!Object.prototype.hasOwnProperty.call(profiles, table)) throw new Error('Record type not supported.');
+            var sysId = String(this.getParameter('sys_id') || '');
+            var isNew = !singleField && String(this.getParameter('new_record') || '') === 'true';
+            if ((isNew && sysId) || (!isNew && !/^[a-f0-9]{32}$/i.test(sysId)))
+                throw new Error('An existing record is required.');
+            var data = singleField ? Object.create(null) : JSON.parse(this.getParameter('data') || '{}');
+            var original = JSON.parse(this.getParameter('original') || '{}');
+            if (singleField) {
+                var fieldValue = this.getParameter('value');
+                data[String(this.getParameter('field') || '')] = fieldValue == null ? fieldValue : String(fieldValue);
+            }
+            if (
+                !data ||
+                Array.isArray(data) ||
+                typeof data !== 'object' ||
+                !original ||
+                Array.isArray(original) ||
+                typeof original !== 'object'
+            )
+                throw new Error('Invalid save payload.');
+            var gr = new GlideRecordSecure(table);
+            if (isNew) {
+                gr.newRecord();
+                if (!gr.canCreate()) throw new Error('You do not have permission to create this record type.');
+            } else if (!gr.get(sysId) || !gr.canRead() || !gr.canWrite())
+                throw new Error('Record not found or write access denied.');
+            if (gr.isValidField('sys_policy') && gr.getValue('sys_policy'))
+                throw new Error('This record is protected.');
+            var defs = this._getEditorFieldDefs(gr, profiles[table]);
+            if (
+                !defs.some(function (def) {
+                    return def.name === profiles[table].primary;
+                })
+            )
+                throw new Error('Record not found or access denied.');
+            var names = Object.keys(data),
+                values = {};
+            for (var i = 0; i < names.length; i++) {
+                var name = names[i];
+                var def = defs.filter(function (item) {
+                    return item.name === name;
+                })[0];
+                if (!def || !def.canWrite) throw new Error('Field is not editable: ' + name);
+                var value = data[name];
+                if (singleField && def.type === 'boolean' && (value === 'true' || value === 'false'))
+                    value = value === 'true';
+                if (typeof value !== (def.type === 'boolean' ? 'boolean' : 'string'))
+                    throw new Error('Invalid value for ' + def.label + '.');
+                if (
+                    !isNew &&
+                    (!Object.prototype.hasOwnProperty.call(original, name) ||
+                        original[name] !== this._editorValue(gr, def))
+                )
+                    throw new Error(
+                        def.label +
+                            ' changed in ServiceNow. Reload or review the current record before saving. Your local edits are preserved.'
+                    );
+                if (def.required && !String(value).trim()) throw new Error(def.label + ' is required.');
+                if (
+                    def.type === 'choice' &&
+                    value &&
+                    !def.choices.some(function (choice) {
+                        return choice.value === value;
+                    })
+                )
+                    throw new Error('Invalid choice for ' + def.label + '.');
+                var element = gr.getElement(name);
+                if (element.isMandatory && element.isMandatory() && (value === '' || value === null))
+                    throw new Error(def.label + ' is required.');
+                var maxLength = Number(element.getED().getLength());
+                if (typeof value === 'string' && maxLength > 0 && value.length > maxLength)
+                    throw new Error(def.label + ' exceeds its maximum length.');
+                values[name] = def.type === 'boolean' ? (value ? '1' : '0') : value;
+            }
+            if (isNew) {
+                for (var d = 0; d < defs.length; d++) {
+                    var required = defs[d];
+                    var requiredElement = gr.getElement(required.name);
+                    var candidate = Object.prototype.hasOwnProperty.call(values, required.name)
+                        ? values[required.name]
+                        : gr.getValue(required.name);
+                    if ((required.required || requiredElement.isMandatory()) && !String(candidate || '').trim())
+                        throw new Error(required.label + ' is required.');
+                }
+            }
+            for (var j = 0; j < names.length; j++) gr.setValue(names[j], values[names[j]]);
+            if (isNew) {
+                sysId = String(gr.insert() || '');
+                if (!sysId) throw new Error('Record creation failed. Check access and record validation.');
+            } else if (names.length && !gr.update())
+                throw new Error('Save failed. Check access and record validation.');
+            var readable = gr.get(sysId) && gr.canRead();
+            return this._answer({
+                success: true,
+                sys_id: sysId,
+                sys_updated_on: gr.getValue('sys_updated_on') || '',
+                sys_mod_count: gr.getValue('sys_mod_count') || '',
+                created_record: isNew && readable ? this._editorRecordData(gr, profiles[table], sysId) : null,
+            });
+        } catch (error) {
+            return this._answer({ success: false, error: error.message || 'Save failed.' });
+        }
+    },
+
     ////////////////////////////////////////////////////////////
     // Widget
     ////////////////////////////////////////////////////////////
@@ -148,6 +588,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
      *   widget_update_set_name: string}}} Return value.
      */
     getWidget: function () {
+        if (this._getEditorTable() !== 'sp_widget') return this._getEditorRecord();
         var sysId = this.getParameter('sys_id');
         if (!sysId) {
             return this._answer({
@@ -194,27 +635,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         var sysPolicy = gr.getValue('sys_policy') || '';
         var sysPolicyDisplay = sysPolicy ? gr.getDisplayValue('sys_policy') : '';
 
-        // Oldest sys_update_version for this widget → "est. year" + founder name
-        var widgetOrigin = null;
-        var ovGr = new GlideRecordSecure('sys_update_version');
-        ovGr.addQuery('name', 'sp_widget_' + sysId);
-        ovGr.orderBy('sys_created_on');
-        ovGr.setLimit(1);
-        ovGr.query();
-        if (ovGr.next()) {
-            var originCreatedOn = ovGr.getValue('sys_created_on'); // UTC "YYYY-MM-DD HH:MM:SS"
-            var originUser = ovGr.getValue('sys_created_by');
-            var originDisplay = originUser;
-            var uGr = new GlideRecordSecure('sys_user');
-            uGr.addQuery('user_name', originUser);
-            uGr.setLimit(1);
-            uGr.query();
-            if (uGr.next()) originDisplay = uGr.getDisplayValue('name');
-            widgetOrigin = {
-                created_on: originCreatedOn,
-                founder: originDisplay,
-            };
-        }
+        var widgetOrigin = this._getRecordOrigin('sp_widget', sysId);
 
         // Volatility risk
         var widgetVolLevel = '';
@@ -381,6 +802,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
      *   sys_mod_count: string, update_set_sys_id: string|null, update_set_name: string|null}} Return value.
      */
     saveWidget: function () {
+        if (this._getEditorTable() !== 'sp_widget') return this._saveEditorRecord(false);
         try {
             var sysId = this.getParameter('sys_id');
             var data;
@@ -491,6 +913,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
      * @returns {{success: boolean, sys_updated_on: string, sys_mod_count: string}} Return value.
      */
     saveField: function () {
+        if (this._getEditorTable() !== 'sp_widget') return this._saveEditorRecord(true);
         try {
             var sysId = this.getParameter('sys_id');
             var field = String(this.getParameter('field'));
@@ -728,6 +1151,13 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
      *   update_set_state: string, update_set_state_label: string, state: string}>}} Return value.
      */
     getVersions: function () {
+        var editorTable = this._getEditorTable();
+        if (
+            editorTable !== 'sp_widget' &&
+            !Object.prototype.hasOwnProperty.call(this._getEditorProfiles(), editorTable)
+        ) {
+            return this._answer({ success: false, error: 'Record type not supported.' });
+        }
         var sysId = this.getParameter('sys_id');
         if (!sysId) {
             return this._answer({
@@ -736,7 +1166,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             });
         }
 
-        var widgetGr = new GlideRecordSecure('sp_widget');
+        var widgetGr = new GlideRecordSecure(editorTable);
         if (!widgetGr.get(sysId)) {
             return this._answer({
                 success: false,
@@ -744,7 +1174,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             });
         }
         // version name uses sys_class_name, e.g. sp_header_footer, not always sp_widget
-        var className = widgetGr.getValue('sys_class_name') || 'sp_widget';
+        var className = widgetGr.getValue('sys_class_name') || editorTable;
 
         var versions = [];
         var gr = new GlideRecordSecure('sys_update_version');
@@ -799,6 +1229,31 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             });
         }
 
+        if (this._getEditorTable() !== 'sp_widget') {
+            var editorTable = this._getEditorTable();
+            var editorProfiles = this._getEditorProfiles();
+            var profile =
+                Object.prototype.hasOwnProperty.call(editorProfiles, editorTable) && editorProfiles[editorTable];
+            var recordId = String(this.getParameter('sys_id') || '');
+            if (!profile || gr.getValue('name') !== editorTable + '_' + recordId)
+                return this._answer({ success: false, error: 'Version does not belong to this record.' });
+            var current = new GlideRecordSecure(editorTable);
+            if (!current.get(recordId) || !current.canRead())
+                return this._answer({ success: false, error: 'Record not found or access denied.' });
+            var parsed = this._parseVersionPayloadAll(gr.getValue('payload')).fields;
+            var fields = {};
+            this._getEditorFieldDefs(current, profile).forEach(function (def) {
+                if (parsed[def.name] !== undefined) fields[def.name] = parsed[def.name];
+            });
+            return this._answer({
+                success: true,
+                fields: fields,
+                sys_created_on: gr.getValue('sys_created_on'),
+                sys_created_by: gr.getValue('sys_created_by'),
+                update_set_name: gr.source.name.getValue(),
+            });
+        }
+
         return this._answer({
             success: true,
             sys_created_on: gr.getValue('sys_created_on'),
@@ -825,20 +1280,23 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
      *   table_label: string}} Return value.
      */
     getDiffFieldDefs: function () {
-        var table = String(this.getParameter('table') || 'sp_widget');
+        return this._answer(this._getDiffFieldDefs(String(this.getParameter('table') || 'sp_widget')));
+    },
+
+    _getDiffFieldDefs: function (table) {
         if (this.DIFF_ALLOWED_TABLES.length > 0 && this.DIFF_ALLOWED_TABLES.indexOf(table) === -1) {
-            return this._answer({
+            return {
                 success: false,
                 error: 'Table not allowed: ' + table,
-            });
+            };
         }
 
         var labelGr = new GlideRecord('sys_db_object');
         if (!labelGr.get('name', table)) {
-            return this._answer({
+            return {
                 success: false,
                 error: 'Table not found: ' + table,
-            });
+            };
         }
 
         var fieldNames = [];
@@ -856,10 +1314,10 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         }
 
         if (fieldNames.length === 0) {
-            return this._answer({
+            return {
                 success: false,
                 error: 'No Default view fields found for table: ' + table,
-            });
+            };
         }
 
         // Queries the full table hierarchy so inherited fields (e.g. active from sys_metadata) get the correct type/renderAs.
@@ -1011,12 +1469,12 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             tableLabel = table;
         }
 
-        return this._answer({
+        return {
             success: true,
             fields: fieldDefs,
             extra_fields: extraFieldDefs,
             table_label: tableLabel,
-        });
+        };
     },
 
     /**
@@ -1844,14 +2302,15 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     ////////////////////////////////////////////////////////////
 
     /**
-     * Upserts a sys_es_latest_script record to enable or disable ES12 mode for a widget.
+     * Upserts a sys_es_latest_script record to enable or disable ES12 mode for a server-script record.
      * Never deletes the record; sets use_es_latest=false to disable.
-     * Accepts `sys_id` (sp_widget sys_id) and `enabled` ('true' to enable, any other value to disable).
+     * Accepts `sys_id`, `record_table` (defaults to sp_widget) and `enabled` ('true' to enable).
      * @returns {{success: boolean, result: boolean}} Return value.
      */
     saveEs12: function () {
         var sysId = this.getParameter('sys_id');
         var enabled = this.getParameter('enabled') == 'true';
+        var table = this._getEditorTable();
         if (!sysId) {
             return this._answer({
                 success: false,
@@ -1859,9 +2318,27 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             });
         }
 
+        if (table !== 'sp_widget') {
+            var profiles = this._getEditorProfiles();
+            if (!Object.prototype.hasOwnProperty.call(profiles, table))
+                return this._answer({ success: false, error: 'Record type not supported.' });
+            var record = new GlideRecordSecure(table);
+            if (
+                !/^[a-f0-9]{32}$/i.test(sysId) ||
+                !record.get(sysId) ||
+                !record.canRead() ||
+                !record.canWrite() ||
+                (record.isValidField('sys_policy') && record.getValue('sys_policy')) ||
+                !this._getEditorFieldDefs(record, profiles[table]).some(function (def) {
+                    return def.scriptKind === 'server' && def.canWrite;
+                })
+            )
+                return this._answer({ success: false, error: 'ES12 is not supported or write access is denied.' });
+        }
+
         var gr = new GlideRecordSecure('sys_es_latest_script');
         gr.addQuery('id', sysId);
-        gr.addQuery('table', 'sp_widget');
+        gr.addQuery('table', table);
         gr.query();
 
         if (gr.next()) {
@@ -1875,7 +2352,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         } else {
             gr.initialize();
             gr.setValue('id', sysId);
-            gr.setValue('table', 'sp_widget');
+            gr.setValue('table', table);
             gr.setValue('use_es_latest', enabled);
             if (!gr.insert()) {
                 return this._answer({
@@ -3449,6 +3926,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
      *   application: string, application_sys_id: string}} Return value.
      */
     getWidgetDefaults: function () {
+        if (this._getEditorTable() !== 'sp_widget') return this._getEditorRecord(true);
         var fields = ['template', 'css', 'client_script', 'script', 'link'];
         var defaults = {};
         var gr = new GlideRecord('sys_dictionary');

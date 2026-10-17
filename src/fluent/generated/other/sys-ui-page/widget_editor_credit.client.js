@@ -51,13 +51,28 @@
                     isFinite(Number(config.requestTimeout)) && Number(config.requestTimeout) > 0
                         ? Math.min(Number(config.requestTimeout), 2147483000)
                         : 180000;
+                var preferences = config.preferences || {};
+                ctrl.attributionView = params.get('sysparm_view') || preferences.view;
+                if (['grouped', 'columns'].indexOf(ctrl.attributionView) === -1) ctrl.attributionView = 'grouped';
+                page.classList.toggle('cp-columns-view', ctrl.attributionView === 'columns');
+                ctrl.changeAttributionView = function (view) {
+                    if (ctrl.attributionView === view) return;
+                    ctrl.attributionView = view;
+                    closeMenu(false);
+                    page.classList.toggle('cp-columns-view', view === 'columns');
+                    fieldViews.forEach(function (fieldView) {
+                        fieldView.changeAttributionView();
+                    });
+                    updateUrl();
+                    savePreferences();
+                };
                 ctrl.whitespaceOptions = [
                     { value: 'none', label: 'Show all changes' },
                     { value: 'all', label: 'Ignore whitespace when comparing lines' },
                     { value: 'changes', label: 'Ignore changes in amount of whitespace' },
                     { value: 'eol', label: 'Ignore changes in whitespace at EOL' },
                 ];
-                ctrl.whitespaceMode = params.get('sysparm_whitespace') || 'all';
+                ctrl.whitespaceMode = params.get('sysparm_whitespace') || preferences.whitespace || 'all';
                 if (
                     !ctrl.whitespaceOptions.some(function (option) {
                         return option.value === ctrl.whitespaceMode;
@@ -125,7 +140,50 @@
                     if (statisticsOpen) loadStatistics();
                     updateUrl();
                     updateTitle();
+                    savePreferences();
                 };
+                var pendingPreferences,
+                    savingPreferences = false,
+                    preferenceTimer;
+                function savePreferences() {
+                    pendingPreferences = { view: ctrl.attributionView, whitespace: ctrl.whitespaceMode };
+                    writePreferences();
+                }
+                function writePreferences() {
+                    if (savingPreferences || !pendingPreferences || $scope.$$destroyed) return;
+                    var value = pendingPreferences;
+                    pendingPreferences = null;
+                    savingPreferences = true;
+                    var finished = false;
+                    function done(success) {
+                        if (finished || $scope.$$destroyed) return;
+                        finished = true;
+                        window.clearTimeout(preferenceTimer);
+                        savingPreferences = false;
+                        ctrl.preferenceError = success
+                            ? ''
+                            : 'Could not save Credit preferences. Change an option to try again.';
+                        changed();
+                        writePreferences();
+                    }
+                    preferenceTimer = window.setTimeout(function () {
+                        done(false);
+                    }, requestTimeout);
+                    try {
+                        var ga = new GlideAjax('WidgetEditorCreditAjax');
+                        ga.addParam('sysparm_name', 'savePreferences');
+                        ga.addParam('sysparm_preferences', JSON.stringify(value));
+                        ga.getXMLAnswer(function (answer) {
+                            try {
+                                done(JSON.parse(answer).success === true);
+                            } catch (e) {
+                                done(false);
+                            }
+                        });
+                    } catch (e) {
+                        done(false);
+                    }
+                }
                 var openStatisticsOnLoad = params.get('sysparm_statistics') === 'true';
                 var launchUrl = window.location.pathname.substring(1) + window.location.search,
                     notifiedTitle = '',
@@ -406,6 +464,47 @@
                     return node;
                 }
 
+                var contributors = Object.create(null);
+                function attributionAvatar(name) {
+                    var avatar = element('span');
+                    avatar.dataset.author = name.toLowerCase();
+                    avatar.setAttribute('aria-hidden', 'true');
+                    renderAvatar(avatar, name, (contributors[name.toLowerCase()] || {}).photo);
+                    return avatar;
+                }
+                function loadContributors(snapshots) {
+                    var names = [];
+                    snapshots.forEach(function (snapshot) {
+                        var name = snapshot.author || '';
+                        if (name && !Object.prototype.hasOwnProperty.call(contributors, name.toLowerCase())) {
+                            contributors[name.toLowerCase()] = null;
+                            names.push(name);
+                        }
+                    });
+                    if (!names.length) return;
+                    try {
+                        var ga = new GlideAjax('WidgetEditorCreditAjax');
+                        ga.addParam('sysparm_name', 'getContributors');
+                        ga.addParam('sysparm_authors', JSON.stringify(names));
+                        ga.getXMLAnswer(function (answer) {
+                            if ($scope.$$destroyed) return;
+                            try {
+                                var result = JSON.parse(answer || '{}');
+                                if (!result.success || !result.contributors) return;
+                                names.forEach(function (name) {
+                                    var key = name.toLowerCase();
+                                    contributors[key] = result.contributors[key] || {};
+                                });
+                                page.querySelectorAll('.cp-origin .cp-avatar').forEach(function (avatar) {
+                                    var person = contributors[avatar.dataset.author];
+                                    if (person)
+                                        renderAvatar(avatar, person.name || avatar.dataset.author, person.photo);
+                                });
+                            } catch (e) {} // Initials keep attribution usable when photos cannot be loaded.
+                        });
+                    } catch (e) {} // Photo retrieval must not block code attribution.
+                }
+
                 var borderStyles = element('style'),
                     borderClasses = Object.create(null);
                 page.appendChild(borderStyles);
@@ -427,9 +526,12 @@
                         document.createTextNode(
                             '#credit-plus .' +
                                 className +
-                                '{box-sizing:border-box;border-bottom:1px solid hsla(' +
+                                '{--cp-group-colour:hsla(' +
                                 hue +
-                                ',60%,60%,0.45);}'
+                                ',60%,45%,0.8);}' +
+                                '#credit-plus .cp-origin.' +
+                                className +
+                                '{border-left:3px solid var(--cp-group-colour);}'
                         )
                     );
                     borderClasses[key] = className;
@@ -855,7 +957,11 @@
                 }
 
                 function updateUrl() {
-                    if (ctrl.whitespaceMode === 'all') params.delete('sysparm_whitespace');
+                    if (
+                        ctrl.whitespaceMode === 'all' &&
+                        ['none', 'changes', 'eol'].indexOf(preferences.whitespace) === -1
+                    )
+                        params.delete('sysparm_whitespace');
                     else params.set('sysparm_whitespace', ctrl.whitespaceMode);
                     if (openStatisticsOnLoad || ctrl.statistics.open) params.set('sysparm_statistics', 'true');
                     else params.delete('sysparm_statistics');
@@ -867,7 +973,9 @@
                     else params.delete('sysparm_record');
                     if (requestedField) params.set('sysparm_field', requestedField);
                     else params.delete('sysparm_field');
-                    params.delete('sysparm_view');
+                    if (ctrl.attributionView === 'columns' || preferences.view === 'columns')
+                        params.set('sysparm_view', ctrl.attributionView);
+                    else params.delete('sysparm_view');
                     var uri = window.location.pathname + '?' + params.toString() + window.location.hash;
                     window.history.replaceState(window.history.state, '', uri);
                     try {
@@ -1330,8 +1438,9 @@
                         creditModel,
                         scrollFrame,
                         annotationRows = [],
+                        attributionBlocks = [],
+                        groupZones = [],
                         annotationFrame,
-                        timeWidthKey,
                         touchY,
                         pending = false,
                         fieldRequest = 0,
@@ -1413,6 +1522,19 @@
                             (!filterSet || (set === filterSet.value) !== filterSet.exclude)
                         );
                     }
+                    function attributionGroups() {
+                        var groups = [];
+                        data.lines.forEach(function (line, index) {
+                            if (!codeMatches[index]) return;
+                            var group = groups[groups.length - 1];
+                            if (!group || group.lines[0].update !== line.update) {
+                                group = { lines: [] };
+                                groups.push(group);
+                            }
+                            group.lines.push(line);
+                        });
+                        return groups;
+                    }
                     function applyHiddenLines() {
                         if (!creditEditor) return;
                         var ranges = [],
@@ -1441,6 +1563,68 @@
                         if (ranges.length && !creditEditor.setHiddenAreas)
                             throw new Error('Line filtering unavailable');
                         if (creditEditor.setHiddenAreas) creditEditor.setHiddenAreas(ranges);
+                        var groups = attributionGroups();
+                        annotationRows.forEach(function (row) {
+                            row.textContent = '';
+                            row.className = '';
+                            row.setAttribute('aria-hidden', 'true');
+                            delete row.dataset.groupEnd;
+                        });
+                        groups.forEach(function (group, index) {
+                            var first = group.lines[0],
+                                last = group.lines[group.lines.length - 1],
+                                row = annotationRows[first.number - 1];
+                            if (ctrl.attributionView === 'columns') {
+                                group.lines.forEach(function (line) {
+                                    var target = annotationRows[line.number - 1],
+                                        source = attribution(line);
+                                    while (source.children.length > 2) target.appendChild(source.firstChild);
+                                    target.removeAttribute('aria-hidden');
+                                });
+                                if (index < groups.length - 1) {
+                                    var snapshot = updates[last.update];
+                                    annotationRows[last.number - 1].className =
+                                        'cp-column-group-end ' + updateSetBorder(snapshot && snapshot.updateSet);
+                                }
+                            } else {
+                                var cell = attribution(first).firstChild;
+                                if (index < groups.length - 1) cell.classList.add('cp-group-end');
+                                row.appendChild(cell);
+                                row.removeAttribute('aria-hidden');
+                                row.dataset.groupEnd = last.number;
+                            }
+                        });
+                        if (creditEditor.changeViewZones)
+                            creditEditor.changeViewZones(function (accessor) {
+                                groupZones.forEach(function (id) {
+                                    accessor.removeZone(id);
+                                });
+                                groupZones = [];
+                                var lineHeight = creditEditor.getOption(monaco.editor.EditorOption.fontInfo).lineHeight;
+                                groups.forEach(function (group, index) {
+                                    var height =
+                                        Math.max(
+                                            0,
+                                            (ctrl.attributionView === 'columns' ? 0 : 48) -
+                                                group.lines.length * lineHeight
+                                        ) + (index < groups.length - 1 ? 6 : 0);
+                                    var snapshot = updates[group.lines[0].update],
+                                        separator =
+                                            index < groups.length - 1
+                                                ? 'cp-group-separator ' +
+                                                  updateSetBorder(snapshot && snapshot.updateSet)
+                                                : '';
+                                    if (height)
+                                        groupZones.push(
+                                            accessor.addZone({
+                                                afterLineNumber: group.lines[group.lines.length - 1].number,
+                                                heightInPx: height,
+                                                domNode: element('div', undefined, separator),
+                                                marginDomNode: element('div', undefined, separator),
+                                            })
+                                        );
+                                });
+                            });
                         layoutAnnotations();
                     }
                     function applyFilters() {
@@ -1576,6 +1760,8 @@
                         window.cancelAnimationFrame(annotationFrame);
                         annotationFrame = null;
                         annotationRows = [];
+                        attributionBlocks = [];
+                        groupZones = [];
                         if (diffEditor) diffEditor.dispose();
                         else if (creditEditor) creditEditor.dispose();
                         diffEditor = null;
@@ -1587,6 +1773,7 @@
                         node('cp-code-view').hidden = !!data;
                         node('cp-table-fallback').hidden = !data;
                         node('cp-attribution').textContent = '';
+                        node('cp-code-monaco').parentNode.style.removeProperty('--cp-content-height');
                         gutter.scrollTop = 0;
                     }
 
@@ -1597,58 +1784,55 @@
                             creditEditor.getScrollWidth() > layout.contentWidth ? layout.horizontalScrollbarHeight : 0;
                         gutter.style.height = Math.max(0, layout.height - scrollbar) + 'px';
                         gutterContent.style.height = creditEditor.getScrollHeight() + 'px';
-                        gutterContent.style.transform = 'translateY(' + -creditEditor.getScrollTop() + 'px)';
-                    }
-
-                    function sizeTimestampColumn(font) {
-                        var cell = annotationRows.length && annotationRows[0].querySelector('.cp-time');
-                        if (!cell || getComputedStyle(cell).display === 'none') return;
-                        var style = getComputedStyle(cell),
-                            key = [
-                                style.font,
-                                style.letterSpacing,
-                                style.paddingLeft,
-                                style.paddingRight,
-                                font.typicalHalfwidthCharacterWidth,
-                            ].join('|');
-                        if (key === timeWidthKey) return;
-                        timeWidthKey = key;
-                        var measure = element('span'),
-                            width = 0;
-                        measure.style.cssText =
-                            'position:absolute;visibility:hidden;white-space:pre;width:max-content;';
-                        cell.appendChild(measure);
-                        data.updates.forEach(function (snapshot) {
-                            measure.textContent = snapshot.time || '';
-                            width = Math.max(width, measure.offsetWidth);
+                        var scrollTop = creditEditor.getScrollTop();
+                        gutterContent.style.transform = 'translateY(' + -scrollTop + 'px)';
+                        attributionBlocks.forEach(function (block) {
+                            var offset = Math.max(0, Math.min(scrollTop - block.top, block.limit));
+                            if (offset !== block.offset) {
+                                block.element.style.transform = 'translateY(' + offset + 'px)';
+                                block.offset = offset;
+                            }
                         });
-                        measure.remove();
-                        // Preserve the loading width unless the rendered timestamp needs more room.
-                        if (width)
-                            section.style.setProperty(
-                                '--cp-time-width',
-                                Math.ceil(
-                                    Math.max(
-                                        width + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) + 2,
-                                        12.5 * parseFloat(getComputedStyle(document.documentElement).fontSize)
-                                    )
-                                ) + 'px'
-                            );
                     }
 
                     function layoutAnnotations() {
                         if (!creditEditor) return;
+                        var body = node('cp-code-monaco').parentNode;
+                        var height = Math.ceil(creditEditor.getContentHeight()) + 'px';
+                        if (body.style.getPropertyValue('--cp-content-height') !== height) {
+                            body.style.setProperty('--cp-content-height', height);
+                            if (diffEditor) diffEditor.layout();
+                            else creditEditor.layout();
+                        }
                         var font = creditEditor.getOption(monaco.editor.EditorOption.fontInfo);
                         gutterContent.style.fontFamily = font.fontFamily;
                         gutterContent.style.fontSize = font.fontSize + 'px';
                         gutterContent.style.fontWeight = font.fontWeight;
                         gutterContent.style.letterSpacing = font.letterSpacing + 'px';
                         gutterContent.style.lineHeight = font.lineHeight + 'px';
-                        sizeTimestampColumn(font);
+                        attributionBlocks = [];
                         annotationRows.forEach(function (row, index) {
                             // Monaco owns line positions and font metrics; table layout must not accumulate rounding errors.
                             row.style.top = creditEditor.getTopForLineNumber(index + 1) + 'px';
                             row.style.height = font.lineHeight + 'px';
+                            var cell = row.querySelector('.cp-origin');
+                            if (cell) {
+                                cell.style.height =
+                                    Math.max(
+                                        48,
+                                        creditEditor.getTopForLineNumber(Number(row.dataset.groupEnd)) +
+                                            font.lineHeight -
+                                            creditEditor.getTopForLineNumber(index + 1)
+                                    ) + 'px';
+                                attributionBlocks.push({
+                                    element: cell.querySelector('.cp-attribution-block'),
+                                    top: parseFloat(row.style.top),
+                                    height: parseFloat(cell.style.height),
+                                });
+                            }
+                        });
+                        attributionBlocks.forEach(function (block) {
+                            block.limit = Math.max(0, block.height - block.element.offsetHeight);
                         });
                         updateGutter();
                     }
@@ -1681,7 +1865,7 @@
                                 domReadOnly: true,
                                 lineHeight: 24,
                                 fontSize: 13,
-                                padding: { top: 8, bottom: 8 },
+                                padding: { top: 0, bottom: 8 },
                                 wordWrap: 'off',
                                 folding: false,
                                 codeLens: false,
@@ -1708,42 +1892,15 @@
                                 creditEditor = diffEditor.getModifiedEditor();
                                 diffEditor.onDidUpdateDiff(scheduleAnnotationLayout);
                             } else creditEditor = monaco.editor.create(node('cp-code-monaco'), options);
-                            var fragment = document.createDocumentFragment(),
-                                previousOrigin,
-                                decorations = [];
-                            data.lines.forEach(function (line, index) {
-                                var snapshot = updates[line.update],
-                                    border = updateSetBorder(snapshot && snapshot.updateSet),
-                                    next = data.lines[index + 1],
-                                    nextSnapshot = next && updates[next.update],
-                                    groupEnd =
-                                        border && border !== updateSetBorder(nextSnapshot && nextSnapshot.updateSet);
-                                if (!diffData && groupEnd)
-                                    decorations.push({
-                                        range: {
-                                            startLineNumber: line.number,
-                                            startColumn: 1,
-                                            endLineNumber: line.number,
-                                            endColumn: 1,
-                                        },
-                                        options: { isWholeLine: true, className: border, marginClassName: border },
-                                    });
-                                var row = attribution(line);
-                                row.removeChild(row.querySelector('.cp-number'));
-                                row.removeChild(row.querySelector('.cp-code'));
+                            var fragment = document.createDocumentFragment();
+                            data.lines.forEach(function (line) {
+                                var row = element('tr');
                                 row.dataset.lineNumber = line.number;
                                 row.setAttribute('role', 'row');
-                                row.querySelectorAll('td').forEach(function (cell) {
-                                    cell.setAttribute('role', 'cell');
-                                });
                                 annotationRows.push(row);
-                                if (!diffData && groupEnd) row.className = border;
-                                else if (diffData && previousOrigin !== line.update) row.className = 'cp-block-start';
-                                previousOrigin = line.update;
                                 fragment.appendChild(row);
                             });
                             node('cp-attribution').appendChild(fragment);
-                            if (!diffData) creditEditor.deltaDecorations([], decorations);
                             creditEditor.onDidScrollChange(updateGutter);
                             creditEditor.onDidContentSizeChange(scheduleAnnotationLayout);
                             creditEditor.onDidLayoutChange(scheduleAnnotationLayout);
@@ -1781,21 +1938,29 @@
                                           : 'No code in this update set.',
                                     'cp-empty'
                                 );
-                            cell.colSpan = 5;
+                            cell.colSpan = ctrl.attributionView === 'columns' ? 5 : 3;
                             row.appendChild(cell);
                             tbody.appendChild(row);
                             scrollWhenReady();
                             return;
                         }
                         if (monacoCredit()) return;
-                        var fragment = document.createDocumentFragment(),
-                            previousOrigin;
-                        data.lines.forEach(function (line, index) {
-                            if (!codeMatches[index]) return;
-                            var row = attribution(line);
-                            if (previousOrigin !== line.update) row.className = 'cp-block-start';
-                            previousOrigin = line.update;
-                            fragment.appendChild(row);
+                        var fragment = document.createDocumentFragment();
+                        var groups = attributionGroups();
+                        groups.forEach(function (group, groupIndex) {
+                            group.lines.forEach(function (line, index) {
+                                var row = attribution(line),
+                                    cell = row.querySelector('.cp-origin');
+                                if (index === 0) {
+                                    if (cell) cell.rowSpan = group.lines.length;
+                                    if (groupIndex) {
+                                        var previous = updates[groups[groupIndex - 1].lines[0].update];
+                                        row.className =
+                                            'cp-block-start ' + updateSetBorder(previous && previous.updateSet);
+                                    }
+                                } else if (cell) cell.remove();
+                                fragment.appendChild(row);
+                            });
                         });
                         tbody.appendChild(fragment);
                         scrollWhenReady();
@@ -1803,29 +1968,47 @@
 
                     function attribution(line) {
                         var row = element('tr'),
-                            snapshot = updates[line.update];
-                        var time = element('td', snapshot ? snapshot.time : '', 'cp-time');
-                        time.title = time.textContent;
-                        row.appendChild(time);
-                        var author = element('td', undefined, 'cp-origin'),
-                            authorCell = element('div', undefined, 'cp-cell');
-                        authorCell.tabIndex = 0;
-                        var authorText = element('span', snapshot ? snapshot.author : 'Unknown', 'cp-cell-text');
+                            snapshot = updates[line.update],
+                            columns = ctrl.attributionView === 'columns';
+                        var author = element(columns ? 'td' : 'div', undefined, 'cp-cell cp-author'),
+                            authorText = element('span', snapshot ? snapshot.author : 'Unknown', 'cp-cell-text');
                         authorText.title = authorText.textContent;
-                        authorCell.appendChild(authorText);
-                        if (snapshot) contextCell(authorCell, 'author', snapshot);
-                        author.appendChild(authorCell);
-                        row.appendChild(author);
-                        var set = element('td', undefined, 'cp-update-set'),
-                            setCell = element('div', undefined, 'cp-cell');
-                        setCell.tabIndex = 0;
-                        var name = snapshot && snapshot.updateSet ? snapshot.updateSet.name : '—',
+                        author.appendChild(authorText);
+                        if (snapshot) contextCell(author, 'author', snapshot);
+                        var set = element(columns ? 'td' : 'div', undefined, 'cp-cell cp-update-set'),
+                            name = snapshot && snapshot.updateSet ? snapshot.updateSet.name : '—',
                             text = element('span', name, 'cp-cell-text');
                         text.title = name;
-                        setCell.appendChild(text);
-                        if (snapshot) contextCell(setCell, 'update set', snapshot);
-                        set.appendChild(setCell);
-                        row.appendChild(set);
+                        set.appendChild(text);
+                        if (snapshot) contextCell(set, 'update set', snapshot);
+                        var time = element(columns ? 'td' : 'span', snapshot ? snapshot.time : '', 'cp-time');
+                        time.title = time.textContent;
+                        if (columns) {
+                            var border = updateSetBorder(snapshot && snapshot.updateSet);
+                            time.className += ' ' + border;
+                            author.className += ' ' + border;
+                            author.title = snapshot ? snapshot.author + ' — ' + snapshot.time : 'Unknown';
+                            row.appendChild(time);
+                            row.appendChild(author);
+                            row.appendChild(set);
+                        } else {
+                            var cell = element(
+                                    'td',
+                                    undefined,
+                                    'cp-origin ' + updateSetBorder(snapshot && snapshot.updateSet)
+                                ),
+                                block = element('div', undefined, 'cp-attribution-block'),
+                                identity = element('div', undefined, 'cp-attribution-identity'),
+                                meta = element('div', undefined, 'cp-attribution-meta');
+                            block.appendChild(attributionAvatar(snapshot ? snapshot.author : ''));
+                            identity.appendChild(author);
+                            meta.appendChild(set);
+                            meta.appendChild(time);
+                            identity.appendChild(meta);
+                            block.appendChild(identity);
+                            cell.appendChild(block);
+                            row.appendChild(cell);
+                        }
                         row.appendChild(element('td', String(line.number), 'cp-number'));
                         row.appendChild(element('td', line.text, 'cp-code'));
                         return row;
@@ -1957,6 +2140,7 @@
                     }
                     function setData(result) {
                         data = result;
+                        loadContributors(data.updates);
                         if (Number(result.requestTimeout) > 0) requestTimeout = Number(result.requestTimeout);
                         data.updates.forEach(function (snapshot) {
                             updates[snapshot.id] = snapshot;
@@ -2143,7 +2327,11 @@
                     gutter.addEventListener('focusin', function (event) {
                         if (!creditEditor) return;
                         var row = event.target.closest('tr[data-line-number]');
-                        if (row) creditEditor.revealLine(Number(row.dataset.lineNumber));
+                        var block = event.target.closest('.cp-attribution-block'),
+                            bounds = block && block.getBoundingClientRect(),
+                            viewport = gutter.getBoundingClientRect();
+                        if (row && (!bounds || bounds.bottom <= viewport.top || bounds.top >= viewport.bottom))
+                            creditEditor.revealLine(Number(row.dataset.lineNumber));
                         updateGutter();
                     });
                     gutter.addEventListener(
@@ -2174,6 +2362,16 @@
                         section: section,
                         updateView: updateView,
                         release: disposeCredit,
+                        changeAttributionView: function () {
+                            var scrollTop = creditEditor
+                                ? creditEditor.getScrollTop()
+                                : node('cp-table-fallback').scrollTop;
+                            if (data && section.open) {
+                                renderCode();
+                                if (creditEditor) creditEditor.setScrollTop(scrollTop);
+                                else node('cp-table-fallback').scrollTop = scrollTop;
+                            }
+                        },
                         recalculate: function () {
                             fieldRequest++;
                             pending = false;
@@ -2294,7 +2492,7 @@
                     }
                     function failed(message, emptyHistory) {
                         ctrl.error = !emptyHistory;
-                        ctrl.empty = !!emptyHistory;
+                        ctrl.empty = true;
                         changed();
                         if (emptyHistory) {
                             ctrl.updateSets = [];
@@ -2387,6 +2585,7 @@
                     });
                 });
                 $scope.$on('$destroy', function () {
+                    window.clearTimeout(preferenceTimer);
                     clearHistory();
                     sequence++;
                     window.clearTimeout(contextTimer);
@@ -2424,6 +2623,24 @@
                 link: function (scope, element) {
                     scope.$watch('ctrl.statistics.open', function (open) {
                         element[0].open = !!open;
+                    });
+                },
+            };
+        });
+        app.directive('creditStatValue', function () {
+            return {
+                restrict: 'A',
+                link: function (scope, element, attrs) {
+                    scope.$watch(attrs.creditStatValue, function (value) {
+                        var node = element[0],
+                            text = value == null ? '' : String(value),
+                            parts = text.indexOf('@') === -1 ? [text] : text.split(/([@.])/);
+                        node.textContent = '';
+                        parts.forEach(function (part) {
+                            if (part === '@') node.appendChild(document.createElement('wbr'));
+                            node.appendChild(document.createTextNode(part));
+                            if (part === '.') node.appendChild(document.createElement('wbr'));
+                        });
                     });
                 },
             };

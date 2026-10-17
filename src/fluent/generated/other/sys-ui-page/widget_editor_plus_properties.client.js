@@ -13,9 +13,34 @@
             window.WE_HISTORY_SYNC.set({ title: pageTitle });
         }
         var sections = document.getElementById('wep-sections');
+        var debugMenu = document.getElementById('wep-debug-menu');
+        var maintenance = document.getElementById('wep-maintenance');
+        var loading = document.getElementById('wep-loading');
+        var content = document.getElementById('wep-content');
         var nav = document.getElementById('wep-nav');
         var message = document.getElementById('wep-message');
         var search = document.getElementById('wep-search');
+        var backToTop = document.getElementById('wep-back-to-top');
+        function updateBackToTop() {
+            if (backToTop) backToTop.hidden = window.scrollY < 200;
+        }
+        if (backToTop) {
+            backToTop.onclick = function () {
+                var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+                var heading = document.querySelector('#wep-header h1');
+                if (heading) heading.focus({ preventScroll: true });
+            };
+            window.addEventListener('scroll', updateBackToTop, { passive: true });
+            updateBackToTop();
+        }
+        if (search) search.disabled = true;
+        function finishLoading() {
+            if (loading) loading.hidden = true;
+            if (content) content.hidden = false;
+            if (search) search.disabled = false;
+            filter();
+        }
         var header = document.getElementById('wep-header');
         var headerObserver = null;
         function updateHeaderHeight() {
@@ -34,7 +59,22 @@
         var rulesDirty = false;
         var plainTextareas = [];
         var jsonEditors = [];
+        var initialLoads = [];
         var counterSequence = 0;
+        var copyDebugMenu = document.getElementById('wep-copy-debug-menu');
+        if (copyDebugMenu) {
+            copyDebugMenu.onclick = async function () {
+                var error = document.getElementById('wep-copy-debug-menu-error');
+                error.hidden = true;
+                copyDebugMenu.textContent = 'Copy code';
+                try {
+                    await navigator.clipboard.writeText(document.getElementById('wep-debug-menu-code').textContent);
+                    copyDebugMenu.textContent = 'Copied';
+                } catch (e) {
+                    error.hidden = false;
+                }
+            };
+        }
 
         function ajax(method, params) {
             return new Promise(function (resolve, reject) {
@@ -102,6 +142,7 @@
                     if (!sections) return;
                     Array.prototype.forEach.call(sections.querySelectorAll('.wep-card'), function (card) {
                         var property = card._prop;
+                        if (!property) return;
                         var match = data.properties.filter(function (item) {
                             return (
                                 item.name === property.name ||
@@ -1107,23 +1148,25 @@
             card.appendChild(panel);
             status(note, 'Loading…');
             var loadingRevision = revision;
-            ajax('getRules', {})
-                .then(function (data) {
-                    if (revision !== loadingRevision) return;
-                    savedConfig = data.config;
-                    savedTables = data.propertyTables || Object.keys(savedConfig);
-                    rules = data.rules;
-                    property.propertyCount = savedTables.length;
-                    property._refreshCount();
-                    renderRules();
-                    status(note, '');
-                })
-                .catch(function (error) {
-                    if (revision !== loadingRevision) return;
-                    setJson(savedConfig);
-                    displayMode('JSON');
-                    status(note, error.message + ' Edit the JSON to repair the hierarchy.', 'error');
-                });
+            initialLoads.push(
+                ajax('getRules', {})
+                    .then(function (data) {
+                        if (revision !== loadingRevision) return;
+                        savedConfig = data.config;
+                        savedTables = data.propertyTables || Object.keys(savedConfig);
+                        rules = data.rules;
+                        property.propertyCount = savedTables.length;
+                        property._refreshCount();
+                        renderRules();
+                        status(note, '');
+                    })
+                    .catch(function (error) {
+                        if (revision !== loadingRevision) return;
+                        setJson(savedConfig);
+                        displayMode('JSON');
+                        status(note, error.message + ' Edit the JSON to repair the hierarchy.', 'error');
+                    })
+            );
             function refreshRulesDirty() {
                 function canonical(config) {
                     return JSON.stringify(
@@ -1376,6 +1419,28 @@
                 topPicker = createPicker(null, body, null, 0, null);
             }
         }
+        function sectionNavigation(section, heading, name, count) {
+            var item = el('li');
+            item.setAttribute('data-feature', name);
+            var link = el('a', 'btn btn-default wep-feature-pill');
+            link.href = '#' + section.id;
+            link.title = 'Go to ' + name;
+            link.appendChild(el('span', 'we-sidebar-item-label', name));
+            if (count) link.appendChild(count);
+            link.onclick = function (event) {
+                event.preventDefault();
+                if (section.hidden && search) {
+                    search.value = '';
+                    filter();
+                }
+                heading.setAttribute('tabindex', '-1');
+                heading.focus({ preventScroll: true });
+                var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                section.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+            };
+            item.appendChild(link);
+            if (nav) nav.appendChild(item);
+        }
         function render(properties) {
             ['display_fields', 'table_config', 'markdown_display'].forEach(function (kind) {
                 var prefix =
@@ -1474,38 +1539,20 @@
                     section.appendChild(propertyCard(property));
                 });
                 if (sections) sections.appendChild(section);
-                var item = el('li');
-                item.setAttribute('data-feature', name);
-                var link = el('a', 'btn btn-default wep-feature-pill');
-                link.href = '#' + section.id;
-                link.title = 'Go to ' + name;
-                var labelSpan = el('span', 'we-sidebar-item-label', name);
-                link.appendChild(labelSpan);
                 pillCount = el('span', 'wep-nav-count we-type-count-pill');
                 refreshCount();
-                link.appendChild(pillCount);
-                link.onclick = function (e) {
-                    e.preventDefault();
-                    if (section.hidden && search) {
-                        search.value = '';
-                        filter();
-                    }
-                    heading.setAttribute('tabindex', '-1');
-                    heading.focus({ preventScroll: true });
-                    var reduceMotion =
-                        window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-                    section.scrollIntoView({
-                        behavior: reduceMotion ? 'auto' : 'smooth',
-                        block: 'start',
-                    });
-                };
-                item.appendChild(link);
-                if (nav) nav.appendChild(item);
+                sectionNavigation(section, heading, name, pillCount);
             });
-            filter();
-            window.requestAnimationFrame(function () {
-                plainTextareas.forEach(resizePlainTextarea);
+            [debugMenu, maintenance].forEach(function (section) {
+                if (!section || !sections) return;
+                sections.appendChild(section);
+                sectionNavigation(
+                    section,
+                    section.querySelector('.wep-feature-heading'),
+                    section.getAttribute('data-feature')
+                );
             });
+            return Promise.all(initialLoads);
         }
         function escapeRegex(s) {
             return s.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
@@ -1617,10 +1664,12 @@
         });
         ajax('getProperties', {})
             .then(function (data) {
-                render(data.properties);
+                return render(data.properties);
             })
+            .then(finishLoading)
             .catch(function (error) {
                 status(message, error.message, 'error');
+                finishLoading();
             });
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initialise);

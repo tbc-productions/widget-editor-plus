@@ -201,7 +201,7 @@ test('update-set records gain graph edges without adding suggested records', asy
     let linkedProvider = 'provider-1';
     const ctrl = {
         related: [first], rows: [first], viewMode: 'graph',
-        isExportBlocked: () => false, includePreviousUpdates: false, embeddedInModal: false,
+        isExportBlocked: () => false, includesPreviousVersion: () => false, canIncludePreviousVersion: () => false, includePreviousUpdates: false, embeddedInModal: false,
     };
     const context = {
         ctrl,

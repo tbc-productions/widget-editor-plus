@@ -252,6 +252,10 @@ declare global {
                         table: 'sys_app_module'
                         id: 'deaa8cc3dff245e1a514318575fe7e28'
                     }
+                    'widget-editor-code-analysis': {
+                        table: 'sys_ui_script'
+                        id: 'f681d4bee0e14220a451788448d3de53'
+                    }
                     'widget-editor-code-search-default-search-group': {
                         table: 'sys_properties'
                         id: 'de82eb4734e443a1815744694a0035fc'
@@ -603,10 +607,6 @@ declare global {
                         table: 'sys_properties_category_m2m'
                         id: '4054d4687cbc46998fdffc1beeca78cd'
                     }
-                    'widget-editor-markdown-groups-migration': {
-                        table: 'sys_script_fix'
-                        id: '99d795ff7c10464194a65ae30f9d2f08'
-                    }
                     'widget-editor-markdown-groups-sc_cat_item_producer': {
                         table: 'sys_properties'
                         id: '91c8cafd67ed4eaabe01df1440185fda'
@@ -738,14 +738,6 @@ declare global {
                     'widget-editor-markdown-max-list-levels-property-category': {
                         table: 'sys_properties_category_m2m'
                         id: '6fc105d6967341e59215c7e59ff88343'
-                    }
-                    'widget-editor-markdown-options-removal': {
-                        table: 'sys_script_fix'
-                        id: '85e291547bb440c7a0792f854acc61a3'
-                    }
-                    'widget-editor-markdown-page-defaults-migration': {
-                        table: 'sys_script_fix'
-                        id: '5dc5b92f93d44d21bf15c7f30523492e'
                     }
                     'widget-editor-plus-category-m2m-code-search-display-fields-catalog-script-client': {
                         table: 'sys_properties_category_m2m'
@@ -1230,7 +1222,7 @@ declare global {
                         table: 'sys_ui_page'
                         id: '9c5bf170283e4d6394aa639c79936587'
                         key: {
-                            name: 'credit_plus'
+                            name: 'widget_editor_credit'
                         }
                     },
                     {

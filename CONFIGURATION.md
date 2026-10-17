@@ -10,6 +10,64 @@ Credit+ and scrolling browser tests reuse one Chromium process per file and clos
 
 [Back to README](README.md)
 
+## App drawer
+
+Click the app icon in the header to switch between Widget Editor+, Compare+, AI Assistant, Code Search+ and, for administrators, Credit+. Select a row to use the current tab, or its hover action to open a new tab. Widget Editor+ prompts you to save or discard unsaved changes before leaving.
+
+Supported apps carry the saved record between them; AI Assistant uses its primary record. Unsupported or unreadable records open the destination fresh. Unsaved edits and historical version selections do not carry between apps.
+
+## Supported editor records
+
+Use **Open…** and click the dotted record type in the title to choose a type:
+
+| Record type | Table | Code panes |
+|---|---|---|
+| Widgets | `sp_widget` | HTML template, CSS/SCSS, client controller, link and server script |
+| Script Includes | `sys_script_include` | Script |
+| CSS | `sp_css` | CSS/SCSS |
+| UI Scripts | `sys_ui_script` | Script |
+| Angular Providers | `sp_angular_provider` | Script |
+| UI Pages | `sys_ui_page` | HTML/Jelly, client script and processing script |
+| Angular HTML templates | `sp_ng_template` | HTML template |
+
+**New** opens an unsaved record of the selected type, using dictionary defaults and create permissions. Use the toolbar **Save** to create it; per-pane saves and local draft recovery become available after the first save. The parent widget of an Angular HTML template is read-only.
+
+Save individual code panes or use the toolbar **Save** for all changed fields. **Revert** in the Unsaved changes popover discards this tab’s edits after confirmation. Saves respect record and field permissions, protection policies and validation. If a changed field also changed in ServiceNow, saving stops and retains your edits for comparison.
+
+The header shows Active where available. **More fields** includes descriptions, API name and application, plus Mobile callable and the read-only Protection policy for Script Includes. It also shows the established year and founder from the earliest readable update version. Related Script Includes, Angular HTML templates and Angular Providers offer **Open in Editor+** in a new tab.
+
+Editor visibility and order preferences apply only to widgets; other types start with all code panes visible. ES12 controls are available for widget server scripts, Script Includes and UI Page processing scripts. Widget-specific actions, related lists, live presence, real-time updates and SN Utils integration are limited to widgets. Other types retain version comparison, Assistant, XML and native-form access. History and drafts distinguish record types.
+
+Existing `widget_id` links remain supported. Other records use `record_table` and `record_sys_id`, for example:
+
+```text
+ui_page.do?sys_id=8b2e70458373fe1070b8b5dfeeaad35e&record_table=sys_ui_page&record_sys_id=<record sys_id>
+```
+
+These links edit the record; they do not execute the target UI Page or script.
+
+## Debug Menu
+
+Properties includes a **Debug Menu** section with a copyable embed snippet for a Service Portal header or footer widget:
+
+```html
+<sp-widget id="widget_editor_debug_menu"></sp-widget>
+```
+
+No instance options or dedicated system properties are required. Default editor, timing indicators and console variables are per-user Debug Menu preferences; context-menu mode and Assistant visibility use Widget Editor+ user preferences.
+
+## Backup and uninstall
+
+Administrators can use **Backup and uninstall** at the bottom of Properties. Uninstall requires active elevation to **security_admin**; use the profile menu to elevate before reviewing records.
+
+- **Export preferences** downloads preferences for all users of Widget Editor+ apps, including shared defaults. It covers `monaco_plus.user_prefs`, `we_debug_menu_prefs`, `widget_editor.visible_editors`, `widget_editor_assistant.favourite_tables` and `widget_editor_assistant.favourite_groups`.
+- **Restore preferences** accepts a preferences XML export up to 10 MiB. Restore matches by user and preference name, updating existing records and creating missing ones. User sys_ids must match; missing users and duplicate preferences block review. Review the counts and confirm before restoring. Interrupted imports can be reviewed and retried safely. Reload Widget Editor+ apps afterwards.
+- **Uninstall Widget Editor+ apps** shows linked records with all selected by default. Uncheck records to preserve them; their required parents are preserved automatically. Preferences are kept unless **Delete all users’ app preferences** is selected. The recommended backup includes all app records and preferences, including preserved records. Save the XML file, acknowledge it and type `UNINSTALL` before deleting the selected records.
+
+Uninstall covers current and retired source records, all records owned by the application, and `monaco.plus.*` system properties. Local and test records appear in the same selection table. Records edited using Widget Editor+ apps remain. Permissions and selections are validated on the server before deletion; changed records require a fresh review.
+
+Backups contain current record values, not attachments, update history or browser-only settings and drafts. Save exports outside the instance before a clone or upgrade. If deletion fails, removal stops and reports partial progress. Keep the page open until it finishes. To recover app configuration, reinstall Widget Editor+ apps, then load the complete backup using ServiceNow’s standard [Import XML](https://www.servicenow.com/docs/r/platform-administration/table-administration-and-data-management/import-xml-file.html) action. Use the preferences-only export with the preference restore controls. Backups contain user settings and application scripts.
+
 ## System Properties
 All system properties are managed under the `monaco.plus.*` namespace:
 
@@ -34,21 +92,30 @@ Admins can edit settings in **Widget Editor+ → Properties**.
 
 ## Markdown formatting
 
-`monaco.plus.update_sets.markdown_escape_characters` defaults to `false`, so exported labels and display values retain their punctuation without added backslashes. This replaces the underscore-only setting; the old `monaco.plus.update_sets.markdown_escape_underscores` property is no longer read.
+`monaco.plus.update_sets.markdown_escape_characters` adds backslashes to Markdown punctuation in exported labels and display values. It defaults to `false` and replaces the obsolete `markdown_escape_underscores` property. Generated Markdown and configured indicators are unaffected.
 
-Enable it to escape backslashes, backticks, asterisks, underscores, braces, square brackets, parentheses, hashes, plus signs, full stops, exclamation marks, pipes, angle brackets, tildes and hyphens. These characters can participate in Markdown syntax, depending on the renderer and context. For example, `+` can start a bullet list, although it does not need escaping in a name such as “Widget Editor+”. When enabled, the exporter conservatively escapes every occurrence in labels and display values. Generated bullets, links and emphasis, configured formatting indicators and URL handling remain unchanged.
+Edit `monaco.plus.update_sets.markdown_formatting` in **Widget Editor+ → Properties**:
 
-Edit `monaco.plus.update_sets.markdown_formatting` in **Widget Editor+ → Properties**. Each update-set number has its own literal value, for example `{"new":":new:","deleted":"Deleted","update_set":{"1":":one:","2":":two:","10":"TEN"}}`. The shipped property lists emoji for numbers 1–10. Add further number keys as needed.
+```json
+{
+  "new": ":new:",
+  "deleted": "Deleted",
+  "update_set": { "1": ":one:", "2": ":two:", "10": "TEN" },
+  "display_field_separator": ",",
+  "display_field_wrapper": "()",
+  "context_indicator": "↪"
+}
+```
 
-Emoji in the formatting JSON are stored as Unicode escapes (for example, `\ud83c\udd95` for 🆕) to preserve them through property storage and XML transport. They appear as emoji in the exported Markdown.
+- `new`, `deleted` and numbered `update_set` values are literal indicators. The shipped defaults use emoji, with set numbers 1–10; add more keys as needed. Missing or empty indicators are hidden. Set indicators appear only for multiple sets, beside records and in the legend. Deleted names retain strikethrough.
+- `display_field_separator` and `display_field_wrapper` format additional values, for example `(value one, value two)`. Separators gain a trailing space unless empty or already ending in whitespace. Wrappers must contain two characters, such as `[]`, or be empty.
+- `context_indicator` prefixes context-only records and their explanatory footer. An empty string hides the symbol.
 
-Empty or unspecified set numbers have no indicator. Use `{"new":"","deleted":"","update_set":{}}` to hide all three indicator types. There are no default formats or placeholders. Values are used beside records and in the update-set legend, with set markers appearing only for multiple sets. Custom marker text and intentional Markdown formatting remain intact. Deleted record names retain strikethrough. Context-only records use the configured marker without automatic italics, keeping links and additional values simpler for Markdown editors.
-
-Additional values use `"display_field_separator":","` and `"display_field_wrapper":"()"`, producing `(value one, value two)`. The separator gets a trailing space for readability unless it is empty or already ends in whitespace. The wrapper is two characters, such as `[]`, or an empty string for no wrapper. `"context_indicator":"↪"` controls both context-only record prefixes and the explanatory footer; an empty string hides the symbol. The symbol is stored as a JSON Unicode escape in the shipped default.
+Use `{"new":"","deleted":"","update_set":{}}` to hide all three record/set indicator types. Shipped emoji are stored as JSON Unicode escapes to preserve them through property storage and XML transport.
 
 ## Markdown primary display fields
 
-In **Widget Editor+ → Properties**, Enter comma-separated primary fields for ordered fallbacks, or period-separated fields to combine their values with a period. Empty or unreadable fields are skipped. A field is shown only once: fields used in the primary value are omitted from additional values, and repeated fields are ignored.
+In **Widget Editor+ → Properties**, enter comma-separated primary fields for ordered fallbacks, or period-separated fields to combine their values with a period. Empty or unreadable fields are skipped. A field is shown only once: fields used in the primary value are omitted from additional values, and repeated fields are ignored.
 
 Per-table properties use `monaco.plus.update_sets.markdown_display.<table>`. Set `display_value` to `name,sp_widget` for fallbacks or `name.element` to join the two fields. Periods in primary fields refer to separate fields on the same record, not reference dot-walks. Additional fields still support reference dot-walks.
 
@@ -68,10 +135,11 @@ The default `monaco.plus.update_sets.markdown_display.sp_instance` uses primary 
 | `monaco_language_css` | Completion provider for CSS/SCSS at-rules and style descriptors. |
 | `monaco_code_actions` | Built-in code actions for JavaScript (JSDoc generation) and SCSS (`px` to `rem` conversion). |
 | `monaco_custom_code_actions` | Extension point for custom per-language code actions. |
+| `widget_editor_code_analysis` | Shared background dependency scanner for Widget Editor+ and Assistant. |
 
 ### Embedding Monaco on Any Form Field
 
-`monaco_plus_bootstrap` isn't limited to Widget Editor+ itself — add it as a UI Script dependency on an `onLoad` Client Script for any table/field to mount a full Monaco editor in place of the native textarea, in whatever language you choose:
+Add `monaco_plus_bootstrap` as a UI Script dependency on an `onLoad` Client Script to replace a form textarea with Monaco:
 
 ```javascript
 function onLoad() {
@@ -91,7 +159,7 @@ function onLoad() {
 ```
 
 - `field` / `language` — the form field to mount on, and the Monaco language id (`json`, `javascript`, `css`, `scss`, `html`, etc.).
-- By default the editor auto-grows with content, like a native expanding textarea, starting from the replaced textarea's rendered height (floored at `125px` — enough room for Monaco's quick-input widget, e.g. F1 — even for a short or hidden/collapsed field) and capped at `maxHeight` (default `'80vh'`) before it scrolls internally.
+- The editor grows from the textarea’s height (minimum `125px`) to `maxHeight` (default `'80vh'`), then scrolls internally.
 - `height` — pass a fixed height (a number is treated as px, or a CSS size string like `'40vh'`) to opt out of auto-grow entirely.
 - `maxHeight` — override the auto-grow cap (ignored once `height` or `containerStyle` is set).
 - `showToggle` — set `false` to omit the toggle-syntax-editor button (default: `true`).
@@ -102,39 +170,45 @@ Need full control over the container instead? Pass `containerStyle` (a CSS strin
 
 The bootstrap script lazy-loads `monaco_plus_core` on demand, so completions/IntelliSense for the chosen `language` come free without any additional wiring.
 
+## Background code analysis
+
+Widget Editor+ and Assistant scan code dependencies in a browser worker without executing the code. The server validates Assistant candidates and read access. Analysis falls back to server discovery or the editor’s local scanner if the worker fails. Results are cached in memory for the current page; XML exports fetch current content.
+
+In Assistant, use the history button in a record’s **Actions** or graph card to include its preceding Customer Update snapshot in the XML and token estimate. A **+ Previous** badge identifies included history. Toggle off and on to retry a failed lookup. Blocked records and table structure exports do not support this option. The sidebar history option includes snapshots from before each selected update set.
+
 ## User Preferences
-User preferences (including editor themes, Assistant visibility, and Debug Menu settings) persist in `localStorage` and synchronise to the ServiceNow instance as `sys_user_preference` records under `monaco_plus.user_prefs`.
+User preferences (including editor themes and Assistant visibility) persist in `localStorage` and synchronise to the ServiceNow instance as `sys_user_preference` records under `monaco_plus.user_prefs`. Debug Menu editor, timing and console preferences synchronise separately under `we_debug_menu_prefs`.
 
 
 ### Local draft autosave
 
-In **User Preferences → Editor**, set **Auto-save local drafts** to an interval in whole seconds. The default is **30**; **0** turns automatic capture off, including capture when leaving the tab. **Keep drafts for** below it sets retention in whole days (minimum **1**, default **7**). Both preferences synchronise through `monaco_plus.user_prefs` and are included in preference exports and imports.
+In **User Preferences → Editor**, set **Auto-save local drafts** in whole seconds (default **30**; **0** disables capture), and **Keep drafts for** in whole days (minimum **1**, default **7**). Both settings synchronise with your preferences and are included in preference exports.
 
-For widgets already saved to ServiceNow, drafts capture changed widget fields, open Angular templates, providers and Script Includes, and unfinished Option Schema and Demo Data edits. Capture also runs when the tab becomes hidden or the page is left. Brand-new widgets and read-only version views are excluded. Capture is silent unless browser storage fails. When autosave is enabled, the Unsaved changes popover shows when the current draft was last saved in this browser.
+Drafts capture unsaved changes to saved records, including open related templates, providers, Script Includes, Option Schema and Demo Data edits. Capture also runs when leaving or hiding the tab. New records and read-only versions are excluded. Drafts stay in this browser and never save to ServiceNow automatically.
 
-After reopening a widget, the **Local drafts found** info pill appears on the left of the alert bar. Select a draft by its last-edited time and changed-field summary, then choose **Compare**, **Restore** or **Discard**. The newest draft is selected initially. When the browser reports `document.wasDiscarded`, the editor automatically restores that tab’s draft and shows **Unsaved changes** instead. If the tab cannot be identified, automatic restoration requires a single recovery draft; otherwise the Local drafts found pill remains available. Browsers without this signal use manual recovery. Previous recovery drafts remain available while editing, even when automatic capture is off. Drafts changed by another tab are retained. Restoring loads changes into the editor without saving to ServiceNow. Compare opens the existing Compare+ modal, with a record selector when a draft includes related records. Conflicting saved content or current edits require review before restoration. Normal access checks still apply. A successful widget Save removes all local drafts for that widget and user, including earlier sessions. Per-field saves remove only the saved content from the current page’s draft; failed saves preserve drafts. Subsequent unsaved edits can create a fresh draft. Setting the interval to 0 does not itself remove existing recovery copies.
+Reopen a record and select **Local drafts found** to **Compare**, **Restore** or **Discard** a recovery copy. Restoration loads edits without saving them; conflicting saved content or current edits require review. Browsers that report a discarded tab can restore its draft automatically when the recovery copy is unambiguous.
 
-Drafts are separated by instance, user, widget and open page. Expired drafts are removed across this user’s widgets when the editor opens and before draft writes, based on the last content change. The current tab’s working copy is retained while it is open. Drafts are also removed when saved or discarded; clearing site data removes them. Local storage is not an encrypted store for sensitive content. Explicitly cancelling an Option Schema or Demo Data dialog discards its edits.
+Successful saves remove matching recovery content; failed saves and drafts with different unsaved content remain recoverable. Turning capture off does not delete existing drafts. Drafts are separated by instance, user, record and tab, and expire from their last content change; the current tab’s working copy is retained while open. Clearing site data removes drafts. Browser storage is not encrypted, so avoid relying on it for sensitive content. Cancelling an Option Schema or Demo Data dialog discards its edits.
 
 ## Credit+
 
-Credit+ is available to administrators in the Widget Editor+ application menu below Code Search+, and in the list context menu on `sys_update_xml`, including conventional Updates related lists on widgets. It opens the right-clicked row; where a row ID is not supplied by the platform, exactly one checked customer update is required. The selected update and code fields are validated on the server at launch. The earlier preview form link is disabled.
+Credit+ requires administrator access and is read-only. Open it from the application menu, the app drawer for a supported saved record, or a Customer Update list context menu. If the platform supplies no right-clicked row, select exactly one Customer Update. Launch URLs use `sysparm_update`.
 
-The global `WidgetEditorCreditAjax` Script Include is accessible from its own application scope. It validates launches and supplies record, field and history metadata; attribution and Statistics analysis run only in the browser worker using Table API payloads. Compare+ requests read-only Customer Update snapshots from the same Script Include. It does not read `sys_update_version` or track intermediate edits within an update set. Launch links use `sysparm_update`. The UI Page (`credit_plus`) and client-callable Script Include have admin ACLs; every public method also checks the role. Historical records remain read-only and historical code is never saved, reverted or executed.
+Choose a table, record and update set, then expand a code field to load attribution. Supported fields include inherited CSS, JavaScript, HTML, JSON and condition fields. Records without Customer Updates show an empty history; deleted records remain accessible through their Customer Updates. Selection and expanded-field links support bookmarks and ServiceNow History.
 
-The viewer uses the platform's AngularJS runtime for page state, field containers and Statistics, with directives managing Monaco and Select2. Statistics and activity controls use the platform’s FontAwesome 4 stylesheet. The viewer follows Compare+'s themed header with searchable Select2 table and record pickers, a themed Update set dropdown and read-only Monaco editors, with a plain text fallback if Monaco cannot load. The table picker lists update-synchronised tables with supported code fields, including inherited fields. Record search uses the table display field and both pickers page their results. Choosing a table clears the record; choosing a record loads its newest Customer Update by Customer Update timestamp. Records without Customer Updates show Compare+’s centred, themed empty state. Deleted records remain accessible through Customer Update launches. Widget records offer **Open in Widget Editor+**; record, Customer Update and update-set links open through `nav_to.do?uri=`. Selection updates both the content-frame URL and the outer ServiceNow URL, so refreshes and bookmarks retain the chosen update set. History entries include the record name and current selection. All supported fields appear as independent collapsible sections, sorted by label, and start collapsed on load and after an update-set change. Fields with no code remain disabled. Fields unavailable in the selected snapshot show an **Unavailable** label; empty fields show **0 lines**. The initial request returns field and update-set metadata without calculating or returning code attribution. Expanding a field loads its history and scrolls its heading into view once its editor is ready; collapsing it disposes its Monaco editor. Reopening uses cached data for the same update set. Multiple fields can remain open together. Right-click a Created by or Update set value (or use Shift+F10, Enter or a tap) for a ServiceNow context menu. Show matching and Filter out apply to that field only; small removable filters keep clearing available even with no matching rows. Created by and Update set values use link colour, a dotted underline and a hand cursor to indicate their menus. Monaco keeps the complete code model and original line numbers while hiding non-matching lines. Syntax colouring, line numbers, selection and find accompany an attribution table showing time, author and linked update set. Thin borders below each update-set attribution group extend across the attribution columns, line numbers and code, with consistent colours across fields and light/dark themes. Code keeps its normal background, and Quick compare retains its change highlighting. Empty code is indicated in a full-width table row. Drag the divider or use its arrow keys to resize attribution and code across all field tables. Long attribution values use ellipses with full-value tooltips. Monaco owns the line positions, font metrics and scrolling, including after resizing or zooming. Wrapping and folding are disabled to keep attribution aligned. On narrow screens the time remains available in attribution tooltips and comparison metadata. Record loading updates the title immediately and notifies the ServiceNow shell. Page and parent-frame titles show the record name, table and instance product name; the shared `we_history_sync` helper records History entries with **Credit+** as the primary value and the record name as the secondary value. History URLs retain the last expanded field.
+### Attribution and comparisons
 
-Code fields come from the table's effective elements, including inherited dictionary fields, and are sorted by field label ascending. Supported types are `script`, `script_plain`, `html_template`, `condition_string`, `conditions` and `condition`. HTML templates use HTML colouring, JavaScript conditions use JavaScript colouring, and encoded conditions remain plain text. Set links come directly from each Customer Update's `update_set` or `remote_update_set`; missing or unreadable sets show a dash. XML parsing reads the target record's direct children, including empty fields, CDATA and XML entities, and ignores companion application-file records. Invalid, duplicate-target and DTD/entity declaration payloads fail safely.
+Credit+ compares available Customer Update snapshots, rather than individual edits or complete authorship. It does not use `sys_update_version`. Authors come from captured source metadata, falling back to Customer Update metadata. Imports may identify an importer, and missing snapshots or intermediate edits cannot be reconstructed. Snapshots use Customer Update timestamps with stable tie-breakers; indistinguishable imported timestamps cannot prove original order.
 
-History is selected by update name. Every Customer Update keeps its own sys_id; duplicate update-set names and repeated snapshots caused by reverts are supported. Snapshots are ordered by Customer Update `sys_updated_on`, then `sys_created_on`, `sys_mod_count` and sys_id. Missing update times fall back to creation time; the ID gives stable ordering when metadata cannot distinguish snapshots. This is a deterministic best effort, not proof of the original order for indistinguishable imported timestamps. The dropdown shows Customer Update time, set name and Customer Update author; line attribution uses the captured source author/time after loading the field. Metadata requests do not parse historical payloads. Malformed, unreadable, oversized or field-missing intermediate snapshots interrupt attribution; available code still displays. Payloads identifying another record remain an error. Unknown set references remain separate snapshots.
+- Use **Grouped view** or **Column view** to change attribution layout. Right-click an author or update set to show matching lines or filter them out. Drag the divider, or use its arrow keys, to resize attribution columns.
+- **Whitespace** defaults to ignoring all whitespace, including inside strings and templates, which can hide meaningful literal changes. Exact matching, ignoring whitespace amounts and ignoring trailing whitespace are also available. Original code remains visible. View and whitespace choices synchronise in user preferences; explicit URL options take priority.
+- **Quick compare** shows an inline diff against the selected snapshot; **Stop comparing** returns to attribution. **Compare+** opens the chosen Customer Update against its preceding snapshot in a new tab. The first snapshot compares with an empty baseline. Whitespace attribution settings do not affect these diffs.
 
-Attribution describes changes between available update-set snapshots, not individual edits or complete authorship. The earliest snapshot is a baseline. Authors come from payload `sys_updated_by`, falling back to the Customer Update's `sys_updated_by`. Imported metadata can identify source authors or importers; fallback times can reflect import or later update activity. Missing snapshots, intermediate edits within a set and revert/branch relationships cannot be reconstructed. Explicit DELETE snapshots use Customer Update author/time metadata because their XML can retain the previous editor's metadata.
+History is retrieved through the Table API with platform access checks; attribution and statistics run in a browser worker. Missing, malformed, oversized or unreadable snapshots can leave partial attribution. Uncertain lines remain unattributed. Use **Reload** to refresh changed history.
 
-By default, the diff ignores all whitespace. The whitespace popover also offers exact matching, ignoring changes in the amount of whitespace, or ignoring trailing whitespace only. The setting is saved in the URL and recalculates open attribution fields and Statistics from the shared history cache; it does not change the displayed code or Quick compare/Compare+ diffs. The diff skips unchanged prefixes and suffixes. Unique unchanged lines split large comparisons into smaller sections (patience matching). Remaining sections use Myers matching for repeated lines or sparse longest-common-subsequence matching (Hunt–Szymanski) for sparse matches, then match unmatched moved blocks and unique meaningful lines without reusing origins for copies. Normalised lines are reused between consecutive snapshots. Attribution and Statistics matching run in a same-origin browser Web Worker, keeping the page responsive. The server validates admin access and supplies the ordered Customer Update identifiers, supported fields and limits. The browser retrieves payloads through the same-origin Table API in batches of up to 100 records, with the platform enforcing table and field access. It checks record identity, timestamps, modification counts and update-set references against the server metadata, parses the XML and keeps only supported code fields in memory. History retrieval starts in the background after record metadata loads. Collapsed field headings show line counts as soon as the selected payload is available. Fields, Statistics and quick comparisons share the same history; attribution and Statistics calculations still run only when requested. Changing update sets keeps the cache when the history fingerprint is unchanged. Reload, changing records or leaving the page clears it and cancels pending retrieval. A bounded cache prioritises the selected snapshot and recent history; selecting an evicted snapshot fetches history again with that snapshot prioritised. The worker retains the previous snapshot and current attribution while calculating. Changing records, reloading or destroying the view terminates its workers; failures remain retryable. Repeated delimiters and ambiguous fragments are handled conservatively. With the default setting, whitespace inside strings, comments and templates is also ignored; this can hide meaningful literal changes. Original code is always displayed. The **Update set** selector includes all available sets for the record, newest first. Choosing a set loads its metadata and collapses the fields; expanding a field loads its code and attribution; the URL follows the selection for reload and History links. The Compare+ menu item opens read-only Compare+ in a new tab for that Customer Update and the immediately preceding update set. Quick compare replaces the field editor with a read-only inline diff from the row’s update set to the selected update set; Stop comparing sits immediately beside the field label in the table header and returns to attribution. Loading messages appear below the header. Comparisons use Customer Update payloads directly, including retrieved sets; the first snapshot compares with an empty baseline. Missing, unreadable or ambiguous snapshots return an error. Both comparison menu items are disabled for the selected set; self-comparisons are disabled and rejected on the server. Credit+ retains its page title and History entry.
+### Limits
 
-Admins can open Credit+ for the current saved widget from the Widget Editor+ menu, directly above Code Search+. In Credit+, the Open in Widget Editor+ split button also offers Open in Widget.
-
-Credit+ limits are positive integer system properties in the **Widget Editor+** category. They are installed only on first install, so application upgrades preserve administrator settings. Invalid or non-positive values use the defaults. XML limits count characters, not encoded bytes.
+Credit+ limits are positive integer properties in **Widget Editor+ → Properties**. Upgrades preserve administrator settings; invalid or non-positive values use the defaults. XML limits count characters, not encoded bytes.
 
 | Property | Default | Effect |
 |---|---:|---|
@@ -144,14 +218,15 @@ Credit+ limits are positive integer system properties in the **Widget Editor+** 
 | `monaco.plus.credit.max_lines` | 50,000 | Maximum lines per field for matching. Larger code still displays with partial attribution. |
 | `monaco.plus.credit.diff_work` | 20,000,000 | Matching work units per browser comparison, including retained traceback links. |
 | `monaco.plus.credit.request_timeout_seconds` | 180 | Timeout for Table API requests, field/statistics loading and worker calculations, capped at the browser timer maximum. Platform transaction limits still apply. |
-| `monaco.plus.credit.statistics_batch_size` | 10 | Retired; no longer read. The Table API browser cache uses up to 100 records per retrieval request. |
 
-When a history or matching limit is reached, current code remains visible. Uncertain attribution stays blank, and the field reports partial results. Statistics exclude uncertain comparisons rather than inventing additions or removals. Increasing limits allows more work but can increase transfer size, browser memory and calculation duration. Late responses after a timeout or record change are discarded.
+When a limit is reached, available code remains visible and partial results are identified. Statistics exclude uncertain comparisons. Higher limits can increase transfer size, browser memory and calculation time. The legacy `monaco.plus.credit.statistics_batch_size` setting is no longer read by the current viewer.
 
-The **Statistics** expandable container appears before the code fields and loads statistics on demand, using the Assistant’s themed skeleton bars while calculating (static with reduced motion). Four leaderboards rank Created by users and update sets with positive totals, with gold, silver and bronze rank icons for the first three places for lines added and removed: Builders/Destroyers for people and Expansions/Demolitions for update sets, across all available update sets and supported code fields, including sets after the selected snapshot. A replacement counts as one removal and one addition; the first snapshot counts as additions. Statistics calculate only when opened, reusing or loading the shared history cache. User references, profile photos and record creation metadata are resolved by one lightweight admin-only server request. Totals are calculated in the browser worker and grouped by case-insensitive username and update-set table/sys_id, so equal names remain distinct and reverts do not inflate the update-set count. Changed histories require Reload. Whitespace/move matching limits apply per comparison. Missing, oversized or unreadable snapshots interrupt comparison; mismatched target records still fail. These are captured-snapshot totals, not individual-edit counts. Unknown or unreadable set references are identified separately from the update-set count.
+### Statistics
 
-Statistics also show record age in whole days, founder, contributor count, total lines created/destroyed, busiest field, biggest makeover and busiest month (all ranked by additions plus removals), plus **Longest quiet spell**, the greatest whole-day gap between consecutive recorded updates. Month and gap calculations use the captured UTC update timestamps; tied months use the earliest month. A single update has no gap yet. Age and founder use readable record creation metadata, falling back to the earliest snapshot only when the record is unavailable; absent metadata remains unknown. The Statistics container header stays below the main toolbar while scrolling and uses the theme branding background variable `--now-color_chrome--brand-5`, falling back to the secondary background. Opening it adds `sysparm_statistics=true` to both the content and ServiceNow shell URLs; shared links and browser refreshes open and load Statistics automatically. Closing it removes that parameter. Results stay cached while toggling the panel, and reset on record/update-set changes or Reload. Statistics remain admin-only and read-only.
+Expand **Statistics** to calculate additions and removals across all available update sets and supported code fields, including sets after the selected snapshot. Builders/Destroyers rank contributors; Expansions/Demolitions rank update sets. Replacements count as one removal and one addition; the first snapshot counts as additions. These are captured-snapshot totals, not individual-edit counts.
 
-User names (including the founder) and update-set names open their records in the same tab through `nav_to.do?uri=`. User records are resolved by username with read access enforced; unavailable references remain plain text. People leaderboards show avatars before usernames, using the same photo and initial fallback as the activity chart. Initials use a consistent colour per case-insensitive username, with contrasting white text in both themes. Leaderboard names have no tooltips or external-link icons. Rank icons sit outside hyperlinks so they do not underline on hover. Leaderboards align ranks, avatars and totals in columns with subtle row separators and percentage bars. Bars expand from the left once their rows enter view, and appear immediately with reduced motion. Statistics use compact Bootstrap 3 panels with larger values above labels, FontAwesome icons on the right and subtle green/red accents for lines created/destroyed. Panels use five columns on wide screens, three on medium screens and two on narrow screens. Icon colours blend the theme brand and text colours for contrast in light and dark modes. Additions and removals use positive and critical theme accents. Leaderboard categories appear as muted subtitles; empty rankings show No additions or No removals without rank icons. Unknown age uses a question mark.
+Statistics include record age, founder, contributor count, lines created/destroyed, busiest field and month, biggest makeover and longest quiet spell between updates. Age and founder use readable record creation metadata, falling back to the earliest snapshot if the record is unavailable. Activity dates use UTC.
 
-Above the leaderboards, an activity chart uses the platform Chart.js bundle to plot additions and removals for each Customer Update in date order. Hover a point for its update set, timestamp and line counts. User avatars appear above the higher point, using the readable live-profile photo, then the user-record photo, then a username initial; hover or focus an avatar for its update-set name in the normal tooltip, and select it for the timestamp, line counts and author. The activity panel has a 170px-high plot that fits the viewport with evenly spaced Customer Updates. Axis labels show unique dates across multiple days, hours/minutes within one day, and seconds for ranges shorter than a minute, using captured UTC timestamps. The visible UTC date range stays above the graph when zoomed. A vertical guide, point rings and an avatar outline highlight the hovered or focused update. Use the first graph control for full screen; the plot fills the available height and keeps its zoom range on exit. Drag across a region to zoom, or use Zoom in, Zoom out and Reset zoom. Crowded avatars are thinned until zooming provides room for individual updates. Updates with incomplete field comparisons plot any known additions/removals. Updates without any known totals remain unplotted, with details available through their avatars. The chart follows the page theme and is disposed when Statistics closes or its record changes.
+The activity chart plots known additions and removals for each Customer Update. Hover or focus points and author avatars for details. Drag a region to zoom, or use the zoom, reset and full-screen controls. Incomplete comparisons show only known totals; updates without known totals remain available through their avatars.
+
+Links with `sysparm_statistics=true` open Statistics automatically. Results stay cached while toggling the panel and reset when the record or update set changes, or on Reload.

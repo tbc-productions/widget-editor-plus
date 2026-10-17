@@ -1,15 +1,15 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const { chromium } = require('@playwright/test');
+const { chromium, expect } = require('@playwright/test');
 
 let browser;
 before(async () => { browser = await chromium.launch({ headless: true }); });
 after(async () => { await browser?.close(); });
 
-const html = fs.readFileSync('src/fluent/generated/other/sys-ui-page/credit_plus.html', 'utf8');
+const html = fs.readFileSync('src/fluent/generated/other/sys-ui-page/widget_editor_credit.html', 'utf8');
 assert.match(fs.readFileSync('src/fluent/generated/other/sys-ui-page/widget_editor_compare.html', 'utf8'), /credit_update:\s*_weDiffConfigParams.get\('credit_update'\)/);
-const client = fs.readFileSync('src/fluent/generated/other/sys-ui-page/credit_plus.client.js', 'utf8');
+const client = fs.readFileSync('src/fluent/generated/other/sys-ui-page/widget_editor_credit.client.js', 'utf8');
 assert.doesNotMatch(client, /[\uD800-\uDBFF][\uDC00-\uDFFF]/, 'Use JavaScript Unicode escapes so emoji survive update-set transport');
 const angularSource = fs.readFileSync(require.resolve('angular/angular.min.js'), 'utf8');
 async function settle(page) {
@@ -49,21 +49,35 @@ function installMonaco() {
         createModel: (text, language) => { const model = { text, language, dispose: () => window.disposedModels++ }; window.createdModels.push(model); return model; },
         create: (container, options) => {
             window.creditOptions.push(options); let top = 0, scroll, configuration, zonesChanged;
-            let font = { fontFamily: 'monospace', fontSize: 13, fontWeight: 'normal', letterSpacing: 0, lineHeight: 24 }, padding = 8, zone = 0, hidden = [];
-            const editor = { getScrollHeight: () => Math.max(container.clientHeight, options.model.text.split('\n').length * font.lineHeight + padding * 2 + zone), getScrollTop: () => top,
+            let font = { fontFamily: 'monospace', fontSize: 13, fontWeight: 'normal', letterSpacing: 0, lineHeight: 24 }, padding = options.padding?.top ?? 0, bottomPadding = options.padding?.bottom ?? 0, zone = 0, hidden = [], groupZones = {}, nextZone = 0;
+            const editor = {
+                getContentHeight: () => (options.model.text.split('\n').length - hidden.reduce((sum, range) => sum + range.endLineNumber - range.startLineNumber + 1, 0)) * font.lineHeight + padding + bottomPadding + zone + Object.values(groupZones).reduce((sum, zone) => sum + zone.heightInPx, 0),
+                getScrollHeight: () => Math.max(container.clientHeight, editor.getContentHeight()), getScrollTop: () => top,
                 getScrollWidth: () => container.clientWidth, getLayoutInfo: () => ({ height: container.clientHeight, contentWidth: container.clientWidth, horizontalScrollbarHeight: 12 }),
                 getOption: () => font,
                 deltaDecorations: (_old, decorations) => { editor.decorations = decorations; return decorations.map((_, i) => 'decoration-' + i); },
                 setHiddenAreas: ranges => { hidden = ranges; window.hiddenRanges = ranges; },
-                getTopForLineNumber: (number, includeZone) => padding + (number - 1 - hidden.reduce((total, range) => total + Math.max(0, Math.min(number - 1, range.endLineNumber) - range.startLineNumber + 1), 0)) * font.lineHeight + (number > 15 && !(number === 16 && includeZone) ? zone : 0),
-                updateOptions: options => { font = { ...font, ...options }; padding = options.padding?.top ?? padding; if (configuration) configuration(); },
+                getTopForLineNumber: (number, includeZone) => padding + (number - 1 - hidden.reduce((total, range) => total + Math.max(0, Math.min(number - 1, range.endLineNumber) - range.startLineNumber + 1), 0)) * font.lineHeight + (number > 15 && !(number === 16 && includeZone) ? zone : 0) + Object.values(groupZones).filter(zone => zone.afterLineNumber < number).reduce((sum, zone) => sum + zone.heightInPx, 0),
+                updateOptions: options => { font = { ...font, ...options }; padding = options.padding?.top ?? padding; bottomPadding = options.padding?.bottom ?? bottomPadding; if (configuration) configuration(); },
+                changeViewZones: callback => {
+                    callback({ addZone: zone => {
+                        const id = String(++nextZone); groupZones[id] = zone;
+                        container.style.position = 'relative';
+                        zone.domNode.style.cssText = 'position:absolute;left:0;width:100%;height:' + zone.heightInPx + 'px;top:' + (editor.getTopForLineNumber(zone.afterLineNumber) + font.lineHeight) + 'px';
+                        container.appendChild(zone.domNode);
+                        return id;
+                    }, removeZone: id => { groupZones[id].domNode.remove(); delete groupZones[id]; } });
+                    editor.groupZones = Object.values(groupZones).map(({ afterLineNumber, heightInPx }) => ({ afterLineNumber, heightInPx }));
+                    editor.zoneElements = Object.values(groupZones).map(zone => zone.domNode);
+                    if (zonesChanged) zonesChanged();
+                },
                 addViewZone: height => { zone = height; if (zonesChanged) zonesChanged(); },
                 revealLine: number => {
                     const position = editor.getTopForLineNumber(number);
                     if (position < top) editor.setScrollTop(position);
                     else if (position + font.lineHeight > top + container.clientHeight) editor.setScrollTop(position + font.lineHeight - container.clientHeight);
                 },
-                setScrollTop: value => { top = value; if (scroll) scroll(); }, onDidScrollChange: callback => scroll = callback, onDidContentSizeChange() {}, onDidLayoutChange() {}, onDidChangeConfiguration: callback => configuration = callback, onDidChangeViewZones: callback => zonesChanged = callback, layout() {}, dispose: () => window.disposedCreditEditors++ };
+                setScrollTop: value => { top = value; if (scroll) scroll(); }, onDidScrollChange: callback => scroll = callback, onDidContentSizeChange() {}, onDidLayoutChange() {}, onDidChangeConfiguration: callback => configuration = callback, onDidChangeViewZones: callback => zonesChanged = callback, layout() {}, dispose: () => { Object.values(groupZones).forEach(zone => zone.domNode.remove()); window.disposedCreditEditors++; } };
             window.creditEditor = editor; window.creditEditors.push(editor); return editor;
         },
         colorizeModelLine: (model, number) => { const escaped = document.createElement('span'); escaped.textContent = model.text.split('\n')[number - 1]; return '<span class="mtk2">' + escaped.innerHTML + '</span>'; },
@@ -90,25 +104,73 @@ async function menuAction(page, cell, label) {
     await page.locator('#cp-context-menu').getByRole('menuitem', { name: label, exact: true }).click();
 }
 function setCell(section) { return section.locator('[data-context-kind="update set"]').first(); }
-async function initialise(page, width = 1280, monaco = false) {
+async function initialise(page, width = 1280, monaco = false, search = '', preferences = {}) {
     await page.setViewportSize({ width, height: 850 });
     await page.route('https://credit.test/**', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: markup }));
-    await page.goto('https://credit.test/?sysparm_update=' + update);
+    await page.goto('https://credit.test/?sysparm_update=' + update + (search ? '&' + search : ''));
     if (monaco) await page.evaluate(installMonaco);
-    await page.evaluate(fixture => {
+    await page.evaluate(({ fixture, preferences }) => {
         window.fixture = fixture; window.calls = []; window.nextAnswer = null; window.historyEntries = [];
-        window.WE_HISTORY_SYNC = { set: entry => window.historyEntries.push(entry) }; window.WE_CREDIT_CONFIG = { siteTitle: 'My instance' };
+        window.WE_HISTORY_SYNC = { set: entry => window.historyEntries.push(entry) }; window.WE_CREDIT_CONFIG = { siteTitle: 'My instance', preferences };
         window.GlideAjax = function (name) {
             const params = {}; this.addParam = (key, value) => params[key] = value;
             this.getXMLAnswer = callback => {
+                if (params.sysparm_name === 'savePreferences') {
+                    (window.preferenceCalls ||= []).push(params);
+                    window.savedPreferences = JSON.parse(params.sysparm_preferences);
+                    callback('{"success":true}');
+                    return;
+                }
+                if (params.sysparm_name === 'getContributors') {
+                    (window.contributorCalls ||= []).push(params);
+                    callback(JSON.stringify({ success: true, contributors: window.contributors || {} }));
+                    return;
+                }
                 window.calls.push({ name, params });
                 const result = window.nextAnswer || (params.sysparm_name === 'getComparison' ? { success: true, table: window.fixture.table, record: window.fixture.record, left: { sys_id: params.sysparm_from_update, fields: { script: 'old();' } }, right: { sys_id: params.sysparm_update, fields: { script: window.fixture.lines.map(line => line.text).join('\n') } } } : { ...window.fixture, selected: params.sysparm_update || window.fixture.selected, field: params.sysparm_field || 'script' });
                 window.nextAnswer = null; callback(JSON.stringify(result));
             };
         };
-    }, fixture);
+    }, { fixture, preferences });
     await installCredit(page);
 }
+
+test('Statistics summary stays readable and distinct with light and dark themes and matching brand/text colours', async () => {
+    const context = await browser.newContext();
+    try {
+        const page = await context.newPage();
+        await initialise(page);
+        for (const width of [1280, 390]) {
+            await page.setViewportSize({ width, height: 850 });
+            for (const [background, surface, text] of [
+                ['255,255,255', '237,237,237', '29,29,29'],
+                ['24,26,30', '45,48,54', '235,235,235']
+            ]) {
+                const colours = await page.evaluate(({ background, surface, text }) => {
+                    const style = document.documentElement.style;
+                    style.setProperty('--now-color_background--primary', background);
+                    style.setProperty('--now-color_background--tertiary', surface);
+                    style.setProperty('--now-color_text--primary', text);
+                    style.setProperty('--now-color_chrome--brand-5', text);
+                    const summary = getComputedStyle(document.getElementById('cp-statistics-button'));
+                    const label = getComputedStyle(document.getElementById('cp-statistics-heading'));
+                    return { background: summary.backgroundColor, text: label.color };
+                }, { background, surface, text });
+                function luminance(colour) {
+                    return colour.match(/\d+/g).map(Number).map(channel => {
+                        const value = channel / 255;
+                        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+                    }).reduce((sum, value, i) => sum + value * [0.2126, 0.7152, 0.0722][i], 0);
+                }
+                const foreground = luminance(colours.text), backdrop = luminance(colours.background);
+                assert.ok((Math.max(foreground, backdrop) + 0.05) / (Math.min(foreground, backdrop) + 0.05) >= 4.5);
+                assert.equal(colours.background, 'rgb(' + surface.split(',').join(', ') + ')');
+                assert.notEqual(colours.background, 'rgb(' + background.split(',').join(', ') + ')');
+                await page.screenshot({ path: '/tmp/credit-statistics-summary-' + width + '-' + (text === '29,29,29' ? 'light' : 'dark') + '.png' });
+            }
+        }
+    } finally { await context.close(); }
+});
 
 test('fields start collapsed, author is plain text, and Compare+ links open safely in a new tab', async () => {
     const context = await browser.newContext();
@@ -148,7 +210,12 @@ test('fields start collapsed, author is plain text, and Compare+ links open safe
             assert.equal(await page.evaluate(() => window.calls.length), 3);
             await page.evaluate(() => window.nextAnswer = { success: false, error: 'Administrator access is required.' });
             await page.locator('#cp-retry').click(); assert.equal(await page.locator('#cp-results').isVisible(), false);
-            assert.equal(await page.locator('#cp-status').evaluate(node => node.classList.contains('alert') && node.classList.contains('alert-danger')), true);
+            assert.equal(await page.locator('#cp-status').textContent(), 'Administrator access is required.');
+            assert.equal(await page.locator('#cp-status').evaluate(node => node.classList.contains('alert')), false);
+            assert.equal(await page.locator('#cp-status-wrap').getAttribute('class'), 'dc-no-versions-overlay');
+            assert.equal(await page.locator('#cp-status-content').getAttribute('class'), 'dc-no-versions-content');
+            assert.equal(await page.locator('#cp-status-content').evaluate(node => getComputedStyle(node).textAlign), 'center');
+            await page.screenshot({ path: '/tmp/credit-load-error-' + width + '.png' });
             await page.locator('#cp-retry').click(); assert.equal(await page.locator('.cp-field-section[open]').count(), 0);
             await page.evaluate(() => window.fixture.lines = []);
             const empty = page.locator('.cp-field-section[data-field=script]');
@@ -184,6 +251,9 @@ test('viewer ignores stale responses after a timeout and allows retry', async ()
         await page.evaluate(() => window.expire());
         await settle(page);
         assert.match(await page.locator('#cp-status').textContent(), /timed out/);
+        assert.equal(await page.locator('#cp-status').evaluate(node => node.classList.contains('alert')), false);
+        assert.equal(await page.locator('#cp-status-wrap').getAttribute('class'), 'dc-no-versions-overlay');
+        assert.equal(await page.locator('#cp-status-content').getAttribute('class'), 'dc-no-versions-content');
         await page.locator('#cp-retry').click();
         await page.evaluate(fixture => window.pending[0](JSON.stringify(fixture)), fixture);
         await settle(page);
@@ -238,6 +308,55 @@ test('inline diff compares the row update to the selected update and restores at
     } finally { await context.close(); }
 });
 
+test('short Monaco fields fit their code and attribution, while long fields retain a scrollable height limit', async () => {
+    const context = await browser.newContext();
+    try {
+        for (const width of [1280, 390]) {
+            const page = await context.newPage(); await initialise(page, width, true);
+            await page.evaluate(() => {
+                const [first, second] = window.fixture.updates;
+                window.fixture.lines = [first.id, first.id, first.id, second.id, first.id].map((update, i) => ({ number: i + 1, text: 'line' + i + '();', update }));
+            });
+            const field = await openField(page);
+            const body = field.locator('.cp-code-body');
+            async function fitted() {
+                await page.waitForFunction(() => document.querySelector('.cp-code-body').clientHeight === creditEditors[0].getContentHeight());
+                const box = await body.boundingBox();
+                assert.ok(box.height < 320, 'Short fields shrink below the normal minimum height');
+                const row = await part(field, 'cp-attribution').locator('tr').first().boundingBox();
+                assert.equal(row.y, box.y, 'The first attribution starts directly below the field heading');
+                const cells = await part(field, 'cp-attribution').locator('.cp-origin').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().bottom));
+                assert.ok(cells.every(bottom => bottom <= box.y + box.height), 'Attribution groups fit without clipping');
+                return box.height;
+            }
+            const groupedHeight = await fitted();
+            assert.equal(await page.evaluate(() => creditOptions[0].padding.top), 0, 'Code starts at the same position as attribution');
+            await menuAction(page, setCell(field), 'Quick compare');
+            assert.equal(await fitted(), groupedHeight, 'Inline comparison also fits the field');
+            await page.evaluate(() => creditEditors.at(-1).addViewZone(37));
+            await page.waitForFunction(() => document.querySelector('.cp-code-body').clientHeight === creditEditors.at(-1).getContentHeight());
+            assert.equal((await body.boundingBox()).height, groupedHeight + 37, 'Diff view zones remain visible');
+            await part(field, 'cp-diff-close').click();
+            await page.getByRole('button', { name: 'Column view', exact: true }).click();
+            // Closing quick compare creates a new editor for this field.
+            await page.waitForFunction(() => document.querySelector('.cp-code-body').clientHeight === creditEditors.at(-1).getContentHeight());
+            assert.ok((await body.boundingBox()).height < groupedHeight, 'Columns remove unused attribution space');
+            const beforeFilter = (await body.boundingBox()).height;
+            await menuAction(page, part(field, 'cp-attribution').locator('[data-context-kind="author"]').first(), 'Show matching');
+            assert.ok((await body.boundingBox()).height < beforeFilter, 'Filtering shrinks the field again');
+            await page.evaluate(() => window.fixture.lines = Array.from({ length: 120 }, (_, i) => ({ number: i + 1, text: 'line' + i + '();', update: window.fixture.selected })));
+            const long = await openField(page, 'client_script');
+            const longBody = long.locator('.cp-code-body');
+            assert.equal((await longBody.boundingBox()).height, 510, 'Long fields keep the existing 60vh height');
+            assert.ok(await page.evaluate(() => creditEditors.at(-1).getContentHeight()) > 510, 'Long code remains scrollable');
+            await page.setViewportSize({ width, height: 500 });
+            const minimum = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize) * 20);
+            assert.equal((await longBody.boundingBox()).height, Math.max(minimum, 300), 'Long fields retain the existing responsive height limit');
+            await page.close();
+        }
+    } finally { await context.close(); }
+});
+
 test('multiple Monaco fields stay aligned and release editors when collapsed or the update set changes', async () => {
     const context = await browser.newContext();
     try {
@@ -283,12 +402,12 @@ test('annotations inherit Monaco font metrics and follow geometry changes withou
         await page.goto('https://credit.test/?sysparm_update=' + update);
         await page.evaluate(installMonaco);
         await page.evaluate(fixture => {
-            fixture = { ...fixture, lines: Array.from({ length: 120 }, (_, i) => ({ number: i + 1, text: 'code();', update: fixture.selected })) };
+            fixture = { ...fixture, lines: Array.from({ length: 120 }, (_, i) => ({ number: i + 1, text: 'code();', update: i >= 118 ? fixture.updates[0].id : fixture.selected })) };
             window.GlideAjax = function () { this.addParam = () => {}; this.getXMLAnswer = callback => callback(JSON.stringify(fixture)); };
         }, fixture);
         await installCredit(page);
         await openField(page);
-        assert.deepEqual(await page.locator('#cp-attribution .cp-cell').first().evaluate(node => {
+        assert.deepEqual(await page.locator('.cp-gutter-content').first().evaluate(node => {
             const style = getComputedStyle(node); return [style.fontSize, style.lineHeight, style.fontFamily];
         }), ['13px', '24px', 'monospace']);
         await page.evaluate(() => {
@@ -296,7 +415,7 @@ test('annotations inherit Monaco font metrics and follow geometry changes withou
             creditEditor.addViewZone(37);
         });
         await page.waitForFunction(() => document.querySelector('#cp-attribution tr[data-line-number="16"]').style.top === '455px');
-        assert.deepEqual(await page.locator('#cp-attribution .cp-cell').first().evaluate(node => {
+        assert.deepEqual(await page.locator('.cp-gutter-content').first().evaluate(node => {
             const style = getComputedStyle(node); return [style.fontSize, style.lineHeight];
         }), ['15px', '27px']);
         for (const zoom of [0.8, 1.1, 1.25, 1.5, 1]) {
@@ -501,10 +620,10 @@ test('every field resists ServiceNow table/button sizing and uses theme variable
         assert.equal(await page.locator('#cp-update-button').evaluate(node => getComputedStyle(node).color), 'rgb(132, 134, 255)');
         for (const name of ['script', 'client_script', 'template']) {
             const section = await openField(page, name);
-            assert.equal(await part(section, 'cp-attribution').locator('tr').first().evaluate(node => getComputedStyle(node).display), 'grid');
+            assert.equal(await part(section, 'cp-attribution').locator('tr').first().evaluate(node => getComputedStyle(node).display), 'block');
             assert.equal(await part(section, 'cp-gutter-content').evaluate(node => getComputedStyle(node).position), 'relative');
             assert.equal(await part(section, 'cp-attribution').locator('button').count(), 0);
-            assert.equal(await part(section, 'cp-attribution').locator('tr').nth(1).evaluate(row => row.getBoundingClientRect().top - row.closest('.cp-code-body').getBoundingClientRect().top), 32);
+            assert.equal(await part(section, 'cp-attribution').locator('tr').nth(1).evaluate(row => row.getBoundingClientRect().top - row.closest('.cp-code-body').getBoundingClientRect().top), 24);
         }
         await page.addStyleTag({ content: ':root { --now-color_background--primary:255,255,255; --now-button--secondary--color:22,27,28; }' });
         await page.waitForFunction(() => getComputedStyle(document.getElementById('cp-update-button')).backgroundColor === 'rgb(255, 255, 255)');
@@ -524,6 +643,7 @@ test('field timeouts, retry and update-set changes discard late responses withou
                 const params = {}; this.addParam = (key, value) => params[key] = value;
                 this.getXMLAnswer = callback => {
                     if (params.sysparm_context) callback(JSON.stringify({ ...fixture, selected: params.sysparm_update }));
+                    else if (params.sysparm_name === 'getContributors') callback('{"success":true,"contributors":{}}');
                     else window.pending.push({ params, callback });
                 };
             };
@@ -589,7 +709,7 @@ test('inline author/set filters combine and clear independently while retaining 
             assert.deepEqual(await numbers(), [1, 3, 6]);
             if (useMonaco) {
                 assert.equal(await page.evaluate(() => window.createdModels[0].text.split('\n').length), 6);
-                assert.deepEqual(await body().locator('tr:not([hidden])').evaluateAll(rows => rows.map(row => parseFloat(row.style.top))), [8, 32, 56]);
+                assert.deepEqual(await body().locator('tr:not([hidden])').evaluateAll(rows => rows.map(row => parseFloat(row.style.top))), [0, 24, 48]);
             }
             await menuAction(page, set(), 'Show matching'); assert.deepEqual(await numbers(), [1, 3, 6]);
             await section.getByRole('button', {name:'Clear created by filter',exact:true}).click();
@@ -874,9 +994,6 @@ test('statistics load only on demand, render safe leaderboards, cache while open
             assert.equal(await button.locator('.fa-bar-chart').count(), 1);
             assert.equal(await button.evaluate(node => node.tagName === 'SUMMARY' && node.parentElement === document.querySelector('.dc-body .da-section') && !document.querySelector('.dc-header #cp-statistics-button')), true);
             assert.equal(await page.locator('#cp-statistics-container').evaluate(node => node.open), false);
-            await page.evaluate(() => document.documentElement.style.setProperty('--now-color_chrome--brand-5', '33,44,55'));
-            assert.equal(await button.evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(33, 44, 55)');
-            await page.evaluate(() => document.documentElement.style.removeProperty('--now-color_chrome--brand-5'));
             await button.click();
             assert.equal(await page.locator('#cp-statistics-status').textContent(), 'Loading statistics…');
             assert.equal(await page.locator('.cp-stats-skeleton').getAttribute('aria-hidden'), 'true');
@@ -1004,6 +1121,43 @@ test('statistics load only on demand, render safe leaderboards, cache while open
             await settle(page);
             assert.equal(await page.locator('.cp-stats-percentage, .cp-stats-medal').count(), 0);
             assert.deepEqual(await page.locator('.cp-stats-board p').allTextContents(), ['No additions', 'No removals', 'No additions', 'No removals']);
+            await page.close();
+        }
+    } finally { await context.close(); }
+});
+
+test('Founder email values prefer punctuation breaks without changing copied text or overflowing', async () => {
+    const context = await browser.newContext();
+    try {
+        for (const width of [1280, 390]) for (const linked of [false, true]) {
+            const page = await context.newPage(); await initialise(page, width);
+            await page.evaluate(linked => window.nextAnswer = {
+                success: true, ageDays: 1, founder: 'alex.smith@example.com.au', founderUserId: linked ? '3'.repeat(32) : '',
+                updateSetCount: 1, contributorCount: 1, added: 1, removed: 0, creators: [], destroyers: [], creatorSets: [], destroyerSets: [],
+            }, linked);
+            await page.getByRole('button', { name: 'Statistics', exact: true }).click(); await settle(page);
+            const card = page.locator('.cp-stat-card').filter({ has: page.locator('dt', { hasText: /^Founder$/ }) });
+            const value = card.locator('[credit-stat-value]');
+            assert.equal(await value.textContent(), 'alex.smith@example.com.au');
+            assert.equal(await value.locator('wbr').count(), 4);
+            assert.equal(await value.locator('wbr').evaluateAll(nodes => nodes.every(node => node.previousSibling.textContent === '.' || node.nextSibling.textContent === '@')), true);
+            assert.equal(await value.evaluate(node => {
+                const selection = getSelection(), range = document.createRange();
+                range.selectNodeContents(node); selection.removeAllRanges(); selection.addRange(range);
+                return selection.toString();
+            }), 'alex.smith@example.com.au');
+            assert.equal(await value.evaluate(node => node.getBoundingClientRect().height > parseFloat(getComputedStyle(node).fontSize) * 1.25), true);
+            for (const name of ['a'.repeat(80) + '@example.com', 'Ada Lovelace', '<img src=x onerror=alert(1)>@example.com']) {
+                await page.evaluate(name => {
+                    const scope = angular.element(document.getElementById('credit-plus')).scope();
+                    scope.ctrl.statistics.facts.find(fact => fact.label === 'Founder').value = name;
+                    scope.$apply();
+                }, name);
+                assert.equal(await value.textContent(), name);
+                assert.equal(await card.evaluate(node => node.scrollWidth <= node.clientWidth), true);
+                assert.equal(await value.locator('img').count(), 0);
+                if (name === 'Ada Lovelace') assert.equal(await value.locator('wbr').count(), 0);
+            }
             await page.close();
         }
     } finally { await context.close(); }
@@ -1175,7 +1329,11 @@ test('expanding a field scrolls only after its editor is ready and ignores colla
                 if (this.matches('.cp-field-section summary')) window.scrolls.push({ field: this.closest('details').dataset.field, editors: window.creditOptions.length, behavior: options.behavior });
                 scroll.call(this, options);
             };
-            window.GlideAjax = function () { this.addParam = () => {}; this.getXMLAnswer = callback => window.pendingFields.push(callback); };
+            window.GlideAjax = function () {
+                let method;
+                this.addParam = (key, value) => { if (key === 'sysparm_name') method = value; };
+                this.getXMLAnswer = callback => method === 'getContributors' ? callback('{"success":true,"contributors":{}}') : window.pendingFields.push(callback);
+            };
         });
         const script = page.locator('.cp-field-section[data-field="script"]');
         await script.locator('summary').click();
@@ -1201,7 +1359,7 @@ test('expanding a field scrolls only after its editor is ready and ignores colla
     } finally { await context.close(); }
 });
 
-test('dragging the shared splitter shrinks every attribution column and keeps headers aligned', async () => {
+test('dragging the shared splitter resizes grouped attribution and keeps its header aligned', async () => {
     const context = await browser.newContext();
     try {
         for (const width of [1920, 1280, 390]) {
@@ -1222,46 +1380,29 @@ test('dragging the shared splitter shrinks every attribution column and keeps he
             await page.mouse.move(body.x + body.width * 0.15, handle.y + 20, { steps: 8 });
             await page.mouse.up();
             const after = await widths();
-            assert.equal(after.length, 4);
+            assert.equal(after.length, 2);
             after.forEach((size, index) => assert.ok(size < before[index] * 0.6, 'Every column shrinks with the pane'));
             assert.equal(await splitter.getAttribute('aria-valuenow'), '15');
             assert.equal(await page.locator('.cp-splitter[aria-valuenow="15"]').count(), fixture.fields.length);
             for (const field of ['script', 'template']) {
                 const current = page.locator('.cp-field-section[data-field="' + field + '"]');
                 const columns = await current.evaluate(section => {
-                    const headers = [...section.querySelectorAll('.cp-gutter-head span')].filter(node => getComputedStyle(node).display !== 'none');
+                    const headers = [section.querySelector('.cp-gutter-head')];
                     const cells = [...section.querySelectorAll('.cp-attribution tr:first-child td')].filter(node => getComputedStyle(node).display !== 'none');
                     return cells.map((cell, index) => ({ left: cell.getBoundingClientRect().left - headers[index].getBoundingClientRect().left, width: cell.getBoundingClientRect().width - headers[index].getBoundingClientRect().width }));
                 });
-                columns.forEach(column => { assert.ok(Math.abs(column.left) < 1); assert.ok(Math.abs(column.width) < 1); });
+                columns.forEach(column => { assert.ok(Math.abs(column.left) < 1); assert.ok(Math.abs(column.width) <= 1, JSON.stringify(column)); });
                 assert.equal(await current.locator('.cp-attribution .cp-update-set .cp-cell-text').first().evaluate(node => getComputedStyle(node).textOverflow), 'ellipsis');
             }
             await splitter.focus(); await page.keyboard.press('Home');
             assert.equal(await splitter.getAttribute('aria-valuenow'), '10');
             await page.keyboard.press('End');
-            if (width > 760) {
-                const timestamps = await page.locator('.cp-attribution tr:first-child .cp-time').evaluateAll(cells => cells.map(cell => ({
-                    width: cell.getBoundingClientRect().width,
-                    cap: parseFloat(cell.closest('.cp-field-section').style.getPropertyValue('--cp-time-width')),
-                    clipped: cell.scrollWidth > cell.clientWidth,
-                    headerWidth: cell.closest('.cp-field-section').querySelector('.cp-time-heading').getBoundingClientRect().width
-                })));
-                timestamps.forEach(time => {
-                    assert.ok(Math.abs(time.width - time.cap) < 1, 'Updated stops growing once a full timestamp fits');
-                    assert.ok(Math.abs(time.width - time.headerWidth) < 1, 'Updated header matches the capped cells');
-                    assert.equal(time.clipped, false, 'Full timestamp fits at the maximum width');
-                });
-                await page.addStyleTag({ content: '#credit-plus .cp-gutter td { padding-left: 19px; padding-right: 19px; }' });
-                await page.evaluate(() => creditEditor.updateOptions({ fontFamily: 'monospace', fontSize: 18, letterSpacing: 1.25 }));
-                await page.waitForFunction(() => document.querySelector('.cp-field-section[data-field="template"] .cp-gutter-content').style.fontSize === '18px');
-                const enlarged = await section.locator('.cp-attribution tr:first-child .cp-time').evaluate(cell => ({
-                    width: cell.getBoundingClientRect().width, clipped: cell.scrollWidth > cell.clientWidth,
-                    headerWidth: cell.closest('.cp-field-section').querySelector('.cp-time-heading').getBoundingClientRect().width
-                }));
-                assert.ok(enlarged.width > timestamps[1].width, 'Cap follows the rendered font and platform padding');
-                assert.equal(enlarged.clipped, false, 'A larger timestamp is still fully visible');
-                assert.ok(Math.abs(enlarged.width - enlarged.headerWidth) < 1);
-            }
+            const cards = await page.locator('.cp-attribution-block').evaluateAll(nodes => nodes.map(node => ({
+                overflow: node.scrollWidth > node.clientWidth,
+                author: node.querySelector('.cp-author').getBoundingClientRect().top,
+                meta: node.querySelector('.cp-attribution-meta').getBoundingClientRect().top,
+            })));
+            assert.equal(cards.every(card => !card.overflow && card.meta > card.author), true);
             await page.close();
         }
     } finally { await context.close(); }
@@ -1361,7 +1502,7 @@ test('real browser workers stream field and statistics batches without server-co
         const field=await openField(page);
         await page.waitForFunction(()=>window.workerStops===1);
         assert.equal(await part(field,'cp-attribution').locator('tr').count(),2);
-        assert.deepEqual(await part(field,'cp-attribution').locator('.cp-origin .cp-cell-text').allTextContents(),['Earlier author','Developer']);
+        assert.deepEqual(await part(field,'cp-attribution').locator('.cp-origin .cp-author .cp-cell-text').allTextContents(),['Earlier author','Developer']);
         assert.equal(await page.evaluate(()=>window.creditOptions.length),1);
         await page.getByRole('button',{name:'Statistics',exact:true}).click();
         await page.waitForFunction(()=>window.workerStops===2);
@@ -1410,6 +1551,8 @@ async function tableApiFixture(page, options = {}) {
     await page.evaluate(manifest=>{
         window.fixture.tableApi=manifest;
         window.GlideAjax=function(){const params={};this.addParam=(k,v)=>params[k]=v;this.getXMLAnswer=callback=>{
+            if(params.sysparm_name==='savePreferences') { callback('{"success":true}'); return; }
+            if(params.sysparm_name==='getContributors') { callback('{"success":true,"contributors":{}}'); return; }
             window.calls.push({params});
             if(params.sysparm_name==='getStatistics') {
                 if(params.sysparm_context!=='true')throw new Error('Server must not calculate statistics');
@@ -1440,7 +1583,7 @@ test('Table API history populates collapsed line counts and is shared by fields,
         await page.waitForFunction(()=>document.querySelectorAll('.cp-stats-board li').length>0);
         const field=await openField(page);
         assert.equal(api.calls(),1);
-        assert.deepEqual(await part(field,'cp-attribution').locator('.cp-origin .cp-cell-text').allTextContents(),['Earlier author','Developer']);
+        assert.deepEqual(await part(field,'cp-attribution').locator('.cp-origin .cp-author .cp-cell-text').allTextContents(),['Earlier author','Developer']);
         assert.deepEqual(await page.locator('.cp-stats-facts div').evaluateAll(nodes => nodes.filter(node => ['Update sets', 'Contributors', 'Lines created', 'Lines destroyed'].includes(node.querySelector('dt').textContent)).map(node => node.querySelector('dd').textContent)),['2','3','5','2']);
         await menuAction(page,setCell(field),'Quick compare');
         await page.waitForFunction(()=>!!window.lastModels);
@@ -1543,18 +1686,30 @@ test('whitespace popover recalculates open fields and Statistics from the cache 
             await route.fulfill({contentType:'application/json',body:JSON.stringify({result:rows})});
         }});
         const field=await openField(page);
-        const authors=()=>part(field,'cp-attribution').locator('.cp-origin .cp-cell-text').allTextContents();
-        assert.deepEqual(await authors(),['Earlier author','Earlier author']);
+        const authors=()=>part(field,'cp-attribution').locator('.cp-origin .cp-author .cp-cell-text').allTextContents();
+        assert.deepEqual(await authors(),['Earlier author']);
         await page.getByRole('button',{name:'Statistics',exact:true}).click();
         await page.waitForFunction(()=>document.querySelectorAll('.cp-stats-board li').length>0);
         const totals=await page.locator('.cp-stats-facts dd').allTextContents();
         await page.getByRole('button',{name:'Whitespace settings',exact:true}).click();
         const popover=page.getByRole('dialog',{name:'Attribution and Statistics whitespace settings'});
+        const modes=popover.getByRole('radiogroup',{name:'Whitespace comparison mode'});
+        assert.equal(await modes.locator('.input-group-radio input.radio[type="radio"] + label.radio-label').count(),4);
+        assert.equal(await modes.getByRole('radio').count(),4);
+        assert.equal(await popover.locator('input:checked').count(),1);
         assert.equal(await popover.locator('input:checked').inputValue(),'all');
+        const selected=modes.getByRole('radio',{name:'Ignore whitespace when comparing lines',exact:true});
+        await selected.click();await settle(page);
+        assert.equal(await selected.isChecked(),true);
+        await selected.focus();await page.keyboard.press('Space');await settle(page);
+        assert.equal(await selected.isChecked(),true);
+        assert.equal(await selected.evaluate(n=>n===document.activeElement),true);
         await popover.getByLabel('Show all changes',{exact:true}).check();
+        assert.equal(await popover.locator('input:checked').count(),1);
+        assert.equal(await selected.isChecked(),false);
         await openField(page);
         await page.waitForFunction(()=>document.querySelectorAll('.cp-stats-board li').length>0);
-        assert.deepEqual(await authors(),['Developer','Developer']);
+        assert.deepEqual(await authors(),['Developer']);
         assert.notDeepEqual(await page.locator('.cp-stats-facts dd').allTextContents(),totals);
         assert.equal(new URL(page.url()).searchParams.get('sysparm_whitespace'),'none');
         assert.equal(api.calls(),1);
@@ -1564,11 +1719,12 @@ test('whitespace popover recalculates open fields and Statistics from the cache 
         if(!await popover.isVisible())await page.getByRole('button',{name:'Whitespace settings',exact:true}).click();
         await popover.getByLabel('Ignore whitespace when comparing lines',{exact:true}).check();
         await openField(page);
-        assert.deepEqual(await authors(),['Earlier author','Earlier author']);
+        assert.deepEqual(await authors(),['Earlier author']);
         assert.equal(new URL(page.url()).searchParams.has('sysparm_whitespace'),false);
         assert.equal(api.calls(),1);
         if(!await popover.isVisible())await page.getByRole('button',{name:'Whitespace settings',exact:true}).click();
         await page.keyboard.press('Escape');
+        await popover.waitFor({state:'hidden'});
         assert.equal(await popover.isVisible(),false);
         assert.equal(await page.getByRole('button',{name:'Whitespace settings',exact:true}).evaluate(n=>n===document.activeElement),true);
         await page.setViewportSize({width:390,height:844});
@@ -1702,76 +1858,40 @@ test('zero-line fields close during loading, block expansion and enable only whe
 });
 
 
-test('Monaco attribution borders end each update-set group and stay consistent across fields and themes', async () => {
+test('grouped attribution markers stay consistent across fields, themes and inline comparison', async () => {
     const context = await browser.newContext();
     try {
-        const page = await context.newPage();
-        await initialise(page, 1280, true);
+        const page = await context.newPage(); await initialise(page, 1280, true);
         await page.evaluate(() => {
-            const first = window.fixture.updates[0], second = window.fixture.updates[1];
-            first.updateSet.name = second.updateSet.name = 'Same name';
-            window.fixture.updates.push(
-                { ...first, id: '7'.repeat(32), author: 'Another author' },
-                { ...first, id: '8'.repeat(32), updateSet: { ...first.updateSet, table: 'sys_remote_update_set' } },
-                { ...first, id: '9'.repeat(32), updateSet: null },
-            );
-            window.fixture.lines = [first.id, '7'.repeat(32), second.id, null, '8'.repeat(32), second.id, '9'.repeat(32)]
-                .map((update, index) => ({ number: index + 1, text: 'line' + index + '();', update }));
+            const [first, second] = window.fixture.updates;
+            window.fixture.lines = [first.id, first.id, second.id, first.id].map((update, i) => ({ number: i + 1, text: 'line' + i + '();', update }));
         });
         const field = await openField(page);
-        const first = await page.evaluate(() => window.creditEditors[0].decorations);
-        assert.deepEqual(first.map(d => [d.range.startLineNumber, d.range.endLineNumber]), [[2, 2], [3, 3], [5, 5], [6, 6]]);
-        assert.equal(first.every(d => d.options.isWholeLine === true && d.options.marginClassName === d.options.className), true);
-        assert.equal(first[1].options.className, first[3].options.className);
-        assert.equal(new Set(first.map(d => d.options.className)).size, 3);
-        await openField(page, 'client_script');
-        assert.deepEqual(await page.evaluate(() => window.creditEditors[1].decorations), first);
-        const colours = [];
-        for (const background of ['255 255 255', '24 26 30']) {
-            colours.push(await page.evaluate(({ background, decorations }) => {
-                document.documentElement.style.setProperty('--now-color_background--primary', background);
-                const editor = document.createElement('div'); editor.className = 'monaco-editor';
-                document.getElementById('credit-plus').appendChild(editor);
-                const values = decorations.map(decoration => {
-                    const line = document.createElement('div'); line.className = decoration.options.className;
-                    editor.appendChild(line);
-                    const style = getComputedStyle(line);
-                    return { background: style.backgroundColor, border: style.borderBottomColor, width: style.borderBottomWidth, style: style.borderBottomStyle };
-                });
-                editor.remove();
-                return values;
-            }, { background, decorations: first }));
-        }
-        assert.deepEqual(colours[0], colours[1]);
-        assert.equal(new Set(colours[0].map(value => value.border)).size, 3);
-        assert.equal(colours[0].every(value => {
-            const alpha = Number(value.border.match(/, ([\d.]+)\)$/)?.[1]);
-            return alpha > 0 && alpha <= 0.5 && value.width === '1px' && value.style === 'solid' && value.background === 'rgba(0, 0, 0, 0)';
-        }), true, 'Group borders are subtle in both themes without filling lines');
-        const rows = await part(field, 'cp-attribution').locator('tr').evaluateAll(rows => rows.map(row => ({
-            number: Number(row.dataset.lineNumber), className: row.className,
-            border: getComputedStyle(row).borderBottomColor, width: getComputedStyle(row).borderBottomWidth,
-            height: row.getBoundingClientRect().height,
+        const markers = async section => part(section, 'cp-attribution').locator('.cp-origin').evaluateAll(cells => cells.map(cell => ({
+            colour: getComputedStyle(cell).borderLeftColor, width: getComputedStyle(cell).borderLeftWidth,
+            height: cell.getBoundingClientRect().height,
         })));
-        assert.deepEqual(rows.filter(row => row.width === '1px').map(row => row.number), [2, 3, 5, 6]);
-        assert.equal(rows.every(row => row.height === 24), true, 'Borders do not change attribution row heights');
-        first.forEach((decoration, index) => {
-            const row = rows[decoration.range.endLineNumber - 1];
-            assert.equal(row.className, decoration.options.className);
-            assert.equal(row.border, colours[0][index].border, 'Borders extend across the left attribution columns');
-        });
+        const first = await markers(field);
+        assert.equal(first.length, 3);
+        assert.equal(first[0].colour, first[2].colour);
+        assert.notEqual(first[0].colour, first[1].colour);
+        assert.equal(first.every(marker => marker.width === '3px' && marker.height >= 48), true);
+        const other = await openField(page, 'client_script');
+        assert.deepEqual(await markers(other), first);
+        await page.evaluate(() => document.documentElement.style.setProperty('--now-color_background--primary', '24 26 30'));
+        assert.deepEqual(await markers(field), first);
         await menuAction(page, setCell(field), 'Quick compare');
-        assert.equal(await page.evaluate(() => window.creditEditors.at(-1).decorations), undefined);
+        assert.deepEqual(await markers(field), first);
         await part(field, 'cp-diff-close').click();
-        assert.deepEqual(await page.evaluate(() => window.creditEditors.at(-1).decorations), first);
-        await field.locator('summary').click();
-        await openField(page);
-        assert.deepEqual(await page.evaluate(() => window.creditEditors.at(-1).decorations), first);
+        assert.deepEqual(await markers(field), first);
+        await field.locator('summary').click(); await openField(page);
+        assert.deepEqual(await markers(field), first);
         await chooseSet(page, original);
         await openField(page);
-        assert.deepEqual(await page.evaluate(() => window.creditEditors.at(-1).decorations), first);
+        assert.deepEqual(await markers(field), first);
     } finally { await context.close(); }
 });
+
 
 function installActivityChart() {
     window.activityCharts = [];
@@ -2106,5 +2226,373 @@ test('Statistics header sticks below the responsive main toolbar while its conte
                 return getComputedStyle(node).position === 'sticky' && Math.abs(box.top - header.bottom) < 2;
             }), true, 'The Statistics header stays beneath the toolbar without covering it');
         }
+    } finally { await context.close(); }
+});
+
+
+test('attribution blocks show cached avatars and aligned update-set gaps, with safe fallbacks and filtering', async () => {
+    const context = await browser.newContext();
+    try {
+        for (const monaco of [false, true]) for (const width of [1280, 390]) {
+            const page = await context.newPage();
+            await initialise(page, width, monaco);
+            await page.route('**/*.iix?t=medium', route => route.request().url().includes('1'.repeat(32))
+                ? route.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64') })
+                : route.fulfill({ status: 404, body: 'Missing photo' }));
+            await page.evaluate(width => {
+                if (width === 390) {
+                    document.documentElement.style.setProperty('--now-color_background--primary', '24 26 30');
+                    document.documentElement.style.setProperty('--now-color_text--primary', '235 235 235');
+                    document.documentElement.style.setProperty('--now-color_text--secondary', '190 194 201');
+                    document.documentElement.style.setProperty('--now-color_background--secondary', '36 39 44');
+                    document.documentElement.style.setProperty('--now-color_background--tertiary', '45 48 54');
+                }
+                const [first, second] = window.fixture.updates;
+                window.fixture.lines = [first.id, first.id, second.id, second.id, first.id].map((update, i) => ({ number: i + 1, text: 'line' + i + '();', update }));
+                window.contributors = {
+                    'earlier author': { name: 'Earlier author', photo: '1'.repeat(32) },
+                    developer: { name: 'Developer', photo: '2'.repeat(32) },
+                };
+            }, width);
+            const field = await openField(page);
+            const table = part(field, monaco ? 'cp-attribution' : 'cp-lines');
+            assert.equal(await part(field, monaco ? 'cp-code-view' : 'cp-table-fallback').locator(monaco ? '.cp-gutter-head' : 'thead th:first-child').textContent(), 'Contributor');
+            const avatars = table.locator('.cp-origin .cp-avatar');
+            assert.equal(await avatars.count(), 3, 'Only the beginning of each attribution block has an avatar');
+            await page.waitForFunction(() => [...document.querySelectorAll('.cp-origin .cp-avatar img')].filter(img => img.naturalWidth > 0).length === 2 && !document.querySelector('.cp-avatar[data-author="developer"] img'));
+            assert.deepEqual(await avatars.allTextContents(), ['E', 'D', 'E']);
+            assert.equal(await avatars.evaluateAll(nodes => nodes.every(node => node.getAttribute('aria-hidden') === 'true')), true);
+            assert.equal(await avatars.evaluateAll(nodes => nodes.every(node => node.getBoundingClientRect().width === 32)), true);
+            assert.equal(await table.locator('.cp-author').count(), 3);
+            assert.equal(await table.locator('.cp-time').count(), 3);
+            assert.equal(await table.locator('.cp-attribution-block').evaluateAll(nodes => nodes.every(node => node.querySelector('.cp-attribution-meta').getBoundingClientRect().top >= node.querySelector('.cp-author').getBoundingClientRect().bottom)), true);
+
+            if (monaco) {
+                assert.deepEqual(await page.evaluate(() => creditEditor.groupZones), [{ afterLineNumber: 2, heightInPx: 6 }, { afterLineNumber: 4, heightInPx: 6 }, { afterLineNumber: 5, heightInPx: 24 }]);
+                assert.equal(await table.locator('tr').evaluateAll(rows => rows.every(row => Number(row.style.top.replace('px', '')) === creditEditor.getTopForLineNumber(Number(row.dataset.lineNumber)))), true);
+                const rows = await table.locator('tr').evaluateAll(rows => rows.map(row => ({ top: row.getBoundingClientRect().top, bottom: row.getBoundingClientRect().bottom })));
+                assert.equal(rows[2].top - rows[1].bottom, 6);
+                const separators = await table.locator('.cp-group-end').evaluateAll(cells => cells.map(cell => {
+                    const style = getComputedStyle(cell, '::after');
+                    return { width: style.borderBottomWidth, style: style.borderBottomStyle, colour: style.borderBottomColor };
+                }));
+                assert.equal(separators.length, 2);
+                assert.equal(separators.every(separator => separator.width === '1px' && separator.style === 'dotted'), true);
+                const codeSeparators = await page.evaluate(() => creditEditor.zoneElements.filter(node => node.classList.contains('cp-group-separator')).map(node => {
+                    const style = getComputedStyle(node);
+                    return { width: style.borderBottomWidth, style: style.borderBottomStyle, colour: style.borderBottomColor };
+                }));
+                assert.deepEqual(codeSeparators, separators, 'The same 1px dotted colour spans attribution and code');
+
+            } else {
+                assert.equal(await table.locator('tr.cp-block-start').count(), 2);
+                assert.deepEqual(await table.locator('tr.cp-block-start td').first().evaluate(node => [getComputedStyle(node).borderTopWidth, getComputedStyle(node).borderTopStyle]), ['1px', 'dotted']);
+                const separators = await table.locator('tr.cp-block-start').evaluateAll(rows => rows.map(row => Array.from(row.cells).map(cell => getComputedStyle(cell).borderTopColor)));
+                assert.equal(separators.every(colours => new Set(colours).size === 1), true, 'Fallback separators have one colour across attribution and code');
+            }
+            await page.screenshot({ path: '/tmp/credit-attribution-avatars-' + width + '-' + (monaco ? 'monaco' : 'fallback') + '.png', fullPage: true });
+            await openField(page, 'client_script');
+            assert.equal(await page.evaluate(() => window.contributorCalls.length), 1, 'Contributors are loaded once across fields');
+            await menuAction(page, table.locator('[data-context-kind="author"]').first(), 'Show matching');
+            const visibleRows = table.locator('tr:visible');
+            assert.equal(await visibleRows.count(), 3);
+            assert.equal(await visibleRows.locator('.cp-avatar').count(), 1, 'A filtered group retains one leading avatar');
+            if (monaco) {
+                assert.deepEqual(await page.evaluate(() => creditEditors[0].groupZones), []);
+                assert.equal(await table.locator('.cp-group-end').count(), 0, 'Filtering to one group removes separators');
+            }
+            await field.getByRole('button', { name: 'Clear created by filter' }).click();
+            assert.equal(await avatars.count(), 3);
+            await page.close();
+        }
+    } finally { await context.close(); }
+});
+
+
+test('group attribution stays visible while scrolling and yields to the next group without focus jumps', async () => {
+    const context = await browser.newContext();
+    try {
+        for (const width of [1280, 390]) for (const monaco of [true, false]) {
+            const page = await context.newPage(); await initialise(page, width, monaco);
+            await page.evaluate(() => {
+                const [first, second] = window.fixture.updates;
+                window.fixture.lines = Array.from({ length: 200 }, (_, i) => ({ number: i + 1, text: 'line' + i + '();', update: i < 100 ? first.id : second.id }));
+            });
+            const field = await openField(page), pane = part(field, monaco ? 'cp-gutter' : 'cp-table-fallback');
+            const cards = pane.locator('.cp-attribution-block');
+            async function scroll(top) {
+                if (monaco) await page.evaluate(top => creditEditors[0].setScrollTop(top), top);
+                else await pane.evaluate((node, top) => { node.scrollTop = top; }, top);
+                await page.evaluate(() => new Promise(requestAnimationFrame));
+            }
+            const scrollTop = () => monaco ? page.evaluate(() => creditEditors[0].getScrollTop()) : pane.evaluate(node => node.scrollTop);
+            async function assertSticky(index, message) {
+                await expect.poll(() => pane.evaluate((node, index) => {
+                    const card = node.querySelectorAll('.cp-attribution-block')[index];
+                    return Math.abs(card.getBoundingClientRect().top - node.getBoundingClientRect().top);
+                }, index), { message }).toBeLessThan(1);
+            }
+            await scroll(1200);
+            assert.equal(await cards.count(), 2, 'One set of details is rendered per group');
+            await assertSticky(0, 'The current group stays at the top of the pane');
+            await cards.first().locator('.cp-author').evaluate(node => node.focus({ preventScroll: true }));
+            await page.keyboard.press('Shift+F10');
+            assert.equal(await page.locator('#cp-context-menu').isVisible(), true);
+            const menuScroll = await scrollTop();
+            assert.equal(menuScroll, 1200, 'Opening the sticky author menu does not jump back to its first code line');
+            await page.keyboard.press('Escape');
+            assert.equal(await scrollTop(), menuScroll, 'Returning focus to the sticky author preserves the scroll position');
+            await page.screenshot({ path: '/tmp/credit-sticky-attribution-' + width + '-' + (monaco ? 'monaco' : 'fallback') + '.png', fullPage: true });
+            const nextTop = await pane.evaluate((node, monaco) =>
+                node.querySelectorAll('.cp-attribution-block')[1].getBoundingClientRect().top - node.getBoundingClientRect().top +
+                (monaco ? creditEditors[0].getScrollTop() : node.scrollTop), monaco);
+            await scroll(nextTop - 24);
+            await expect.poll(() => pane.evaluate(node => {
+                const [first, next] = [...node.querySelectorAll('.cp-attribution-block')].map(card => card.getBoundingClientRect());
+                return first.top < node.getBoundingClientRect().top && first.bottom <= next.top + 1;
+            }), { message: 'Details stop at their group boundary' }).toBe(true);
+            await scroll(nextTop + 200);
+            await assertSticky(1, 'The next group becomes sticky');
+            await menuAction(page, cards.nth(1).locator('.cp-author'), 'Show matching');
+            await scroll(1200);
+            assert.equal(await cards.count(), 1);
+            await assertSticky(0, 'Filtering rebuilds the sticky group');
+            await field.getByRole('button', { name: 'Clear created by filter' }).click();
+            await scroll(1200);
+            assert.equal(await cards.count(), 2);
+            await assertSticky(0, 'Clearing the filter rebuilds both sticky groups');
+            if (monaco) {
+                await page.evaluate(() => creditEditors[0].updateOptions({ lineHeight: 27 }));
+                await page.evaluate(() => new Promise(requestAnimationFrame));
+                await assertSticky(0, 'Font changes refresh sticky bounds');
+            }
+            await page.close();
+        }
+    } finally { await context.close(); }
+});
+
+
+test('attribution buttons switch cached fields between Grouped and Columns and mark the selected view', async () => {
+    const context = await browser.newContext();
+    try {
+        for (const monaco of [false, true]) for (const width of [1280, 390]) {
+            const page = await context.newPage();
+            const errors = [];
+            page.on('pageerror', error => errors.push(error.message));
+            await initialise(page, width, monaco);
+            await page.evaluate(() => {
+                const [first, second] = window.fixture.updates;
+                window.fixture.lines = [first.id, first.id, second.id, second.id, first.id].map((update, i) => ({ number: i + 1, text: 'line' + i + '();', update }));
+            });
+            const field = await openField(page);
+            const second = await openField(page, 'client_script');
+            const rows = section => part(section, monaco ? 'cp-attribution' : 'cp-lines');
+            const grouped = page.getByRole('button', { name: 'Grouped view', exact: true });
+            const columns = page.getByRole('button', { name: 'Column view', exact: true });
+            async function assertActive(view) {
+                assert.equal(await grouped.getAttribute('aria-pressed'), String(view === 'grouped'));
+                assert.equal(await columns.getAttribute('aria-pressed'), String(view === 'columns'));
+                assert.equal(await grouped.evaluate(node => node.classList.contains('active')), view === 'grouped');
+                assert.equal(await columns.evaluate(node => node.classList.contains('active')), view === 'columns');
+                assert.equal(await page.locator('.cp-settings-control .btn.active').count(), 1);
+            }
+            assert.equal(await grouped.textContent(), 'Grouped');
+            assert.equal(await columns.textContent(), 'Columns');
+            assert.equal(await grouped.locator('.fa.fa-id-card-o[aria-hidden="true"]').count(), 1);
+            assert.equal(await columns.locator('.fa.fa-columns[aria-hidden="true"]').count(), 1);
+            assert.equal(await columns.evaluate(node => node.nextElementSibling.id), 'cp-whitespace-control');
+            assert.equal(await page.locator('#cp-view-popover').count(), 0);
+            await assertActive('grouped');
+            assert.equal(await rows(field).locator('.cp-avatar').count(), 3);
+            const calls = await page.evaluate(() => window.calls.length);
+            const editors = monaco ? await page.evaluate(() => window.creditEditors.length) : 0;
+            await columns.click();
+            await settle(page);
+            await assertActive('columns');
+            assert.equal(new URL(page.url()).searchParams.get('sysparm_view'), 'columns');
+            assert.deepEqual(await page.evaluate(() => window.savedPreferences), { view: 'columns', whitespace: 'all' });
+            for (const section of [field, second]) {
+                assert.equal(await rows(section).locator('.cp-avatar').count(), 0);
+                assert.deepEqual(await rows(section).locator('.cp-author .cp-cell-text').allTextContents(), ['Earlier author', 'Earlier author', 'Developer', 'Developer', 'Earlier author']);
+                assert.equal(await rows(section).locator('.cp-time').count(), 5);
+                assert.equal(await rows(section).locator('.cp-update-set').count(), 5);
+                const headings = part(section, monaco ? 'cp-code-view' : 'cp-table-fallback').locator(monaco ? '.cp-gutter-head' : 'thead tr');
+                assert.equal(await headings.locator('.cp-time').isVisible(), width !== 390);
+                assert.match(await headings.textContent(), /Updated.*Created by.*Update set/);
+                assert.equal(await headings.evaluate(node => {
+                    const updated = getComputedStyle(node.children[0]), author = getComputedStyle(node.children[1]);
+                    return ['fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'color'].every(property => updated[property] === author[property]);
+                }), true, 'Updated uses the same typography as the other column headings');
+                if (monaco) {
+                    assert.equal(await rows(section).locator('tr').evaluateAll(nodes => nodes.every(row => row.children.length === 3)), true);
+                    assert.equal(await rows(section).locator('.cp-column-group-end').count(), 2);
+                } else assert.equal(await rows(section).locator('tr').evaluateAll(nodes => nodes.every(row => row.cells.length === 5)), true);
+            }
+            assert.equal(await page.evaluate(() => window.calls.length), calls, 'Switching view does not fetch attribution');
+            if (monaco) {
+                assert.equal(await page.evaluate(() => window.creditEditors.length), editors);
+                assert.equal(await page.evaluate(() => window.creditOptions.at(-1).model.text), 'line0();\nline1();\nline2();\nline3();\nline4();');
+                assert.deepEqual(await page.evaluate(() => window.creditEditor.groupZones), [{ afterLineNumber: 2, heightInPx: 6 }, { afterLineNumber: 4, heightInPx: 6 }]);
+            }
+            await columns.click();
+            assert.equal(await page.evaluate(() => window.preferenceCalls.length), 1, 'Clicking the active view leaves it selected without saving again');
+            await page.screenshot({ path: '/tmp/credit-columns-buttons-' + width + '-' + (monaco ? 'monaco' : 'fallback') + '.png', fullPage: true });
+            await menuAction(page, rows(field).locator('[data-context-kind="author"]').first(), 'Show matching');
+            await grouped.focus();
+            await page.keyboard.press('Space');
+            await settle(page);
+            await assertActive('grouped');
+            assert.equal(new URL(page.url()).searchParams.has('sysparm_view'), false);
+            assert.deepEqual(await page.evaluate(() => window.savedPreferences), { view: 'grouped', whitespace: 'all' });
+            assert.deepEqual(await rows(field).locator('.cp-author .cp-cell-text').allTextContents(), ['Earlier author']);
+            assert.equal(await rows(field).locator('.cp-avatar').count(), 1);
+            assert.equal(await part(field, 'cp-active-filters').getByRole('button').count(), 1);
+            assert.equal(await rows(second).locator('.cp-avatar').count(), 3);
+            await part(field, 'cp-active-filters').getByRole('button').click();
+            if (monaco) {
+                await menuAction(page, setCell(field), 'Quick compare');
+                const compareCalls = await page.evaluate(() => window.calls.length);
+                await columns.click();
+                await settle(page);
+                assert.equal(await part(field, 'cp-diff-close').isVisible(), true);
+                assert.equal(await page.evaluate(() => window.lastModels.original.text), 'old();');
+                assert.equal(await page.evaluate(() => window.calls.length), compareCalls);
+            }
+            assert.deepEqual(errors, []);
+            await page.close();
+        }
+    } finally { await context.close(); }
+});
+
+test('Credit loads saved preferences with explicit URL overrides and keeps them across update selection', async () => {
+    const context = await browser.newContext();
+    try {
+        for (const [preferences, search, view, whitespace] of [
+            [{ view: 'columns', whitespace: 'eol' }, '', 'columns', 'eol'],
+            [{ view: 'columns', whitespace: 'eol' }, 'sysparm_view=grouped&sysparm_whitespace=none', 'grouped', 'none'],
+            [{ view: 'grouped', whitespace: 'none' }, 'sysparm_view=columns&sysparm_whitespace=changes', 'columns', 'changes'],
+            [{ view: 'columns', whitespace: 'none' }, 'sysparm_view=grouped&sysparm_whitespace=all', 'grouped', 'all'],
+            [{ view: 'invalid', whitespace: 'invalid' }, '', 'grouped', 'all'],
+        ]) {
+            const page = await context.newPage();
+            await initialise(page, 1280, true, search, preferences);
+            let field = await openField(page);
+            assert.equal(await part(field, 'cp-attribution').locator('.cp-avatar').count(), view === 'columns' ? 0 : 1);
+            await chooseSet(page, original);
+            field = await openField(page);
+            assert.equal(await part(field, 'cp-attribution').locator('.cp-avatar').count(), view === 'columns' ? 0 : 1);
+            if (preferences.view === 'columns') assert.equal(new URL(page.url()).searchParams.get('sysparm_view'), view);
+            if (['none', 'changes', 'eol'].includes(preferences.whitespace)) assert.equal(new URL(page.url()).searchParams.get('sysparm_whitespace'), whitespace);
+            const button = page.getByRole('button', { name: view === 'columns' ? 'Column view' : 'Grouped view', exact: true });
+            assert.equal(await button.getAttribute('aria-pressed'), 'true');
+            await page.getByRole('button', { name: 'Whitespace settings', exact: true }).click();
+            assert.equal(await page.locator('#cp-whitespace-popover input:checked').inputValue(), whitespace);
+            await page.getByLabel('Ignore changes in amount of whitespace', { exact: true }).check();
+            await settle(page);
+            if (whitespace !== 'changes') assert.deepEqual(await page.evaluate(() => window.savedPreferences), { view, whitespace: 'changes' });
+            await page.close();
+        }
+    } finally { await context.close(); }
+});
+
+test('Credit serialises preference writes, retains the latest choices and reports save failures', async () => {
+    const context = await browser.newContext();
+    try {
+        const page = await context.newPage();
+        await initialise(page);
+        await openField(page);
+        await page.evaluate(() => {
+            const Original = window.GlideAjax;
+            window.preferenceWrites = [];
+            window.GlideAjax = function (name) {
+                const ga = new Original(name), params = {};
+                this.addParam = (key, value) => { params[key] = value; ga.addParam(key, value); };
+                this.getXMLAnswer = callback => params.sysparm_name === 'savePreferences'
+                    ? window.preferenceWrites.push({ value: JSON.parse(params.sysparm_preferences), callback })
+                    : ga.getXMLAnswer(callback);
+            };
+        });
+        await page.getByRole('button', { name: 'Column view', exact: true }).click();
+        await page.getByRole('button', { name: 'Grouped view', exact: true }).click();
+        await page.getByRole('button', { name: 'Whitespace settings', exact: true }).click();
+        await page.getByLabel('Show all changes', { exact: true }).check();
+        assert.equal(await page.evaluate(() => window.preferenceWrites.length), 1);
+        await page.evaluate(() => preferenceWrites[0].callback('{"success":true}'));
+        assert.deepEqual(await page.evaluate(() => window.preferenceWrites.map(write => write.value)), [{ view: 'columns', whitespace: 'all' }, { view: 'grouped', whitespace: 'none' }]);
+        await page.evaluate(() => preferenceWrites[1].callback('{"success":false}'));
+        await settle(page);
+        assert.match(await page.getByRole('status').allTextContents().then(values => values.join(' ')), /Could not save Credit preferences/);
+        await page.getByRole('button', { name: 'Column view', exact: true }).click();
+        await page.evaluate(() => preferenceWrites[2].callback('{"success":true}'));
+        await settle(page);
+        assert.equal(await page.getByText('Could not save Credit preferences.', { exact: false }).isVisible(), false);
+    } finally { await context.close(); }
+});
+
+test('Columns keeps empty filter results clearable and renders unknown origins safely', async () => {
+    const context = await browser.newContext();
+    try {
+        for (const monaco of [false, true]) {
+            const page = await context.newPage();
+            await initialise(page, 1280, monaco, 'sysparm_view=columns');
+            let field = await openField(page);
+            await menuAction(page, field.locator('[data-context-kind="author"]').first(), 'Filter out');
+            const empty = part(field, 'cp-lines').locator('.cp-empty');
+            assert.equal(await empty.textContent(), 'No matches.');
+            assert.equal(await empty.getAttribute('colspan'), '5');
+            await part(field, 'cp-active-filters').getByRole('button').click();
+            assert.equal(await field.locator('.cp-empty').count(), 0);
+            await page.evaluate(() => window.fixture.lines[0].update = 'f'.repeat(32));
+            await page.getByRole('button', { name: 'Reload', exact: true }).click();
+            field = await openField(page);
+            const rows = part(field, monaco ? 'cp-attribution' : 'cp-lines');
+            assert.deepEqual(await rows.locator('.cp-author .cp-cell-text').allTextContents(), ['Unknown', 'Developer']);
+            assert.deepEqual(await rows.locator('.cp-update-set .cp-cell-text').allTextContents(), ['—', fixture.updates[1].updateSet.name]);
+            await page.close();
+        }
+    } finally { await context.close(); }
+});
+
+test('Compare+ drawer opens Credit+ with the same record even when its Customer Update history is empty', async () => {
+    const context = await browser.newContext();
+    const record = 'a'.repeat(32);
+    try {
+        const page = await context.newPage();
+        await page.route('https://credit.test/**', route => {
+            const url = new URL(route.request().url());
+            if (url.pathname === '/nav_to.do') return route.fulfill({ contentType: 'text/html', body: '<iframe src="/' + url.searchParams.get('uri').replace(/&/g, '&amp;') + '"></iframe>' });
+            return route.fulfill({
+                contentType: 'text/html',
+                body: url.searchParams.get('sys_id') === '9c5bf170283e4d6394aa639c79936587'
+                    ? markup : '<we-app-drawer current-app="compare" credit-available="true"></we-app-drawer>',
+            });
+        });
+        await page.addInitScript(() => {
+            window.calls = [];
+            window.GlideAjax = function (processor) {
+                const params = { processor };
+                this.addParam = (key, value) => { params[key] = value; };
+                this.getXMLAnswer = callback => {
+                    window.calls.push(params);
+                    callback(JSON.stringify(params.sysparm_name === 'getAppDrawerContext'
+                        ? { success: true, apps: { credit: true } }
+                        : { success: false, error: 'No Customer Updates for this record.', errorCode: 'no_customer_updates' }));
+                };
+            };
+        });
+        await page.goto('https://credit.test/ui_page.do?sys_id=51ec3d258363b61070b8b5dfeeaad36b&table=sp_widget&record_id=' + record);
+        await page.addScriptTag({ path: 'src/fluent/generated/other/sys-ui-page/widget_editor_app_drawer.js' });
+        await page.getByRole('button', { name: 'Apps', exact: true }).click();
+        await page.getByRole('link', { name: 'Credit+', exact: true }).click();
+        await page.waitForURL('https://credit.test/nav_to.do?uri=' + encodeURIComponent('ui_page.do?sys_id=9c5bf170283e4d6394aa639c79936587&sysparm_table=sp_widget&sysparm_record=' + record));
+        const frame = page.frames()[1];
+        await frame.waitForLoadState();
+        await installCredit(frame);
+        const request = await frame.evaluate(() => window.calls.find(call => call.sysparm_name === 'getCredit'));
+        assert.equal(request.processor, 'WidgetEditorCreditAjax');
+        assert.equal(request.sysparm_table, 'sp_widget');
+        assert.equal(request.sysparm_record, record);
+        assert.match(await frame.locator('#cp-status').textContent(), /No Customer Updates/);
+        assert.equal(page.context().pages().length, 1);
     } finally { await context.close(); }
 });

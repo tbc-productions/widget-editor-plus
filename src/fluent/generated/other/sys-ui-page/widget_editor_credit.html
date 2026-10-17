@@ -11,6 +11,12 @@
             } catch (e) {}
             description;
         </g:evaluate>
+        <g:evaluate var="jvar_cp_preferences">
+            var preferences = '{}';
+            try { preferences = new global.WidgetEditorCreditAjax().getPreferences(); } catch (e) {}
+            preferences;
+        </g:evaluate>
+        <span id="cp-preferences" hidden="hidden">${HTML:jvar_cp_preferences}</span>
         <span id="cp-page-description" hidden="hidden">${HTML:jvar_cp_description}</span>
         <span id="cp-request-timeout" hidden="hidden">${HTML:gs.getProperty("monaco.plus.credit.request_timeout_seconds", "180")}</span>
         <span id="cp-site-title" hidden="hidden">${HTML:gs.getProperty("glide.product.name", "ServiceNow")}</span>
@@ -21,7 +27,10 @@
                     window.location.replace('/now/nav/ui/classic/params/target/' + encodeURIComponent(page));
                 }
             })();
+            var creditPreferences = {};
+            try { creditPreferences = JSON.parse((document.getElementById('cp-preferences') || {}).textContent || '{}'); } catch (e) {}
             window.WE_CREDIT_CONFIG = {
+                preferences: creditPreferences,
                 requestTimeout: Number((document.getElementById('cp-request-timeout') || {}).textContent || '180') * 1000,
                 siteTitle: document.getElementById('cp-site-title').textContent,
                 description: document.getElementById('cp-page-description').textContent
@@ -33,6 +42,7 @@
         <g:requires name="scripts/snc-code-editor/monaco.bundle.min.jsx" params="sysparm_substitute=false" />
         <g:requires name="monaco_plus_bootstrap.jsdbx" params="sysparm_substitute=false" />
         <g:requires name="we_history_sync.jsdbx" params="sysparm_substitute=false" />
+        <link rel="stylesheet" href="/styles/retina_icons/retina_icons.css" />
         <link rel="stylesheet" href="/scripts/icon-fonts/font-awesome/css/font-awesome.css" />
         <style>
         [ng-cloak], .ng-cloak, .ng-hide { display: none !important; }
@@ -67,7 +77,6 @@
         /* Header Bar */
         .dc-header {
             background: rgb(var(--now-color_chrome--brand-5, var(--now-color--primary-0, 221, 237, 233)));
-            border-bottom: 1px solid rgb(var(--now-color_border--secondary, var(--now-color_divider--secondary, 228, 230, 235)));
             flex-shrink: 0;
             position: sticky;
             top: 0;
@@ -175,6 +184,7 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
+            gap: 0.375rem;
             text-decoration: none;
             transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
             box-shadow: none;
@@ -285,13 +295,14 @@
         .cp-field-section summary .da-diff-counts { float: right; }
         .cp-table td.cp-empty { padding: 1.5rem 0.75rem; text-align: center; color: rgb(var(--now-color_text--secondary, 82 82 82)); white-space: normal; }
         #cp-whitespace-control { position: relative; }
-        #cp-whitespace-popover { display: block; top: 100%; left: auto; right: 0; width: 27rem; max-width: calc(100vw - 3rem); }
+        #cp-whitespace-popover { position: absolute; display: block; top: 100%; left: auto; right: 0; width: 27rem; max-width: calc(100vw - 3rem); }
         #cp-whitespace-popover .arrow { left: auto; right: 0.65rem; }
-        #cp-whitespace-popover .radio label { white-space: normal; }
+        #cp-whitespace-popover .input-group-radio { display: block; margin: 0.5rem 0; }
+        #cp-whitespace-popover .radio-label { white-space: normal; }
         .cp-settings-control { margin-left: auto; flex-shrink: 0; }
         #cp-statistics { --cp-icon-accent: var(--now-color--primary-1, 0, 118, 204); padding: 16px; background: rgb(var(--now-color_background--secondary, 246 247 250)); }
         .da-section.cp-statistics-section { overflow: visible; --cp-icon-accent: var(--now-color--primary-1, 0, 118, 204); }
-        #cp-statistics-button { position: sticky; top: var(--cp-header-height, 0px); z-index: 1000; display: list-item; cursor: pointer; padding: 0.75rem; background: rgb(var(--now-color_chrome--brand-5, var(--now-color_background--secondary, 246 247 250))); }
+        #cp-statistics-button { position: sticky; top: var(--cp-header-height, 0px); z-index: 1000; display: list-item; cursor: pointer; padding: 0.75rem; background: rgb(var(--now-color_background--tertiary, 237 237 237)); }
         #cp-statistics-button .cp-stats-icon { margin-left: 0.375rem; }
         @keyframes we-skeleton-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
         .cp-stats-skeleton .we-skeleton-bar { display: block; height: 1rem; margin: 0.5rem 0 0.75rem; border-radius: 4px; background: rgb(var(--now-color_background--tertiary, 243 244 246)); animation: we-skeleton-pulse 1.4s ease-in-out infinite; }
@@ -467,14 +478,14 @@
         .da-label { font-weight: 600; }
         .da-field-key { font: 13px Consolas, Menlo, Monaco, monospace; color: rgb(var(--now-color_text--tertiary, 114 114 114)); }
         .da-diff-counts { font-weight: 600; margin-left: auto; }
-        .cp-scroll { overflow: auto; background: rgb(var(--now-color_background--primary, 255 255 255)); }
+        .cp-scroll { max-height: clamp(20rem, 60vh, 45rem); overflow: auto; background: rgb(var(--now-color_background--primary, 255 255 255)); }
         .cp-table { border-collapse: collapse; width: 100%; text-align: left; }
         .cp-table th { padding: 0.5rem 0.75rem; font-weight: 600; background: rgb(var(--now-color_background--secondary, 246 247 249)); border-bottom: 1px solid rgb(var(--now-color_border--secondary, 228 230 235)); white-space: nowrap; }
         .cp-table td { padding: 0 0.75rem; vertical-align: top; line-height: 1.5rem; }
-        .cp-origin { width: 6rem; white-space: nowrap; border-right: 1px solid rgba(var(--now-color_text--primary, 29 29 29), 0.1); background: rgba(var(--now-color_text--primary, 29 29 29), 0.015); }
-        .cp-time { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 8rem; font-size: 12px; }
+        .cp-origin { width: 24rem; max-width: 24rem; background: rgba(var(--now-color_text--primary, 29 29 29), 0.015); }
+        .cp-time { min-width: 0; max-width: 55%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
         .cp-number { color: rgb(var(--now-color_text--tertiary, 114 114 114)); text-align: right; width: 3rem; user-select: none; }
-        .cp-update-set { width: 11rem; max-width: 11rem; }
+        .cp-update-set { flex: 1; min-width: 0; }
         .cp-update-set a { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .cp-code { white-space: pre; font: 13px/1.5rem Menlo, Consolas, monospace; }
         .cp-code.monaco-editor { position: static; background: transparent; outline: none; }
@@ -487,17 +498,18 @@
         .cp-field-loading .icon-loading { display: inline-block; width: 1em; height: 1em; animation: cpSpin 0.75s linear infinite; }
         @keyframes cpSpin { to { transform: rotate(360deg); } }
         @media (prefers-reduced-motion: reduce) { .cp-field-loading .icon-loading { animation: none; } }
-        .cp-gutter-head { align-items: center; display: grid; grid-template-columns: min(40%, var(--cp-time-width, 12.5rem)) minmax(0, 5fr) minmax(0, 7fr); }
+        .cp-gutter-head { align-items: center; display: flex; min-width: 0; overflow: hidden; }
         .cp-gutter-head span { padding: 0.5rem 0.75rem; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .cp-code-body { height: clamp(20rem, 60vh, 45rem); background: rgb(var(--now-color_background--primary, 255 255 255)); }
+        .cp-code-body { height: min(var(--cp-content-height, 45rem), clamp(20rem, 60vh, 45rem)); background: rgb(var(--now-color_background--primary, 255 255 255)); }
         #credit-plus .cp-code-monaco { min-width: 0; overflow: hidden; }
         #credit-plus .cp-gutter { min-width: 0; overflow: hidden; overflow: clip; border-right: 1px solid rgb(var(--now-color_border--secondary, 228 230 235)); }
         #credit-plus .cp-gutter-content { position: relative; }
         #credit-plus .cp-gutter table, #credit-plus .cp-attribution { display: block; position: relative; width: 100%; border: 0; margin: 0; border-spacing: 0; font: inherit; }
-        #credit-plus .cp-attribution tr { position: absolute; left: 0; width: 100%; display: grid; grid-template-columns: min(40%, var(--cp-time-width, 12.5rem)) minmax(0, 5fr) minmax(0, 7fr); overflow: hidden; }
+        #credit-plus .cp-attribution tr { position: absolute; left: 0; width: 100%; display: block; }
+        #credit-plus .cp-attribution tr[aria-hidden="true"] { pointer-events: none; }
         #credit-plus .cp-gutter td { display: block; min-width: 0; width: auto; max-width: none; padding: 0 0.75rem; border: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: inherit; }
 
-        #credit-plus .cp-gutter .cp-block-start td { box-shadow: inset 0 1px rgba(var(--now-color_text--primary, 29 29 29), 0.1); }
+        #credit-plus .cp-gutter .cp-origin { width: 100%; }
         .cp-splitter { cursor: col-resize; touch-action: none; background: rgb(var(--now-color_border--secondary, 228 230 235)); }
         .cp-splitter:hover, .cp-splitter:focus-visible { background: rgb(var(--now-color--primary-2, 0 118 204)); outline: none; }
         .cp-context-menu { position: fixed; z-index: 1100; max-width: calc(100vw - 8px); max-height: calc(100vh - 8px); overflow: auto; }
@@ -512,11 +524,29 @@
         .monaco-diff-editor .line-delete { background-color: rgba(191, 41, 41, 0.15) !important; }
         .monaco-diff-editor .char-delete { background-color: rgba(191, 41, 41, 0.35) !important; }
         .cp-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
-        .cp-block-start td { border-top: 1px solid rgba(var(--now-color_text--primary, 29 29 29), 0.1); }
+        .cp-block-start { --cp-separator-colour: var(--cp-group-colour, rgb(var(--now-color_border--secondary, 228 230 235))); }
         #credit-plus .cp-cell { display: flex; align-items: center; gap: 0.25rem; height: 100%; min-width: 0; }
         #credit-plus .cp-cell[aria-haspopup="menu"] { cursor: pointer; }
         #credit-plus .cp-cell[aria-haspopup="menu"] .cp-cell-text { color: rgb(var(--now-color--primary-2, 0 118 204)); text-decoration: underline dotted; text-underline-offset: 3px; }
+        #credit-plus .cp-attribution-block { display: flex; align-items: flex-start; gap: 0.5rem; min-height: 48px; padding: 4px 0; font: 13px/20px var(--now-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif); }
+        #credit-plus .cp-scroll .cp-attribution-block { position: sticky; top: 0; }
+        #credit-plus .cp-origin .cp-avatar { width: 32px; height: 32px; margin-top: 4px; font-size: 16px; line-height: 30px; }
+        .cp-attribution-identity { flex: 1; min-width: 0; }
+        #credit-plus .cp-attribution-block .cp-author { font-weight: 600; }
+        .cp-attribution-meta { display: flex; align-items: center; gap: 0.5rem; color: rgb(var(--now-color_text--secondary, 82 82 82)); font-size: 11px; }
+        .cp-table .cp-block-start td { border-top: 1px dotted var(--cp-separator-colour); padding-top: 5px; }
+        .cp-group-separator { border-bottom: 1px dotted var(--cp-group-colour, rgb(var(--now-color_border--secondary, 228 230 235))); pointer-events: none; }
+        #credit-plus .cp-gutter .cp-origin.cp-group-end { position: relative; overflow: visible; }
+        .cp-origin.cp-group-end::after { content: ""; position: absolute; left: -3px; right: 0; bottom: -6px; border-bottom: 1px dotted var(--cp-group-colour, rgb(var(--now-color_border--secondary, 228 230 235))); pointer-events: none; }
         #credit-plus .cp-cell-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #credit-plus.cp-columns-view .cp-gutter-head, #credit-plus.cp-columns-view .cp-attribution tr { display: grid; grid-template-columns: min(40%, 12.5rem) minmax(0, 5fr) minmax(0, 7fr); }
+        #credit-plus.cp-columns-view .cp-time { max-width: none; font-size: 12px; }
+        #credit-plus.cp-columns-view .cp-gutter td { height: 100%; }
+        #credit-plus.cp-columns-view .cp-time { border-left: 3px solid var(--cp-group-colour, transparent); }
+        #credit-plus.cp-columns-view .cp-gutter-head .cp-time { border-color: transparent; }
+        #credit-plus.cp-columns-view .cp-gutter-head .cp-time, #credit-plus.cp-columns-view th.cp-time { font-size: inherit; color: inherit; }
+        #credit-plus.cp-columns-view .cp-scroll .cp-cell { display: table-cell; height: auto; max-width: 15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .cp-column-group-end::after { content: ""; position: absolute; left: 0; right: 0; bottom: -6px; border-bottom: 1px dotted var(--cp-group-colour, rgb(var(--now-color_border--secondary, 228 230 235))); pointer-events: none; }
         button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid rgb(var(--now-color_focus-ring, 1 119 142)); outline-offset: 2px; }
         [hidden] { display: none !important; }
         @media (max-width: 760px) {
@@ -530,10 +560,10 @@
             .cp-control .form-control { flex: 1; min-width: 0; }
             .cp-control label { width: 7rem; }
             .cp-code-headings, .cp-code-body { grid-template-columns: minmax(0, var(--cp-attribution-width, 44%)) 6px minmax(0, 1fr); }
-            .cp-gutter-head { grid-template-columns: 50% 50%; font-size: 11px; }
-            .cp-gutter-head .cp-time-heading { display: none; }
-            #credit-plus .cp-gutter .cp-time { display: none; }
-            #credit-plus .cp-attribution tr { grid-template-columns: 50% 50%; }
+            .cp-gutter-head { font-size: 11px; }
+            #credit-plus.cp-columns-view .cp-gutter-head, #credit-plus.cp-columns-view .cp-attribution tr { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
+            #credit-plus.cp-columns-view .cp-time { display: none; }
+            #credit-plus.cp-columns-view .cp-author { border-left: 3px solid var(--cp-group-colour, transparent); }
             .cp-gutter-head span, #credit-plus .cp-gutter td { padding-left: 0.375rem; padding-right: 0.375rem; }
         }
         @media (prefers-reduced-motion: reduce) { .dc-header-btns .btn { transition: none; } }
@@ -732,9 +762,12 @@
         <main id="credit-plus" class="dc-app" ng-controller="CreditCtrl as ctrl" ng-cloak="ng-cloak">
             <header class="dc-header">
                 <div class="dc-header-row">
-                    <div class="dc-title" credit-record-pickers="" role="heading" aria-level="1"><span class="dc-title-label">Credit+&#160;</span><span id="cp-table-picker" class="dc-table-picker-wrap"><span id="cp-table-label" ng-bind="ctrl.tableLabel"></span></span><span class="dc-title-colon">:</span><span id="cp-record-picker" class="dc-picker-wrap"><strong id="cp-record-name" ng-bind="ctrl.recordName"></strong></span></div>
+                    <div class="we-app-drawer-heading">
+                        <we-app-drawer current-app="credit" credit-available="true"></we-app-drawer>
+                        <div class="dc-title" credit-record-pickers="" role="heading" aria-level="1"><span class="dc-title-label">Credit+&#160;</span><span id="cp-table-picker" class="dc-table-picker-wrap"><span id="cp-table-label" ng-bind="ctrl.tableLabel"></span></span><span class="dc-title-colon">:</span><span id="cp-record-picker" class="dc-picker-wrap"><strong id="cp-record-name" ng-bind="ctrl.recordName"></strong></span></div>
+                    </div>
                     <div class="dc-header-btns">
-                        <button id="cp-retry" ng-click="ctrl.reload()" ng-disabled="ctrl.loading" type="button" class="btn btn-default" title="Reload" aria-label="Reload"><i class="icon-refresh" aria-hidden="true"></i></button>
+                        <button id="cp-retry" ng-click="ctrl.reload()" ng-disabled="ctrl.loading" type="button" class="btn btn-default" title="Reload" aria-label="Reload"><i class="icon-refresh" aria-hidden="true"></i><span>Reload</span></button>
                         <div id="cp-open-actions" class="btn-group" role="group" aria-label="Open widget" ng-show="ctrl.data.table === 'sp_widget' &amp;&amp; !ctrl.data.deleted" ng-class="{open: ctrl.editorMenuOpen}" ng-keydown="ctrl.editorMenuKeydown($event)">
                             <a id="cp-editor-link" class="btn btn-primary" target="_blank" rel="noopener" ng-href="{{ctrl.editorHref}}">Open in Widget Editor+</a>
                             <button id="cp-open-toggle" class="btn btn-primary dropdown-toggle" type="button" aria-label="More widget actions" aria-haspopup="menu" ng-attr-aria-expanded="{{ctrl.editorMenuOpen}}" aria-controls="cp-open-menu" ng-click="ctrl.editorMenuOpen = !ctrl.editorMenuOpen"><span class="caret" aria-hidden="true"></span></button>
@@ -748,18 +781,25 @@
                         <button id="cp-update-button" type="button" class="btn btn-default dc-version-dd-btn" aria-haspopup="listbox" aria-expanded="false" aria-controls="cp-update-menu" ng-disabled="ctrl.loading || !ctrl.updateSets.length" ng-attr-data-value="{{ctrl.selectedSet.id}}"><span class="dc-version-dd-btn-label"><span ng-if="!ctrl.selectedSet">Update set</span><span class="dc-vrow" ng-if="ctrl.selectedSet"><span class="dc-vrow-date" ng-bind="ctrl.selectedSet.time || '—'" ng-attr-title="{{ctrl.selectedSet.time || '—'}}"></span><span class="dc-vrow-uset" ng-bind="ctrl.selectedSet.name || '—'" ng-attr-title="{{ctrl.selectedSet.name || '—'}}"></span><span class="dc-vrow-user" ng-bind="ctrl.selectedSet.author || '—'" ng-attr-title="{{ctrl.selectedSet.author || '—'}}"></span></span></span><span class="dc-version-dd-btn-chevron"><span class="caret"></span></span></button>
                         <div id="cp-update-menu" class="dc-version-dd-menu" role="listbox" aria-label="Update set" hidden="hidden"><div class="dc-version-dd-item" ng-repeat="set in ctrl.updateSets track by set.id" ng-attr-id="cp-update-option-{{$index}}" ng-attr-data-value="{{set.id}}" tabindex="-1" role="option" ng-attr-aria-selected="{{set.id === ctrl.selectedSet.id}}" ng-class="{'dc-version-dd-selected': set.id === ctrl.selectedSet.id}" ng-click="ctrl.chooseUpdate(set)"><span class="dc-vrow"><span class="dc-vrow-date" ng-bind="set.time || '—'" ng-attr-title="{{set.time || '—'}}"></span><span class="dc-vrow-uset" ng-bind="set.name || '—'" ng-attr-title="{{set.name || '—'}}"></span><span class="dc-vrow-user" ng-bind="set.author || '—'" ng-attr-title="{{set.author || '—'}}"></span></span></div></div>
                     </div></div>
-                    <div class="dc-header-btns cp-settings-control"><div id="cp-whitespace-control">
-                        <button id="cp-whitespace-button" type="button" class="btn btn-default" ng-click="ctrl.toggleWhitespace()" ng-class="{active: ctrl.whitespaceOpen}" aria-label="Whitespace settings" ng-attr-aria-expanded="{{ctrl.whitespaceOpen}}" aria-controls="cp-whitespace-popover"><i class="icon-indent" aria-hidden="true"></i></button>
+                    <div class="dc-header-btns cp-settings-control">
+                        <button id="cp-grouped-button" type="button" class="btn btn-default" ng-click="ctrl.changeAttributionView('grouped')" ng-class="{active: ctrl.attributionView === 'grouped'}" aria-label="Grouped view" title="Grouped view" ng-attr-aria-pressed="{{ctrl.attributionView === 'grouped'}}"><i class="fa fa-id-card-o" aria-hidden="true"></i><span>Grouped</span></button>
+                        <button id="cp-columns-button" type="button" class="btn btn-default" ng-click="ctrl.changeAttributionView('columns')" ng-class="{active: ctrl.attributionView === 'columns'}" aria-label="Column view" title="Column view" ng-attr-aria-pressed="{{ctrl.attributionView === 'columns'}}"><i class="fa fa-columns" aria-hidden="true"></i><span>Columns</span></button>
+                    <div id="cp-whitespace-control">
+                        <button id="cp-whitespace-button" type="button" class="btn btn-default" ng-click="ctrl.toggleWhitespace()" ng-class="{active: ctrl.whitespaceOpen}" aria-label="Whitespace settings" ng-attr-aria-expanded="{{ctrl.whitespaceOpen}}" aria-controls="cp-whitespace-popover"><i class="icon-indent" aria-hidden="true"></i><span>Whitespace</span></button>
                         <div id="cp-whitespace-popover" class="popover bottom" ng-show="ctrl.whitespaceOpen" role="dialog" aria-label="Attribution and Statistics whitespace settings">
                             <div class="arrow"></div>
-                            <div class="popover-content">
-                                <div class="radio" ng-repeat="option in ctrl.whitespaceOptions"><label><input type="radio" name="credit-whitespace" ng-model="ctrl.whitespaceMode" ng-value="option.value" ng-change="ctrl.changeWhitespace()" />{{option.label}}</label></div>
+                            <div class="popover-content" role="radiogroup" aria-label="Whitespace comparison mode">
+                                <div class="input-group-radio" ng-repeat="option in ctrl.whitespaceOptions">
+                                    <input type="radio" class="radio" id="cp-whitespace-{{option.value}}" name="credit-whitespace" ng-model="ctrl.whitespaceMode" ng-value="option.value" ng-change="ctrl.changeWhitespace()" />
+                                    <label class="radio-label" for="cp-whitespace-{{option.value}}" ng-bind="option.label"></label>
+                                </div>
                             </div>
                         </div>
                     </div></div>
                 </div>
             </header>
             <div class="dc-body">
+                <p class="alert alert-warning" role="status" ng-show="ctrl.preferenceError" ng-bind="ctrl.preferenceError"></p>
                 <div id="cp-loading" class="we-loading" ng-if="ctrl.loading" role="status" aria-live="polite"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" aria-hidden="true">
                     <defs>
                         <linearGradient id="cp-loading-gradient" gradientUnits="userSpaceOnUse" x1="-100%" y1="-100%" x2="0%" y2="0%">
@@ -790,7 +830,7 @@
                         </g>
                     </g>
                     </svg><span ng-bind="ctrl.status"></span></div>
-                <div id="cp-status-wrap" ng-show="!ctrl.loading" ng-class="{'dc-no-versions-overlay': ctrl.empty}"><div id="cp-status-content" ng-class="{'dc-no-versions-content': ctrl.empty}"><p id="cp-status" ng-class="{'alert alert-danger': ctrl.error}" ng-bind="ctrl.status" role="status" aria-live="polite"></p></div></div>
+                <div id="cp-status-wrap" ng-show="!ctrl.loading" ng-class="{'dc-no-versions-overlay': ctrl.empty}"><div id="cp-status-content" ng-class="{'dc-no-versions-content': ctrl.empty}"><p id="cp-status" ng-class="{'alert alert-danger': ctrl.error &amp;&amp; !ctrl.empty}" ng-bind="ctrl.status" role="status" aria-live="polite"></p></div></div>
                 <details class="alert alert-warning" id="cp-warnings" ng-show="ctrl.data.warnings.length"><summary>History gaps</summary><div id="cp-warning-text"><p ng-repeat="warning in ctrl.data.warnings track by $index" ng-bind="warning"></p></div></details>
                 <details id="cp-statistics-container" class="da-section cp-statistics-section" ng-show="ctrl.data" credit-statistics="">
                     <summary id="cp-statistics-button" class="da-summary" role="button" aria-label="Statistics" aria-controls="cp-statistics" ng-attr-aria-expanded="{{ctrl.statistics.open}}" ng-click="$event.preventDefault(); ctrl.toggleStatistics()"><span id="cp-statistics-heading" class="da-label">Statistics</span><i class="fa fa-bar-chart cp-stats-icon" aria-hidden="true"></i></summary>
@@ -802,7 +842,7 @@
                             <div class="cp-stats-boards"><div class="cp-stats-board" ng-repeat="item in ctrl.skeletonBoards"><span class="we-skeleton-bar" style="width:60%"></span><span class="we-skeleton-bar" style="width:100%" ng-repeat="row in ctrl.skeletonRows"></span></div></div>
                         </div>
                         <div ng-if="ctrl.statistics.loaded">
-                            <dl class="cp-stats-facts"><div class="panel panel-default cp-stat-card" ng-class="fact.style" ng-repeat="fact in ctrl.statistics.facts"><dt><span ng-bind="fact.label"></span><i class="fa cp-stats-icon" aria-hidden="true" ng-class="fact.icon"></i></dt><dd><a class="cp-stats-name dc-link" ng-if="fact.href" ng-href="{{fact.href}}" ng-bind="fact.value"></a><span ng-if="!fact.href" ng-bind="fact.value"></span></dd></div></dl>
+                            <dl class="cp-stats-facts"><div class="panel panel-default cp-stat-card" ng-class="fact.style" ng-repeat="fact in ctrl.statistics.facts"><dt><span ng-bind="fact.label"></span><i class="fa cp-stats-icon" aria-hidden="true" ng-class="fact.icon"></i></dt><dd><a class="cp-stats-name dc-link" ng-if="fact.href" ng-href="{{fact.href}}" credit-stat-value="fact.value"></a><span ng-if="!fact.href" credit-stat-value="fact.value"></span></dd></div></dl>
                             <section class="cp-activity" ng-if="ctrl.statistics.activity.length" credit-activity="ctrl.statistics.activity" aria-label="Record activity">
                                 <h3>Activity <i class="fa fa-line-chart cp-stats-icon" aria-hidden="true"></i><span class="cp-activity-range" aria-label="Visible activity dates"></span></h3>
                                 <div class="cp-activity-body">
@@ -836,11 +876,11 @@
                     <div class="cp-field-code">
                         <div id="cp-active-filters" class="cp-active-filters" hidden="hidden" aria-label="Active filters"></div>
                         <div id="cp-code-view">
-                            <div class="cp-code-headings"><div class="cp-gutter-head"><span class="cp-time-heading">Updated</span><span>Created by</span><span>Update set</span></div><span aria-hidden="true"></span><div class="cp-code-heading"><span class="cp-heading-label"><span id="cp-code-label"></span><span id="cp-code-loading" class="cp-field-loading" role="status" aria-live="polite" hidden="hidden"><i class="icon-loading" aria-hidden="true"></i><span class="cp-sr-only">Loading comparison…</span></span></span><button id="cp-diff-close" class="btn btn-default btn-sm" type="button" hidden="hidden">Stop comparing</button></div></div>
+                            <div class="cp-code-headings"><div class="cp-gutter-head"><span ng-if="ctrl.attributionView !== 'columns'">Contributor</span><span class="cp-time" ng-if="ctrl.attributionView === 'columns'">Updated</span><span ng-if="ctrl.attributionView === 'columns'">Created by</span><span ng-if="ctrl.attributionView === 'columns'">Update set</span></div><span aria-hidden="true"></span><div class="cp-code-heading"><span class="cp-heading-label"><span id="cp-code-label"></span><span id="cp-code-loading" class="cp-field-loading" role="status" aria-live="polite" hidden="hidden"><i class="icon-loading" aria-hidden="true"></i><span class="cp-sr-only">Loading comparison…</span></span></span><button id="cp-diff-close" class="btn btn-default btn-sm" type="button" hidden="hidden">Stop comparing</button></div></div>
                             <div id="cp-code-status" role="status" aria-live="polite" hidden="hidden"></div>
                             <div class="cp-code-body">
                                 <div id="cp-gutter" class="cp-gutter"><div id="cp-gutter-content" class="cp-gutter-content"><table class="cp-table" role="table" aria-label="Historical code line attribution">
-                                    <thead class="cp-sr-only"><tr><th scope="col">Updated</th><th scope="col">Created by</th><th scope="col">Update set</th></tr></thead>
+                                    <thead class="cp-sr-only"><tr><th scope="col" ng-if="ctrl.attributionView !== 'columns'">Contributor</th><th scope="col" class="cp-time" ng-if="ctrl.attributionView === 'columns'">Updated</th><th scope="col" ng-if="ctrl.attributionView === 'columns'">Created by</th><th scope="col" ng-if="ctrl.attributionView === 'columns'">Update set</th></tr></thead>
                                     <tbody id="cp-attribution" class="cp-attribution" role="rowgroup"></tbody>
                                 </table></div></div>
                                 <div id="cp-splitter" class="cp-splitter" role="separator" tabindex="0" aria-label="Resize attribution and code for all fields" aria-orientation="vertical" aria-valuemin="10" aria-valuemax="65" aria-valuenow="34"></div>
@@ -848,8 +888,8 @@
                             </div>
                         </div>
                         <div id="cp-table-fallback" class="cp-scroll" hidden="hidden"><table class="cp-table" aria-label="Historical code line attribution">
-                            <thead><tr><th scope="col">Updated</th><th scope="col">Created by</th><th scope="col">Update set</th><th scope="col">Line</th><th scope="col"><span id="cp-fallback-label"></span><span id="cp-fallback-loading" class="cp-field-loading" role="status" aria-live="polite" hidden="hidden"><i class="icon-loading" aria-hidden="true"></i><span class="cp-sr-only">Loading…</span></span></th></tr></thead>
-                            <tbody><tr id="cp-status-row" hidden="hidden"><td colspan="5"><div id="cp-field-status" role="status" aria-live="polite"></div></td></tr></tbody>
+                            <thead><tr><th scope="col" ng-if="ctrl.attributionView !== 'columns'">Contributor</th><th scope="col" class="cp-time" ng-if="ctrl.attributionView === 'columns'">Updated</th><th scope="col" ng-if="ctrl.attributionView === 'columns'">Created by</th><th scope="col" ng-if="ctrl.attributionView === 'columns'">Update set</th><th scope="col">Line</th><th scope="col"><span id="cp-fallback-label"></span><span id="cp-fallback-loading" class="cp-field-loading" role="status" aria-live="polite" hidden="hidden"><i class="icon-loading" aria-hidden="true"></i><span class="cp-sr-only">Loading…</span></span></th></tr></thead>
+                            <tbody><tr id="cp-status-row" hidden="hidden"><td ng-attr-colspan="{{ctrl.attributionView === 'columns' ? 5 : 3}}"><div id="cp-field-status" role="status" aria-live="polite"></div></td></tr></tbody>
                             <tbody id="cp-lines"></tbody>
                         </table></div>
                     </div>

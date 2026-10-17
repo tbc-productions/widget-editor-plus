@@ -237,7 +237,7 @@ test('Graph groups hundreds of Choice Sets per table and toggles the entire grou
     const links = Object.fromEntries(choices.map(row => [row.sys_id, { source: 'sys_db_object:table', target: 'sys_choice_set:' + row.sys_id, label: 'Choice Set' }]));
     let saves = 0;
     const context = {
-        ctrl: { rows: [parent, ...choices, other], isExportBlocked: () => false, onSelectionChange() { saves++; context.rebuildGraph(); } },
+        ctrl: { rows: [parent, ...choices, other], includesPreviousVersion: () => false, canIncludePreviousVersion: () => false, isExportBlocked: () => false, onSelectionChange() { saves++; context.rebuildGraph(); } },
         rowKey: row => row.table + ':' + row.sys_id,
         tableLabel: table => table,
         rowMatchesActiveFilter: () => true,

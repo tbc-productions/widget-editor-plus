@@ -13,6 +13,7 @@
 
     <g:requires name="widget_editor_xml_export.jsdbx" params="sysparm_substitute=false" />
     <g:requires name="we_history_sync.jsdbx" params="sysparm_substitute=false" />
+    <link rel="stylesheet" href="/styles/retina_icons/retina_icons.css" />
     <g:requires name="scripts/angular_1.5.11/angular.min.js" position="last" />
     <script src="/scripts/angular_1.5.11/angular.min.js"></script>
 
@@ -72,7 +73,6 @@
         /* Header Bar */
         .dc-header {
             background: rgb(var(--now-color_chrome--brand-5,var(--now-color--primary-0,221,237,233)));
-            border-bottom: 1px solid rgb(var(--now-color_border--secondary, var(--now-color_divider--secondary, 228 230 235)));
             flex-shrink: 0;
             z-index: 10;
             margin: 0;
@@ -430,8 +430,8 @@
             text-overflow: unset !important;
         }
 
-        th.we-cell-actions {
-            text-align: left;
+        table.we-main-table th.we-cell-actions {
+            text-align: right;
         }
 
         .we-cell-actions {
@@ -441,8 +441,21 @@
             overflow: visible !important;
             text-overflow: unset !important;
         }
-        .we-cell-actions .btn + .btn {
-            margin-left: 0.375rem;
+        .we-record-actions {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.375rem;
+        }
+        .we-record-actions .btn {
+            flex: 0 0 auto;
+            margin: 0;
+        }
+        .we-history-button[aria-pressed="true"] {
+            color: rgb(var(--now-color--primary-2, 0 118 204));
+            border-color: rgb(var(--now-color--primary-2, 0 118 204));
+            background: rgba(var(--now-color--primary-2, 0 118 204), 0.12);
         }
         .we-spin {
             display: inline-block;
@@ -452,13 +465,7 @@
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
         }
-        input[type="checkbox"].we-checkbox {
-            margin: 0;
-            cursor: pointer;
-            width: 1rem;
-            height: 1rem;
-            vertical-align: middle;
-        }
+        .we-cell-check .input-group-checkbox, .we-cell-check .checkbox-label { margin: 0; }
 
         /* Recommended Pill Badge */
         .we-pill-suggested {
@@ -646,9 +653,6 @@
             gap: 0.4rem;
         }
         .we-sidebar-checkbox-row {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
             margin: 0;
             font-size: 0.8125rem;
             font-weight: 600;
@@ -1525,6 +1529,7 @@
         <div class="dc-header" ng-if="!ctrl.embeddedInModal">
             <div class="dc-header-row">
                 <div class="dc-title">
+                    <we-app-drawer current-app="assistant" credit-available="${gs.hasRole('admin')}"></we-app-drawer>
                     <span>Widget Editor+ Assistant</span>
                 </div>
             </div>
@@ -1587,14 +1592,17 @@
                             <colgroup>
                                 <col style="width: 3.25rem;" />
                                 <col style="width: 25%;" />
-                                <col style="width: 42%;" />
+                                <col />
                                 <col style="width: 20%;" />
-                                <col style="width: 13%; min-width: 9.25rem;" />
+                                <col style="width: 16rem;" />
                             </colgroup>
                             <thead>
                                 <tr>
                                     <th class="we-cell-check">
-                                        <input type="checkbox" class="we-checkbox" ng-checked="ctrl.isAllSelected()" ng-click="ctrl.toggleSelectAll()" title="Select / deselect all" />
+                                        <div class="input-group-checkbox">
+                                            <input type="checkbox" class="checkbox" id="we-assistant-select-all" ng-checked="ctrl.isAllSelected()" ng-click="ctrl.toggleSelectAll()" title="Select / deselect all" />
+                                            <label class="checkbox-label" for="we-assistant-select-all"><span class="sr-only">Select / deselect all</span></label>
+                                        </div>
                                     </th>
                                     <th>Table</th>
                                     <th>Name</th>
@@ -1607,7 +1615,10 @@
                                      same column layout as every other row (checkbox, open-in-new-tab, remove). -->
                                 <tr class="we-primary-row we-update-set-summary-row" ng-repeat="us in ctrl.updateSets" style="--we-sticky-top: {{2.75 + $index * 2.75}}rem;" data-update-set-key="{{us.sys_id}}">
                                     <td class="we-cell-check">
-                                        <input type="checkbox" class="we-checkbox" ng-checked="ctrl.isUpdateSetChecked(us)" ng-click="ctrl.toggleUpdateSetChecked(us)" title="Select / deselect all records from this update set" />
+                                        <div class="input-group-checkbox">
+                                            <input type="checkbox" class="checkbox" id="we-assistant-select-set-{{us.sys_id}}" ng-checked="ctrl.isUpdateSetChecked(us)" ng-click="ctrl.toggleUpdateSetChecked(us)" title="Select / deselect all records from this update set" />
+                                            <label class="checkbox-label" for="we-assistant-select-set-{{us.sys_id}}"><span class="sr-only">Select / deselect all records from {{us.name}}</span></label>
+                                        </div>
                                     </td>
                                     <td>
                                         <strong>Update Set</strong>
@@ -1621,15 +1632,17 @@
                                         <span class="we-updated-text" ng-bind="us.updatedOn || '—'"></span>
                                     </td>
                                     <td class="we-cell-actions">
-                                        <button type="button" class="btn btn-default" ng-click="ctrl.refreshUpdateSet(us)" ng-disabled="ctrl.refreshingUpdateSets[us.sys_id]" title="Refresh update set's records">
-                                            <i class="icon-refresh" ng-class="{'we-spin': ctrl.refreshingUpdateSets[us.sys_id]}"></i>
-                                        </button>
-                                        <a class="btn btn-default" ng-href="/nav_to.do?uri=sys_update_set.do%3Fsys_id%3D{{us.sys_id}}" target="_blank" title="Open update set in platform">
-                                            <i class="icon-open-document-new-tab"></i>
-                                        </a>
-                                        <button type="button" class="btn btn-default" ng-click="ctrl.removeUpdateSet(us)" title="Remove this update set's records">
-                                            <i class="icon-cross"></i>
-                                        </button>
+                                        <div class="we-record-actions">
+                                            <button type="button" class="btn btn-default" ng-click="ctrl.refreshUpdateSet(us)" ng-disabled="ctrl.refreshingUpdateSets[us.sys_id]" title="Refresh update set's records">
+                                                <i class="icon-refresh" ng-class="{'we-spin': ctrl.refreshingUpdateSets[us.sys_id]}"></i>
+                                            </button>
+                                            <a class="btn btn-default" ng-href="/nav_to.do?uri=sys_update_set.do%3Fsys_id%3D{{us.sys_id}}" target="_blank" title="Open update set in platform">
+                                                <i class="icon-open-document-new-tab"></i>
+                                            </a>
+                                            <button type="button" class="btn btn-default" ng-click="ctrl.removeUpdateSet(us)" title="Remove this update set's records">
+                                                <i class="icon-cross"></i>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                                 <!-- Unified Rows: Row 0 is Primary (or a placeholder prompting selection), Remaining Rows Grouped by Type -->
@@ -1650,7 +1663,10 @@
                                 </tr>
                                 <tr ng-repeat-end="ng-repeat-end" ng-if="!row.placeholder" ng-class="{'we-primary-row': row.primary, 'we-row-just-added': row._justAdded}" style="--we-sticky-top: {{2.75 + ctrl.updateSets.length * 2.75}}rem;" data-row-key="{{row.table}}:{{row.sys_id}}">
                                     <td class="we-cell-check">
-                                        <input type="checkbox" class="we-checkbox" ng-model="row.checked" ng-disabled="row.primary || ctrl.isExportBlocked(row.table, row)" ng-change="ctrl.onSelectionChange(row)" />
+                                        <div class="input-group-checkbox">
+                                            <input type="checkbox" class="checkbox" id="we-assistant-select-record-{{row.table}}-{{row.sys_id}}" ng-model="row.checked" ng-disabled="row.primary || ctrl.isExportBlocked(row.table, row)" ng-change="ctrl.onSelectionChange(row)" />
+                                            <label class="checkbox-label" for="we-assistant-select-record-{{row.table}}-{{row.sys_id}}"><span class="sr-only">Include {{row.label}}</span></label>
+                                        </div>
                                     </td>
                                     <td>
                                         <span ng-class="{'we-lookup-link': !(row.primary &amp;&amp; ctrl.embeddedInModal) &amp;&amp; !row.updateSetSysId, 'we-record-name-deleted': row.updateSetAction === 'DELETE'}" ng-click="!(row.primary &amp;&amp; ctrl.embeddedInModal) &amp;&amp; !row.updateSetSysId &amp;&amp; ctrl.openLookupForRow(row, 'table')" title="{{((row.primary &amp;&amp; ctrl.embeddedInModal) || row.updateSetSysId) ? '' : 'Click to change table'}}">
@@ -1675,8 +1691,9 @@
                                             <span class="we-pill-favourite-text">{{row.favouriteGroupName}}</span>
                                             <i class="icon-star" aria-hidden="true"></i>
                                         </span>
-                                        <div class="we-record-pill-stack" ng-if="row.updateSetSysId">
-                                            <div class="we-record-pill-line">
+                                        <span class="we-pill-update-set we-pill-update-set--previous" ng-if="!row.updateSetSysId &amp;&amp; ctrl.includesPreviousVersion(row) &amp;&amp; !row.previousVersionError &amp;&amp; row.previousVersion" title="{{'Previous update set: ' + (row.previousVersion.updateSetName || 'Unknown')}}">+ Previous</span>
+                                        <div class="we-record-pill-stack" ng-if="row.updateSetSysId || (ctrl.includesPreviousVersion(row) &amp;&amp; (!row.previousVersion || row.previousVersionError))">
+                                            <div class="we-record-pill-line" ng-if="row.updateSetSysId">
                                                 <span class="we-pill-update-set" title="{{row.updateSetName}}">
                                                     <i class="icon-document-code" aria-hidden="true"></i>
                                                     <span class="we-pill-update-set-text">{{row.updateSetName}}</span>
@@ -1684,10 +1701,12 @@
                                                 <span class="we-pill-new" ng-if="ctrl.includePreviousUpdates &amp;&amp; row.isNewInUpdateSet" title="No earlier version of this record exists before this update set">New</span>
                                                 <span class="we-pill-deleted" ng-if="row.updateSetAction === 'DELETE'" title="This update set deletes this record">Deleted</span>
                                             </div>
-                                            <div class="we-record-pill-line" ng-if="ctrl.includePreviousUpdates &amp;&amp; !row.isNewInUpdateSet &amp;&amp; row.previousVersion">
-                                                <span class="we-pill-update-set we-pill-update-set--previous" title="{{'Previous Update Set: ' + row.previousVersion.updateSetName}}">
-                                                    <span class="we-pill-update-set-text">{{row.previousVersion.updateSetName}}</span>
+                                            <div class="we-record-pill-line" ng-if="ctrl.includesPreviousVersion(row)">
+                                                <span class="we-pill-blocked" ng-if="row.previousVersionError">History unavailable</span>
+                                                <span class="we-pill-update-set we-pill-update-set--previous" ng-if="!row.previousVersionError &amp;&amp; row.previousVersion" title="{{'Previous Update Set: ' + row.previousVersion.updateSetName}}">
+                                                    <span class="we-pill-update-set-text">{{row.previousVersion.updateSetName || 'Previous version'}}</span>
                                                 </span>
+                                                <span class="we-pill-update-set we-pill-update-set--previous" ng-if="!row.updateSetSysId &amp;&amp; !row.previousVersionError &amp;&amp; !row.previousVersion">{{row.previousVersionBytes === 0 ? 'No previous version' : 'Loading previous…'}}</span>
                                             </div>
                                         </div>
                                     </td>
@@ -1695,18 +1714,23 @@
                                         <span class="we-updated-text" ng-bind="row.updatedOn || '—'"></span>
                                     </td>
                                     <td class="we-cell-actions">
-                                        <button type="button" class="btn btn-default" ng-if="row.primary &amp;&amp; !ctrl.embeddedInModal" ng-click="ctrl.openLookup('primary')" title="Select primary record">
-                                            <i class="icon-target"></i>
-                                        </button>
-                                        <button type="button" class="btn btn-default" ng-click="ctrl.scanRow(row)" ng-disabled="row.scanning" title="Scan for related records">
-                                            <i class="icon-search"></i>
-                                        </button>
-                                        <a class="btn btn-default" ng-if="!(row.primary &amp;&amp; ctrl.embeddedInModal)" ng-href="/nav_to.do?uri={{row.table}}.do%3Fsys_id%3D{{row.sys_id}}" target="_blank" title="Open record in platform">
-                                            <i class="icon-open-document-new-tab"></i>
-                                        </a>
-                                        <button type="button" class="btn btn-default" ng-if="!row.primary" ng-click="ctrl.removeRow(row)" title="Remove record">
-                                            <i class="icon-cross"></i>
-                                        </button>
+                                        <div class="we-record-actions">
+                                            <button type="button" class="btn btn-default we-history-button" ng-if="ctrl.canIncludePreviousVersion(row)" ng-click="ctrl.toggleRecordPreviousVersion(row)" aria-pressed="{{!!ctrl.includesPreviousVersion(row)}}" aria-label="{{(ctrl.includesPreviousVersion(row) ? 'Exclude' : 'Include') + ' previous version for ' + row.label}}" title="{{ctrl.includesPreviousVersion(row) ? 'Exclude previous version' : 'Include previous version'}}">
+                                                <i class="icon-history" aria-hidden="true"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-default" ng-if="row.primary &amp;&amp; !ctrl.embeddedInModal" ng-click="ctrl.openLookup('primary')" title="Select primary record">
+                                                <i class="icon-target"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-default" ng-click="ctrl.scanRow(row)" ng-disabled="row.scanning" title="Scan for related records">
+                                                <i class="icon-search"></i>
+                                            </button>
+                                            <a class="btn btn-default" ng-if="!(row.primary &amp;&amp; ctrl.embeddedInModal)" ng-href="/nav_to.do?uri={{row.table}}.do%3Fsys_id%3D{{row.sys_id}}" target="_blank" title="Open record in platform">
+                                                <i class="icon-open-document-new-tab"></i>
+                                            </a>
+                                            <button type="button" class="btn btn-default" ng-if="!row.primary" ng-click="ctrl.removeRow(row)" title="Remove record">
+                                                <i class="icon-cross"></i>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             </tbody>
@@ -1724,7 +1748,7 @@
                             <button type="button" class="btn btn-default btn-icon" ng-click="ctrl.graphCanvasCommand('zoomIn')" title="Zoom in">+</button>
                             <button type="button" class="btn btn-default" ng-click="ctrl.graphCanvasCommand('fit')" title="Fit all records">Fit</button>
                         </div>
-                        <canvas class="we-record-graph-canvas" ng-if="ctrl.graph.nodes.length" we-record-graph-canvas="" graph="ctrl.graph" command="ctrl.graphCommand" zoom-percent="ctrl.graphZoom" on-scan="ctrl.scanRow(row)" on-open="ctrl.openGraphRecord(row)" on-remove="ctrl.removeRow(row)" on-toggle="ctrl.toggleGraphRecord(row)" on-select-primary="ctrl.openLookup('primary')" tabindex="0" aria-label="Record relationship graph. Drag to pan and use the mouse wheel to zoom."></canvas>
+                        <canvas class="we-record-graph-canvas" ng-if="ctrl.graph.nodes.length" we-record-graph-canvas="" graph="ctrl.graph" command="ctrl.graphCommand" zoom-percent="ctrl.graphZoom" on-scan="ctrl.scanRow(row)" on-open="ctrl.openGraphRecord(row)" on-remove="ctrl.removeRow(row)" on-toggle="ctrl.toggleGraphRecord(row)" on-previous="ctrl.toggleRecordPreviousVersion(row)" on-select-primary="ctrl.openLookup('primary')" tabindex="0" aria-label="Record relationship graph. Drag to pan and use the mouse wheel to zoom."></canvas>
                     </div>
                 </div>
             </div>
@@ -1768,10 +1792,10 @@
                             <div class="we-sidebar-footer">
                                 <!-- Update Set Options — only relevant once at least one update set has been added -->
                                 <div class="we-update-set-options" ng-if="ctrl.updateSets.length">
-                                    <label class="we-sidebar-checkbox-row">
-                                        <input type="checkbox" class="we-checkbox" ng-model="ctrl.includePreviousUpdates" ng-change="ctrl.toggleIncludePreviousUpdates()" />
-                                        <span>Include previous version</span>
-                                    </label>
+                                    <div class="input-group-checkbox">
+                                        <input type="checkbox" class="checkbox" id="we-assistant-include-previous" ng-model="ctrl.includePreviousUpdates" ng-change="ctrl.toggleIncludePreviousUpdates()" />
+                                        <label class="checkbox-label we-sidebar-checkbox-row" for="we-assistant-include-previous">Include previous version</label>
+                                    </div>
                                     <i class="icon-help we-update-set-options-help" aria-hidden="true" title="Include previous update set versions for comparison."></i>
                                 </div>
 
@@ -1936,7 +1960,7 @@
                         </div>
                         <div class="we-table-scroll-container">
                             <table class="we-main-table" style="table-layout: auto;" ng-if="ctrl.manageGroup.records.length &gt; 0">
-                                <thead><tr><th>Table</th><th>Name</th><th>Updated</th><th class="we-cell-actions" style="text-align: left;">Actions</th></tr></thead>
+                                <thead><tr><th>Table</th><th>Name</th><th>Updated</th><th class="we-cell-actions">Actions</th></tr></thead>
                                 <tbody>
                                     <tr ng-repeat="row in ctrl.manageGroup.records track by (row.table + ':' + row.sys_id)">
                                         <td>
@@ -1946,15 +1970,17 @@
                                         <td>{{row.label}}</td>
                                         <td><span class="we-updated-text" ng-bind="row.updatedOn || '—'"></span></td>
                                         <td class="we-cell-actions">
-                                            <button type="button" class="btn btn-default" ng-click="ctrl.manageGroupScanRow(row)" ng-disabled="row.scanning" title="Scan for related records">
-                                                <i class="icon-search"></i>
-                                            </button>
-                                            <a class="btn btn-default" ng-href="/nav_to.do?uri={{row.table}}.do%3Fsys_id%3D{{row.sys_id}}" target="_blank" title="Open record in platform">
-                                                <i class="icon-open-document-new-tab"></i>
-                                            </a>
-                                            <button type="button" class="btn btn-default" ng-click="ctrl.manageGroupRemoveRow(row)" title="Remove from group">
-                                                <i class="icon-cross"></i>
-                                            </button>
+                                            <div class="we-record-actions">
+                                                <button type="button" class="btn btn-default" ng-click="ctrl.manageGroupScanRow(row)" ng-disabled="row.scanning" title="Scan for related records">
+                                                    <i class="icon-search"></i>
+                                                </button>
+                                                <a class="btn btn-default" ng-href="/nav_to.do?uri={{row.table}}.do%3Fsys_id%3D{{row.sys_id}}" target="_blank" title="Open record in platform">
+                                                    <i class="icon-open-document-new-tab"></i>
+                                                </a>
+                                                <button type="button" class="btn btn-default" ng-click="ctrl.manageGroupRemoveRow(row)" title="Remove from group">
+                                                    <i class="icon-cross"></i>
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 </tbody>
