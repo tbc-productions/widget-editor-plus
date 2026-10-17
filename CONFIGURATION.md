@@ -60,6 +60,7 @@ The default `monaco.plus.update_sets.markdown_display.sp_instance` uses primary 
 | `monaco_language_css` | Completion provider for CSS/SCSS at-rules and style descriptors. |
 | `monaco_code_actions` | Built-in code actions for JavaScript (JSDoc generation) and SCSS (`px` to `rem` conversion). |
 | `monaco_custom_code_actions` | Extension point for custom per-language code actions. |
+| `widget_editor_code_analysis` | Shared background dependency scanner for Widget Editor+ and Assistant. |
 
 ### Embedding Monaco on Any Form Field
 
@@ -93,6 +94,14 @@ function onLoad() {
 Need full control over the container instead? Pass `containerStyle` (a CSS string) — it overrides `height`/`maxHeight` and disables auto-grow.
 
 The bootstrap script lazy-loads `monaco_plus_core` on demand, so completions/IntelliSense for the chosen `language` come free without any additional wiring.
+
+## Background code analysis
+
+Widget Editor+ and Assistant use `widget_editor_code_analysis` as a same-origin browser Web Worker to extract code dependencies without running the code. Widget Editor+ uses it for Script Include and injected Angular provider discovery. Monaco language services and ESLint retain their existing workers; custom JSDoc parsing and Angular template validation remain unchanged.
+
+Assistant loads readable source and configured relationships in batches of up to ten records, with at most three batches in progress. The worker extracts Script Include, table, property, event, integration, flow and provider candidates. The server validates candidates, resolves them with `GlideRecordSecure` and checks whether the source changed during analysis. Changed sources are scanned again on the server. Configured relationship rules and Choice Set discovery retain their existing behaviour. Dictionary metadata, table hierarchies, relationship configuration and identical lookups are reused only within each server request.
+
+Each page shares identical pending analysis jobs and retains up to 32 analysis results, capped at two million characters of cache keys. The cache stays in memory and clears when leaving the page. Worker errors or a 30-second timeout clear pending jobs so later scans can retry; Assistant falls back to server discovery and Widget Editor+ to its existing local scanner. Editor name lookups retain their batches of 50 and now share pending checks, with failed checks remaining retryable. Assistant also shares overlapping XML fetches; completed exports still fetch current XML rather than reuse a previous snapshot.
 
 ## User Preferences
 User preferences (including editor themes, Assistant visibility, and Debug Menu settings) persist in `localStorage` and synchronise to the ServiceNow instance as `sys_user_preference` records under `monaco_plus.user_prefs`.

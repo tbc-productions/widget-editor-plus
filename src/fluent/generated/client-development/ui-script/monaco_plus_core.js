@@ -118,6 +118,7 @@
 
     /* Lazy SI name cache: sys_id when confirmed, '' when confirmed non-SI, absent when unchecked. */
     var _siNameMap = {};
+    var _siNameChecks = Object.create(null);
 
     /* { lowercasedPrefix: true } — prefixes whose _fetchSiByPrefix result was under SI_PREFIX_LIMIT, so _siNameMap is known-complete for that prefix (and any longer prefix built on it). */
     var _siCompletePrefixes = {};
@@ -2569,6 +2570,24 @@
      * @param {string} content - The full text of a Monaco editor model.
      */
     function _scanAndFetchSIs(content) {
+        if (window.WECodeAnalysis) {
+            return window.WECodeAnalysis.analyse({ content: content }).then(
+                function (result) {
+                    _batchCheckSiNames(
+                        result.scriptIncludes.map(function (candidate) {
+                            return candidate.name;
+                        })
+                    );
+                },
+                function () {
+                    _scanAndFetchSIsLocally(content);
+                }
+            );
+        }
+        _scanAndFetchSIsLocally(content);
+    }
+
+    function _scanAndFetchSIsLocally(content) {
         if (!window.monaco) {
             return;
         }
@@ -2597,7 +2616,8 @@
     function _batchCheckSiNames(names) {
         var toCheck = [];
         names.forEach(function (n) {
-            if (_siNameMap[n] === undefined) {
+            if (_siNameMap[n] === undefined && !_siNameChecks[n]) {
+                _siNameChecks[n] = true;
                 toCheck.push(n);
             }
         });
@@ -2643,6 +2663,12 @@
                         });
                     } catch (e) {}
                 };
+                xhr.timeout = 30000;
+                xhr.onloadend = function () {
+                    batch.forEach(function (name) {
+                        delete _siNameChecks[name];
+                    });
+                };
                 xhr.send();
             })(toCheck.slice(i, i + BATCH_SIZE));
         }
@@ -2655,6 +2681,7 @@
     // Directive-type providers are out of scope here — see monaco_language_html for their
     // data-<prop> HTML completions instead.
 
+    var _providerNameChecks = Object.create(null);
     var _providerNameMap = {}; // name -> sys_id ('' = confirmed not a service/factory provider)
     var _providerMethodCache = {};
     var _providerPropertyCache = {};
@@ -2922,7 +2949,9 @@
     /** Checks candidate names against sp_angular_provider in batches of 50; confirmed service/factory providers trigger a fetch. */
     function _batchCheckProviderNames(names) {
         var toCheck = names.filter(function (n) {
-            return _providerNameMap[n] === undefined;
+            if (_providerNameMap[n] !== undefined || _providerNameChecks[n]) return false;
+            _providerNameChecks[n] = true;
+            return true;
         });
         if (!toCheck.length) {
             return;
@@ -2962,6 +2991,12 @@
                         });
                     } catch (e) {}
                 };
+                xhr.timeout = 30000;
+                xhr.onloadend = function () {
+                    batch.forEach(function (name) {
+                        delete _providerNameChecks[name];
+                    });
+                };
                 xhr.send();
             })(toCheck.slice(i, i + BATCH_SIZE));
         }
@@ -2973,10 +3008,23 @@
      * any matching service/factory provider so it can be typed in DI_TYPES.
      */
     function _scanAndFetchProviders(content) {
+        if (window.WECodeAnalysis) {
+            return window.WECodeAnalysis.analyse({ clientScript: content }).then(
+                function (result) {
+                    _fetchScannedProviders(result.controllerParams);
+                },
+                function () {
+                    _fetchScannedProviders(_parseControllerParams(content));
+                }
+            );
+        }
+        _fetchScannedProviders(_parseControllerParams(content));
+    }
+
+    function _fetchScannedProviders(params) {
         if (!window.monaco) {
             return;
         }
-        var params = _parseControllerParams(content);
         if (!params || !params.length) {
             return;
         }

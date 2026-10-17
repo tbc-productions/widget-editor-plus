@@ -48,7 +48,7 @@
         return;
     }
 
-    var _v = '2026-08-31T00:00';
+    var _v = '2026-10-17T00:00';
     var CORE_UI_SCRIPT_URL = '/monaco_plus_core.jsdbx?sysparm_substitute=false&v=' + _v;
     var MONACO_BUNDLE_URL = '/scripts/snc-code-editor/monaco.bundle.min.jsx?sysparm_substitute=false';
     var MONACO_WORKER_BASE = '/scripts/snc-code-editor/';
@@ -317,7 +317,19 @@
                 return;
             }
 
-            _loadScript(CORE_UI_SCRIPT_URL, finish);
+            var coreStarted = false;
+            var analysisTimer;
+            function loadCore() {
+                if (coreStarted) return;
+                coreStarted = true;
+                clearTimeout(analysisTimer);
+                _loadScript(CORE_UI_SCRIPT_URL, finish);
+            }
+            if (global.WECodeAnalysis) loadCore();
+            else {
+                analysisTimer = setTimeout(loadCore, 3000);
+                _loadScript('/widget_editor_code_analysis.jsdbx?sysparm_substitute=false&v=1', loadCore);
+            }
         });
 
         return _coreLoadPromise;

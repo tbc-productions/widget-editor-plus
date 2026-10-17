@@ -252,6 +252,10 @@ declare global {
                         table: 'sys_app_module'
                         id: 'deaa8cc3dff245e1a514318575fe7e28'
                     }
+                    'widget-editor-code-analysis': {
+                        table: 'sys_ui_script'
+                        id: 'f681d4bee0e14220a451788448d3de53'
+                    }
                     'widget-editor-code-search-default-search-group': {
                         table: 'sys_properties'
                         id: 'de82eb4734e443a1815744694a0035fc'

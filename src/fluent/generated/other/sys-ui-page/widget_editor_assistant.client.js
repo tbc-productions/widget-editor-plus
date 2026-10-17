@@ -1973,7 +1973,136 @@
             function ($scope, $q, $timeout) {
                 var ctrl = this;
 
+                var analysisQueue = [],
+                    analysisRequests = Object.create(null),
+                    analysisBatches = 0;
+                var analysisScheduled = false,
+                    analysisClosed = false;
+
                 function ajax(action, params) {
+                    if (action !== 'getSuggestedRelated' || !window.WECodeAnalysis) return request(action, params);
+                    var key = params.table + ':' + params.sys_id;
+                    if (analysisRequests[key]) return analysisRequests[key].promise;
+                    var deferred = $q.defer();
+                    var job = { params: params, deferred: deferred, promise: deferred.promise };
+                    analysisRequests[key] = job;
+                    analysisQueue.push(job);
+                    if (!analysisScheduled) {
+                        analysisScheduled = true;
+                        $timeout(flushAnalysis, 0, false);
+                    }
+                    return deferred.promise;
+                }
+
+                async function analyseBatch(jobs) {
+                    var sources = await request('getAnalysisSources', {
+                        records: JSON.stringify(
+                            jobs.map(function (job) {
+                                return job.params;
+                            })
+                        ),
+                    });
+                    if (
+                        !sources ||
+                        !sources.success ||
+                        !Array.isArray(sources.results) ||
+                        sources.results.length !== jobs.length
+                    )
+                        throw new Error('Analysis sources unavailable');
+                    var candidates = [],
+                        positions = [];
+                    await Promise.all(
+                        sources.results.map(async function (result, index) {
+                            if (!result.success) throw new Error(result.error || 'Analysis source unavailable');
+                            if (!result.analysis) return;
+                            var analysis = await window.WECodeAnalysis.analyse(result.analysis);
+                            candidates.push({
+                                table: jobs[index].params.table,
+                                sys_id: jobs[index].params.sys_id,
+                                version: result.analysis.version,
+                                analysis: analysis,
+                            });
+                            positions.push(index);
+                        })
+                    );
+                    if (analysisClosed) throw new Error('Assistant closed');
+                    if (candidates.length) {
+                        var resolved = await request('resolveAnalysis', { records: JSON.stringify(candidates) });
+                        if (
+                            !resolved ||
+                            !resolved.success ||
+                            !Array.isArray(resolved.results) ||
+                            resolved.results.length !== candidates.length
+                        )
+                            throw new Error('Analysis resolution unavailable');
+                        resolved.results.forEach(function (result, index) {
+                            if (!result.success) throw new Error(result.error || 'Analysis resolution failed');
+                            var source = sources.results[positions[index]],
+                                seen = Object.create(null);
+                            source.related = (result.replaceRelated ? [] : source.related || [])
+                                .concat(result.related || [])
+                                .filter(function (row) {
+                                    var key = row.table + ':' + row.sys_id;
+                                    if (seen[key]) return false;
+                                    seen[key] = true;
+                                    return true;
+                                });
+                        });
+                    }
+                    return sources.results.map(function (result) {
+                        return { success: true, related: result.related };
+                    });
+                }
+
+                function flushAnalysis() {
+                    analysisScheduled = false;
+                    while (!analysisClosed && analysisBatches < 3 && analysisQueue.length) {
+                        (function (jobs) {
+                            analysisBatches++;
+                            $q.when(analyseBatch(jobs))
+                                .then(
+                                    function (results) {
+                                        jobs.forEach(function (job, index) {
+                                            job.deferred.resolve(results[index]);
+                                        });
+                                    },
+                                    function () {
+                                        // Keep discovery available when workers or the new endpoint cannot load.
+                                        return $q.when(
+                                            runPool(
+                                                jobs,
+                                                function (job) {
+                                                    if (!analysisClosed)
+                                                        return request('getSuggestedRelated', job.params).then(
+                                                            job.deferred.resolve,
+                                                            job.deferred.reject
+                                                        );
+                                                },
+                                                3
+                                            )
+                                        );
+                                    }
+                                )
+                                .finally(function () {
+                                    jobs.forEach(function (job) {
+                                        delete analysisRequests[job.params.table + ':' + job.params.sys_id];
+                                    });
+                                    analysisBatches--;
+                                    flushAnalysis();
+                                });
+                        })(analysisQueue.splice(0, 10));
+                    }
+                }
+
+                $scope.$on('$destroy', function () {
+                    analysisClosed = true;
+                    analysisQueue = [];
+                    Object.keys(analysisRequests).forEach(function (key) {
+                        analysisRequests[key].deferred.reject(new Error('Assistant closed'));
+                    });
+                });
+
+                function request(action, params) {
                     var deferred = $q.defer();
                     var ga = new GlideAjax('WidgetEditorAssistantAjax');
                     ga.addParam('sysparm_name', action);
@@ -3022,6 +3151,17 @@
                 };
 
                 async function fetchExportRecordXml(row) {
+                    var pending = fetchExportRecordXml.pending || (fetchExportRecordXml.pending = new Map());
+                    var key = row.table + ':' + row.sys_id;
+                    if (pending.has(key)) return pending.get(key);
+                    var promise = loadExportRecordXml(row).finally(function () {
+                        pending.delete(key);
+                    });
+                    pending.set(key, promise);
+                    return promise;
+                }
+
+                async function loadExportRecordXml(row) {
                     var response = await fetch(
                         '/' + row.table + '.do?sys_id=' + encodeURIComponent(row.sys_id) + '&XML',
                         { credentials: 'same-origin' }
@@ -5003,7 +5143,7 @@
         document.head.appendChild(s);
     }
 
-    function _init() {
+    function _initApp() {
         if (typeof angular !== 'undefined') {
             _initAngular();
             return;
@@ -5027,6 +5167,22 @@
                 console.error('AngularJS failed to load within timeout');
             }
         }, 50);
+    }
+
+    function _init() {
+        var started = false;
+        var analysisTimer;
+        function startApp() {
+            if (started) return;
+            started = true;
+            clearTimeout(analysisTimer);
+            _initApp();
+        }
+        if (window.WECodeAnalysis) startApp();
+        else {
+            analysisTimer = setTimeout(startApp, 3000);
+            _loadScript('/widget_editor_code_analysis.jsdbx?sysparm_substitute=false&v=1', startApp);
+        }
     }
 
     if (typeof addAfterPageLoadedEvent === 'function') {
