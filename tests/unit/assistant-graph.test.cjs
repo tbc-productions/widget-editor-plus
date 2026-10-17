@@ -123,7 +123,7 @@ test('Canvas colours come only from live ServiceNow theme variables', () => {
 });
 
 test('Canvas highlights new and deleted records with ServiceNow status colours', () => {
-    assert.ok(source.includes('isNew: !!ctrl.includePreviousUpdates && !!r.isNewInUpdateSet'));
+    assert.ok(source.includes('isNew: !!r.updateSetSysId && !!ctrl.includePreviousUpdates && !!r.isNewInUpdateSet'));
     assert.ok(source.includes("isDeleted: r.updateSetAction === 'DELETE'"));
     assert.ok(source.includes('if (node.isNew && node.isDeleted)'));
     assert.match(source, /colours.positiveSurface,\s*colours.criticalSurface/);

@@ -207,7 +207,7 @@ test('Assistant keeps URL/runtime metadata on wrappers and counters on payloads'
 });
 
 // Execute the real Assistant exporter with a minimal DOM and controlled platform responses.
-async function exportAssistant(includePreviousUpdates, choiceChecked) {
+async function exportAssistant(includePreviousUpdates, choiceChecked, individualHistory = false) {
     class Element {
         constructor(tagName) { this.tagName = tagName; this.attrs = {}; this.children = []; this.textContent = ''; }
         setAttribute(key, value) { this.attrs[key] = String(value); }
@@ -234,7 +234,9 @@ async function exportAssistant(includePreviousUpdates, choiceChecked) {
         { table: 'sys_script_include', sys_id: 'failed' },
     ].map(row => ({ ...row, checked: true }));
     if (choiceChecked !== undefined) selected.push({ table: 'sys_choice_set', sys_id: 'choice', checked: choiceChecked });
-    const ctrl = { visibleRows: [...selected, { table: 'sp_widget', sys_id: 'unchecked', checked: false }],
+    if (individualHistory === true) selected[0].previousVersion = { payload: 'previous-widget', updateSetName: 'Earlier set' };
+    if (individualHistory === 'failed') selected[0].previousVersionError = true;
+    const ctrl = { previousVersionRecords: individualHistory ? { 'sp_widget:primary': true, 'blocked_table:blocked': true } : {}, isExportBlocked: table => table === 'blocked_table', visibleRows: [...selected, { table: 'sp_widget', sys_id: 'unchecked', checked: false }],
         primary: { label: 'Primary' }, updateSets: [], includePreviousUpdates };
     const links = [
         ['sp_widget:primary', 'sys_choice_set:choice', 'Choice'],
@@ -257,6 +259,7 @@ async function exportAssistant(includePreviousUpdates, choiceChecked) {
         recordLinks: Object.fromEntries(links.map(([source, target, label]) => [source + '>' + target, { source, target, label }])),
         rowKey: row => row.table + ':' + row.sys_id,
         tableLabel: table => ({ sys_script_include: 'Script Include' })[table] || table,
+        refreshPreviousVersions: async () => {},
         runPool: async (rows, worker) => Promise.all(rows.map(worker)),
         ajax: async () => ({ success: true, url: 'https://example/record', es12Override: 'enabled' }),
         fetch: async url => {
@@ -264,7 +267,7 @@ async function exportAssistant(includePreviousUpdates, choiceChecked) {
             return { text: async () => url.startsWith('/sys_choice_set') ? 'choice' : url.startsWith('/sp_widget') ? 'widget' : 'include' };
         },
         DOMParser: class { parseFromString(text) {
-            return { documentElement: payload(text === 'choice' ? 'sys_choice_set' : text === 'widget' ? 'sp_widget' : 'sys_script_include', text === 'previous' ? 'old' : 'new') };
+            return { documentElement: payload(text === 'choice' ? 'sys_choice_set' : (text === 'widget' || text === 'previous-widget') ? 'sp_widget' : 'sys_script_include', text.startsWith('previous') ? 'old' : 'new') };
         } },
         addExportModCount: el => el.setAttribute('sys_mod_count', '4'),
         redactRecordElement() {}, isTableExportBlocked: table => table === 'blocked_table',
@@ -276,6 +279,7 @@ async function exportAssistant(includePreviousUpdates, choiceChecked) {
     context.fetchExportRecordXml = async row => (await context.fetch('/' + row.table + '.do?sys_id=' + row.sys_id)).text();
     vm.createContext(context);
     loadFieldComparison(context);
+    vm.runInContext(script.slice(script.indexOf('ctrl.canIncludePreviousVersion ='), script.indexOf('// Graph-only aggregation:')), context);
     vm.runInContext(script.slice(script.indexOf('ctrl.generateXml = async function'), script.indexOf('function init()', script.indexOf('ctrl.generateXml = async function'))), context);
     await ctrl.generateXml();
     return exported.documentElement;
@@ -353,5 +357,28 @@ test('Choice selection controls both record payload and relationship export', as
             assert.equal(choice.children[0].tagName, 'current_version');
             assert.equal(choice.children[0].children[0].tagName, 'sys_choice_set');
         }
+    }
+});
+
+
+test('Assistant exports individual history without enabling update set history and withholds blocked history', async () => {
+    const bundle = await exportAssistant(false, undefined, true);
+    const child = (el, tag) => el.children.find(node => node.tagName === tag);
+    const primary = child(bundle, 'primary_record').children[0];
+    assert.equal(child(primary, 'previous_version').attrs.update_set_name, 'Earlier set');
+    assert.equal(child(primary, 'current_version').children[0].children[0].attrs.change, 'modified');
+    for (const related of child(bundle, 'related_records').children) {
+        assert.equal(child(related, 'previous_version'), undefined);
+    }
+});
+
+
+test('Assistant distinguishes absent individual history from a failed lookup', async () => {
+    for (const [scenario, status] of [['missing', 'not_found'], ['failed', 'unavailable']]) {
+        const bundle = await exportAssistant(false, undefined, scenario);
+        const primary = bundle.children.find(el => el.tagName === 'primary_record').children[0];
+        const previous = primary.children.find(el => el.tagName === 'previous_version');
+        assert.equal(previous.attrs.status, status);
+        assert.equal(primary.attrs.change_type, undefined);
     }
 });

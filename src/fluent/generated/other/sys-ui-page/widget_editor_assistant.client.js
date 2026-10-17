@@ -48,6 +48,7 @@
                         onOpen: '&',
                         onRemove: '&',
                         onToggle: '&',
+                        onPrevious: '&',
                         onSelectPrimary: '&',
                     },
                     link: function (scope, element) {
@@ -175,6 +176,12 @@
                                           },
                                       ];
                             var actions = [];
+                            if (node.canIncludePreviousVersion)
+                                actions.push({
+                                    type: 'previous',
+                                    title: (node.includePreviousUpdates ? 'Exclude' : 'Include') + ' previous version',
+                                    iconClass: 'icon-history',
+                                });
                             if (node.primary && !node.embeddedPrimary)
                                 actions.push({
                                     type: 'selectPrimary',
@@ -300,16 +307,31 @@
                                     });
                                 }
                                 lines.push(updateLine);
-                                if (node.includePreviousUpdates && !row.isNewInUpdateSet && row.previousVersion) {
-                                    lines.push([
-                                        {
-                                            className: 'we-pill-update-set we-pill-update-set--previous',
-                                            label: row.previousVersion.updateSetName,
-                                            title: 'Previous Update Set: ' + row.previousVersion.updateSetName,
-                                            textClass: 'we-pill-update-set-text',
-                                        },
-                                    ]);
-                                }
+                            }
+                            if (node.includePreviousUpdates && row.previousVersionError) {
+                                lines.push([{ className: 'we-pill-blocked', label: 'History unavailable' }]);
+                            } else if (node.includePreviousUpdates && row.previousVersion) {
+                                lines.push([
+                                    {
+                                        className: 'we-pill-update-set we-pill-update-set--previous',
+                                        label: row.updateSetSysId
+                                            ? row.previousVersion.updateSetName || 'Previous version'
+                                            : '+ Previous',
+                                        title: 'Previous Update Set: ' + row.previousVersion.updateSetName,
+                                        textClass: 'we-pill-update-set-text',
+                                    },
+                                ]);
+                            } else if (
+                                node.includePreviousUpdates &&
+                                !row.updateSetSysId &&
+                                row.hasOwnProperty('previousVersionBytes')
+                            ) {
+                                lines.push([
+                                    {
+                                        className: 'we-pill-update-set we-pill-update-set--previous',
+                                        label: 'No previous version',
+                                    },
+                                ]);
                             }
                             return lines;
                         }
@@ -362,6 +384,10 @@
                                     button.className = 'btn btn-default btn-icon';
                                     button.title = action.title;
                                     button.setAttribute('aria-label', action.title);
+                                    if (action.type === 'previous') {
+                                        button.className += ' we-history-button';
+                                        button.setAttribute('aria-pressed', String(node.includePreviousUpdates));
+                                    }
                                     if (action.choiceToggle) {
                                         button.setAttribute(
                                             'aria-pressed',
@@ -1298,6 +1324,7 @@
                                 }
                                 if (action.type === 'open') scope.onOpen({ row: action.node.row });
                                 if (action.type === 'remove') scope.onRemove({ row: action.node.row });
+                                if (action.type === 'previous') scope.onPrevious({ row: action.node.row });
                                 if (action.type === 'toggle') scope.onToggle({ row: action.node.row });
                                 if (action.type === 'selectPrimary') scope.onSelectPrimary();
                             });
@@ -2138,6 +2165,7 @@
                 ctrl.related = [];
                 ctrl.updateSets = [];
                 ctrl.includePreviousUpdates = false;
+                ctrl.previousVersionRecords = {};
                 ctrl.rows = [];
                 ctrl.visibleRows = [];
                 ctrl.viewMode = 'table';
@@ -2889,6 +2917,31 @@
                     return row.table + ':' + row.sys_id;
                 }
 
+                ctrl.canIncludePreviousVersion = function (row) {
+                    return (
+                        !row.placeholder &&
+                        !row.updateSetSysId &&
+                        !row.choiceGroup &&
+                        row.table !== 'sys_db_object' &&
+                        !ctrl.isExportBlocked(row.table, row)
+                    );
+                };
+
+                ctrl.includesPreviousVersion = function (row) {
+                    return row.updateSetSysId
+                        ? ctrl.includePreviousUpdates
+                        : ctrl.canIncludePreviousVersion(row) && !!ctrl.previousVersionRecords[rowKey(row)];
+                };
+
+                ctrl.toggleRecordPreviousVersion = function (row) {
+                    var key = rowKey(row);
+                    if (!ctrl.canIncludePreviousVersion(row)) return;
+                    if (ctrl.previousVersionRecords[key]) delete ctrl.previousVersionRecords[key];
+                    else ctrl.previousVersionRecords[key] = true;
+                    if (row.previousVersionError) delete row.previousVersionBytes;
+                    ctrl.toggleIncludePreviousUpdates();
+                };
+
                 // Graph-only aggregation: real rows remain the source for persistence and XML.
                 function groupGraphChoices(rows) {
                     var groups = Object.create(null);
@@ -3041,9 +3094,10 @@
                                     : ctrl.isExportBlocked(r.table, r),
                                 // Match the visible pill semantics: "New" is only meaningful/shown
                                 // while previous versions are included; Deleted is always shown.
-                                isNew: !!ctrl.includePreviousUpdates && !!r.isNewInUpdateSet,
+                                isNew: !!r.updateSetSysId && !!ctrl.includePreviousUpdates && !!r.isNewInUpdateSet,
                                 isDeleted: r.updateSetAction === 'DELETE',
-                                includePreviousUpdates: !!ctrl.includePreviousUpdates,
+                                includePreviousUpdates: !!ctrl.includesPreviousVersion(r),
+                                canIncludePreviousVersion: ctrl.canIncludePreviousVersion(r),
                                 checked: !!r.checked,
                                 dimmed: (!r.checked && !r.partiallyChecked) || !rowMatchesActiveFilter(r),
                                 embeddedPrimary: !!(r.primary && ctrl.embeddedInModal),
@@ -3357,7 +3411,12 @@
                     ctrl.progress = { done: 0, total: 0 };
                     var rows = [];
                     if (ctrl.primary.sysId && ctrl.primary.table) {
-                        if (!primaryRowObj) primaryRowObj = {};
+                        if (
+                            !primaryRowObj ||
+                            primaryRowObj.table !== ctrl.primary.table ||
+                            primaryRowObj.sys_id !== ctrl.primary.sysId
+                        )
+                            primaryRowObj = {};
                         angular.extend(primaryRowObj, {
                             table: ctrl.primary.table,
                             sys_id: ctrl.primary.sysId,
@@ -3440,8 +3499,8 @@
                         var r = ctrl.visibleRows[i];
                         if (r.placeholder || !r.checked) continue;
                         bytes += ctrl.rowSizeBytes[rowKey(r)] || 0;
-                        // Include Previous Updates adds a previous_version payload per update-set row to the export.
-                        if (ctrl.includePreviousUpdates && r.updateSetSysId) {
+                        // Include requested historical payloads in the export estimate.
+                        if (ctrl.includesPreviousVersion(r)) {
                             bytes += r.previousVersionBytes || 0;
                         }
                     }
@@ -3455,12 +3514,7 @@
                         var r = ctrl.visibleRows[i];
                         if (r.placeholder || !r.checked) continue;
                         if (!ctrl.rowSizeBytes.hasOwnProperty(rowKey(r))) return true;
-                        if (
-                            ctrl.includePreviousUpdates &&
-                            r.updateSetSysId &&
-                            !r.hasOwnProperty('previousVersionBytes')
-                        )
-                            return true;
+                        if (ctrl.includesPreviousVersion(r) && !r.hasOwnProperty('previousVersionBytes')) return true;
                     }
                     return false;
                 };
@@ -3475,7 +3529,7 @@
                         if (r.placeholder || !r.checked) continue;
                         total++;
                         if (ctrl.rowSizeBytes.hasOwnProperty(rowKey(r))) done++;
-                        if (ctrl.includePreviousUpdates && r.updateSetSysId) {
+                        if (ctrl.includesPreviousVersion(r)) {
                             total++;
                             if (r.hasOwnProperty('previousVersionBytes')) done++;
                         }
@@ -3690,6 +3744,7 @@
                     graphLinkRequests = {};
                     graphLinksGeneration++;
                     ctrl.includePreviousUpdates = false;
+                    ctrl.previousVersionRecords = {};
                     dismissedSuggestionKeys = {};
                     _scannedScriptKeys = {};
                     ctrl.rowSizeBytes = {};
@@ -3744,6 +3799,7 @@
                                 checked: checked,
                                 dismissedSuggestions: dismissedSuggestions,
                                 includePreviousUpdates: ctrl.includePreviousUpdates,
+                                previousVersionRecords: ctrl.previousVersionRecords,
                                 manual: manual,
                                 updateSetMembers: updateSetMembers,
                                 updateSets: ctrl.updateSets,
@@ -3757,6 +3813,7 @@
                     try {
                         stored = JSON.parse(localStorage.getItem(storageKey()) || 'null');
                     } catch (e) {}
+                    ctrl.previousVersionRecords = (stored && stored.previousVersionRecords) || {};
                     if (!stored) {
                         return $q.resolve();
                     }
@@ -4058,6 +4115,7 @@
                         .then(loadStoredSelections)
                         .then(function () {
                             rebuildRows();
+                            ensurePreviousVersionsForVisible();
                             discoverGraphLinks(ctrl.related);
                         });
                 }
@@ -4420,6 +4478,9 @@
                     }
 
                     if (ctrl.lookup.mode === 'edit' && ctrl.lookup.targetRow) {
+                        delete ctrl.lookup.targetRow.previousVersion;
+                        delete ctrl.lookup.targetRow.previousVersionBytes;
+                        delete ctrl.lookup.targetRow.previousVersionError;
                         ctrl.lookup.targetRow.table = ctrl.lookup.chosenTable;
                         ctrl.lookup.targetRow.tableLabel = ctrl.lookup.tableLabel;
                         ctrl.lookup.targetRow.sys_id = r.sys_id;
@@ -4710,9 +4771,7 @@
                     );
                 };
 
-                // Looks up, per row, the latest recorded version of that record before it was touched
-                // by its update set — used both to render the "New" pill and to populate the export's
-                // previous_version content.
+                // Previous snapshots supply the history pills, token estimate and export.
                 // Counter (not a bool) since a toggle-on refresh and a newly-added update set's refresh
                 // can overlap — the token estimate should keep showing "calculating" until both finish.
                 var _pendingPreviousVersionFetches = 0;
@@ -4724,7 +4783,7 @@
                     // Skip rows already measured — toggling Include Previous Updates off then on
                     // shouldn't re-fetch previous-version XML the row object already has cached.
                     var targets = rows.filter(function (r) {
-                        return r.updateSetSysId && !r.hasOwnProperty('previousVersionBytes');
+                        return ctrl.includesPreviousVersion(r) && !r.hasOwnProperty('previousVersionBytes');
                     });
                     if (!targets.length) return;
                     _pendingPreviousVersionFetches++;
@@ -4732,17 +4791,20 @@
                     await runPool(
                         targets,
                         async function (row) {
+                            var key = rowKey(row);
                             try {
                                 var res = await ajax('getPreviousUpdateXml', {
                                     table: row.table,
                                     sys_id: row.sys_id,
                                     before: row.updateSetMemberCreatedOnValue || '',
                                 });
-                                if (!res || !res.success) {
+                                if (rowKey(row) !== key) return;
+                                row.previousVersionError = !res || !res.success;
+                                if (row.previousVersionError) {
                                     row.previousVersionBytes = 0;
                                     return;
                                 }
-                                row.isNewInUpdateSet = !res.found;
+                                row.isNewInUpdateSet = !!row.updateSetSysId && !res.found;
                                 row.previousVersion = res.found
                                     ? {
                                           payload: res.payload,
@@ -4755,7 +4817,9 @@
                                 // Cached once here (not recomputed per digest) since it feeds the token estimate.
                                 row.previousVersionBytes = res.found ? new Blob([res.payload || '']).size : 0;
                             } catch (e) {
-                                // Fall back to 0 so a failed lookup doesn't leave sizesPending() stuck true forever.
+                                if (rowKey(row) !== key) return;
+                                // Finish the estimate and report unavailable history in the export.
+                                row.previousVersionError = true;
                                 row.previousVersionBytes = 0;
                             }
                             $timeout(angular.noop);
@@ -4774,9 +4838,8 @@
                 // estimate right now — checked AND passing the active type filter. A row hidden by
                 // the filter, or unchecked, is skipped until it becomes visible/checked again.
                 function ensurePreviousVersionsForVisible() {
-                    if (!ctrl.includePreviousUpdates) return;
                     var targets = ctrl.visibleRows.filter(function (r) {
-                        return r.checked && r.updateSetSysId;
+                        return r.checked && ctrl.includesPreviousVersion(r);
                     });
                     if (targets.length) refreshPreviousVersions(targets);
                 }
@@ -4807,6 +4870,8 @@
                     }
                     ctrl.generating = true;
                     ctrl.progress = { done: 0, total: selected.length };
+
+                    await refreshPreviousVersions(selected);
 
                     // Resolve every selected row, including records deleted since they were selected.
                     var exportUrls = {};
@@ -4902,7 +4967,7 @@
                         async function (row) {
                             var targetContainer = row.primary ? primaryContainer : relatedContainer;
                             // All records share one envelope, whether or not history was requested.
-                            var showsVersions = !!row.updateSetSysId && ctrl.includePreviousUpdates;
+                            var showsVersions = ctrl.includesPreviousVersion(row);
                             var wrapperEl = combinedDoc.createElement('record');
                             wrapperEl.setAttribute('id', rowKey(row));
                             wrapperEl.setAttribute('table', row.table);
@@ -5013,7 +5078,11 @@
 
                             if (showsVersions) {
                                 var previousEl = combinedDoc.createElement('previous_version');
-                                if (row.previousVersion) {
+                                if (row.previousVersionError) {
+                                    previousEl.setAttribute('status', 'unavailable');
+                                    previousEl.textContent =
+                                        'Previous version could not be loaded. Toggle the option off and on to retry.';
+                                } else if (row.previousVersion) {
                                     previousEl.setAttribute('update_set_name', row.previousVersion.updateSetName || '');
                                     previousEl.setAttribute(
                                         'update_set_sys_id',
@@ -5033,9 +5102,10 @@
                                         previousEl.appendChild(combinedDoc.importNode(prevChildren[p], true));
                                     }
                                 } else {
-                                    previousEl.setAttribute('status', 'new');
-                                    previousEl.textContent =
-                                        'No earlier version exists — this record is new as of this update set.';
+                                    previousEl.setAttribute('status', row.updateSetSysId ? 'new' : 'not_found');
+                                    previousEl.textContent = row.updateSetSysId
+                                        ? 'No earlier version exists — this record is new as of this update set.'
+                                        : 'No previous update set version is available for this record.';
                                 }
                                 wrapperEl.appendChild(previousEl);
                                 function recordChild(container) {

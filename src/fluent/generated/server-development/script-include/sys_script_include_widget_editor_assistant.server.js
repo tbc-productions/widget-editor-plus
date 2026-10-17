@@ -1891,6 +1891,7 @@ WidgetEditorAssistantAjax.prototype = Object.extendsObject(AbstractAjaxProcessor
      * existed immediately prior to the update set currently being added. Reuses the same
      * `name = table + '_' + sys_id` lookup already used elsewhere to resolve a record's owning
      * update set.
+     * Without `before`, skips the latest Customer Update to return the preceding update-set snapshot.
      * Accepts `table`, `sys_id`, `before`.
      * @returns {{success: boolean, found: boolean, payload: ?string, action: ?string,
      *   updateSetSysId: ?string, updateSetName: ?string, updatedOn: ?string}} Return value.
@@ -1902,13 +1903,20 @@ WidgetEditorAssistantAjax.prototype = Object.extendsObject(AbstractAjaxProcessor
         if (!table || !sysId) {
             return this._answer({ success: false, found: false });
         }
+        if (!before) {
+            if (this._isTableExportBlocked(table)) return this._answer({ success: false, found: false });
+            var record = new GlideRecordSecure(table);
+            if (!record.isValid() || !record.get(sysId)) return this._answer({ success: false, found: false });
+            table = record.getValue('sys_class_name') || table;
+        }
 
         var gr = new GlideRecordSecure('sys_update_xml');
         gr.addQuery('name', table + '_' + sysId);
         if (before) gr.addQuery('sys_created_on', '<', before);
         gr.orderByDesc('sys_created_on');
-        gr.setLimit(1);
+        gr.setLimit(before ? 1 : 2);
         gr.query();
+        if (!before) gr.next();
         if (!gr.next()) {
             return this._answer({ success: true, found: false });
         }
