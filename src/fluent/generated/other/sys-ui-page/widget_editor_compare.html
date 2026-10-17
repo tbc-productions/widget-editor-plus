@@ -611,89 +611,12 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
+            gap: 0.375rem;
             text-decoration: none;
-            transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
-            box-shadow: none;
         }
-        .dc-header-btns .btn:focus-visible {
-            outline: 2px solid rgb(var(--now-color_focus-ring, var(--now-color--focus-ring, 1, 119, 142)));
-            outline-offset: 2px;
-        }
-        .dc-header-btns .btn:disabled,
-        .dc-header-btns .btn[disabled] {
-            opacity: 0.45;
-            cursor: not-allowed;
-            pointer-events: none;
-        }
-        /* Primary header button */
-        .dc-header-btns .btn-primary {
-            background-color: rgb(var(--now-button--primary--background-color, var(--now-color--primary-1, 30, 133, 109))) !important;
-            border: 1px solid rgb(var(--now-button--primary--border-color, var(--now-color--primary-3, 15, 67, 55))) !important;
-            color: rgb(var(--now-button--primary--color, var(--now-color--neutral-0, 255, 255, 255))) !important;
-        }
-        .dc-header-btns .btn-primary:hover:not(:disabled) {
-            background-color: rgb(var(--now-button--primary--background-color--hover, var(--now-color--primary-2, 23, 100, 82))) !important;
-            border-color: rgb(var(--now-button--primary--border-color--hover, var(--now-color--primary-3, 15, 67, 55))) !important;
-            color: rgb(var(--now-button--primary--color--hover, var(--now-color--neutral-0, 255, 255, 255))) !important;
-        }
-        .dc-header-btns .btn-primary:focus,
-        .dc-header-btns .btn-primary:focus:hover {
-            background-color: rgb(var(--now-button--primary--background-color--hover, var(--now-color--primary-2, 23, 100, 82))) !important;
-            border-color: rgb(var(--now-button--primary--border-color--hover, var(--now-color--primary-3, 15, 67, 55))) !important;
-            color: rgb(var(--now-button--primary--color--hover, var(--now-color--neutral-0, 255, 255, 255))) !important;
-            outline: 2px solid rgb(var(--now-color_focus-ring, var(--now-color--focus-ring, 1, 119, 142))) !important;
-            outline-offset: 2px !important;
-        }
-        .dc-header-btns .btn-primary:active:not(:disabled),
-        .dc-header-btns .btn-primary.active,
-        .dc-header-btns .btn-primary:active:hover,
-        .dc-header-btns .btn-primary:active:focus {
-            background-color: rgb(var(--now-button--primary--background-color--active, var(--now-color--primary-3, 15, 67, 55))) !important;
-            border-color: rgb(var(--now-button--primary--border-color--active, var(--now-color--primary-3, 15, 67, 55))) !important;
-            color: rgb(var(--now-button--primary--color--active, var(--now-color--neutral-0, 255, 255, 255))) !important;
-        }
-        .dc-header-btns .btn-primary:disabled,
-        .dc-header-btns .btn-primary[disabled] {
-            opacity: 0.45 !important;
-            cursor: not-allowed !important;
-        }
-        /* Secondary header button (header chrome styling) */
+        /* Native secondary hover fills are translucent over the dark header. */
         .dc-header-btns .btn-default {
-            background-color: rgb(var(--now-color_background--primary, 255, 255, 255)) !important;
-            border: 1px solid rgb(var(--now-color_border--secondary, var(--now-color_divider--secondary, 205, 212, 217))) !important;
-            color: rgb(var(--now-button--secondary--color, var(--now-color--neutral-18, 22, 27, 28))) !important;
-            border-radius: var(--now-button--border-radius, 4px) !important;
-            transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
-        }
-        .dc-header-btns .btn-default * {
-            color: inherit !important;
-            fill: currentColor !important;
-        }
-        .dc-header-btns .btn-default:hover:not(:disabled) {
-            background-color: rgba(var(--now-color--secondary-1, 1, 119, 142), 0.1) !important;
-            border-color: rgb(var(--now-color--secondary-1, 1, 119, 142)) !important;
-            color: rgb(var(--now-color--secondary-1, 1, 119, 142)) !important;
-        }
-        .dc-header-btns .btn-default:focus,
-        .dc-header-btns .btn-default:focus:hover {
-            background-color: rgba(var(--now-color--secondary-1, 1, 119, 142), 0.1) !important;
-            border-color: rgb(var(--now-color--secondary-1, 1, 119, 142)) !important;
-            color: rgb(var(--now-color--secondary-1, 1, 119, 142)) !important;
-            outline: 2px solid rgb(var(--now-color_focus-ring, var(--now-color--focus-ring, 1, 119, 142))) !important;
-            outline-offset: 2px !important;
-        }
-        .dc-header-btns .btn-default:active:not(:disabled),
-        .dc-header-btns .btn-default.active,
-        .dc-header-btns .btn-default:active:hover,
-        .dc-header-btns .btn-default:active:focus {
-            background-color: rgba(var(--now-color--secondary-1, 1, 119, 142), 0.18) !important;
-            border-color: rgb(var(--now-color--secondary-2, 1, 89, 107)) !important;
-            color: rgb(var(--now-color--secondary-2, 1, 89, 107)) !important;
-        }
-        .dc-header-btns .btn-default:disabled,
-        .dc-header-btns .btn-default[disabled] {
-            opacity: 0.45 !important;
-            cursor: not-allowed !important;
+            background-color: rgb(var(--now-color_background--primary, 255, 255, 255));
         }
 
         /* Custom version column dropdowns */
@@ -1412,19 +1335,21 @@
                     </div>
                     <div class="dc-header-btns" ng-hide="ctrl.recordNotFound || ctrl.noRecordSelected || ctrl.tableNoVersions">
                         <button type="button" class="btn"
-                                ng-class="ctrl.showChangedFieldsFirst ? 'btn-primary active' : 'btn-default'"
+                                ng-class="ctrl.showChangedFieldsFirst ? 'btn-primary' : 'btn-default'"
                                 ng-click="ctrl.toggleShowChangedFieldsFirst()"
                                 title="{{ctrl.showChangedFieldsFirst ? 'Show fields in default order' : 'Show changed fields first'}}"
-                                aria-label="{{ctrl.showChangedFieldsFirst ? 'Show fields in default order' : 'Show changed fields first'}}"
+                                aria-label="Sort changed fields first"
                                 aria-pressed="{{ctrl.showChangedFieldsFirst}}">
                             <span class="icon icon-new-above" aria-hidden="true"></span>
+                            <span>Sort</span>
                         </button>
-                        <button type="button" class="btn btn-default"
+                        <button type="button" class="btn btn-primary"
                                 ng-click="ctrl.exportXml()"
                                 ng-disabled="!ctrl.canExportXml()"
                                 title="Export both versions as XML"
                                 aria-label="Export both versions as XML">
                             <span class="icon icon-export" aria-hidden="true"></span>
+                            <span>Export</span>
                         </button>
                         <button class="btn btn-primary" ng-if="ctrl.isSpWidget" ng-hide="ctrl.noVersions" ng-click="ctrl.goToWidgetEditor()" ng-bind="ctrl.isFromList ? 'Close' : (ctrl.hasWidgetEditorOpener ? 'Return to Widget Editor+' : 'Open Widget Editor+')"></button>
                         <a class="btn btn-primary" ng-if="!ctrl.isSpWidget &amp;&amp; ctrl.tableLabel" ng-href="{{ctrl.platformUrl}}" target="_blank">Open {{ctrl.tableLabel}}<span class="icon-open-document-new-tab" style="display: inline-block; margin-left: 4px;" aria-hidden="true"></span></a>
