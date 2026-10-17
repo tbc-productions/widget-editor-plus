@@ -4928,7 +4928,7 @@
                 _globalSetupDone = true;
                 monaco.editor.addEditorAction({
                     id: 'we.search-code',
-                    label: 'Search in Code Search+',
+                    label: 'Find in Code Search+',
                     contextMenuGroupId: 'navigation',
                     contextMenuOrder: 3,
                     precondition: 'editorHasSelection',
@@ -4939,7 +4939,10 @@
                         var query = model.getValueInRange(selection).trim();
                         if (!query) return;
                         global.open(
-                            '/ui_page.do?sys_id=27a85cdf06a14eba97d2ffc3b57c4a46&q=' + encodeURIComponent(query),
+                            '/nav_to.do?uri=' +
+                                encodeURIComponent(
+                                    'ui_page.do?sys_id=27a85cdf06a14eba97d2ffc3b57c4a46&q=' + encodeURIComponent(query)
+                                ),
                             '_blank',
                             'noopener'
                         );

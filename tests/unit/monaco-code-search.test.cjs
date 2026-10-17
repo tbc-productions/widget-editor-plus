@@ -19,7 +19,7 @@ function setup() {
 
 test('shared Monaco action searches selected text using the verified Code Search+ page', () => {
     const { action, opened } = setup();
-    assert.equal(action.label, 'Search in Code Search+');
+    assert.equal(action.label, 'Find in Code Search+');
     assert.equal(action.precondition, 'editorHasSelection');
     assert.equal(action.contextMenuGroupId, 'navigation');
     const selection = { isEmpty: () => false };
@@ -30,7 +30,10 @@ test('shared Monaco action searches selected text using the verified Code Search
     });
     assert.equal(opened.length, 1);
     const [url, target, features] = opened[0];
-    const parsed = new URL(url, 'https://instance.test');
+    const navigation = new URL(url, 'https://instance.test');
+    assert.equal(navigation.pathname, '/nav_to.do');
+    assert.equal(navigation.searchParams.size, 1);
+    const parsed = new URL(navigation.searchParams.get('uri'), 'https://instance.test');
     assert.equal(parsed.pathname, '/ui_page.do');
     const keys = fs.readFileSync('src/fluent/generated/keys.ts', 'utf8');
     const pageId = keys.match(/id: '([a-f0-9]{32})'\s+key: \{\s+name: 'widget_editor_code_search'/)[1];
