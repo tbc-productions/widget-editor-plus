@@ -225,6 +225,46 @@ test('all six new record types load defaults without inserting and create only o
     }
 });
 
+test('new record saves accept wrapped request strings without requiring an existing record', () => {
+    for (const table of supported.slice(1)) {
+        const h = serverHarness(table, { params: { sys_id: '', new_record: 'true' } });
+        const profile = h.api._getEditorProfiles()[table];
+        const field = profile.fields.find(def => def.language).name;
+        h.params.data = JSON.stringify({ [profile.primary]: 'New record', [field]: 'new code' });
+        for (const name of Object.keys(h.params)) h.params[name] = new String(h.params[name]);
+        const result = h.api.saveWidget();
+        assert.equal(result.success, true, table + ': ' + result.error);
+        assert.equal(result.sys_id, id);
+        assert.equal(h.row[field], 'new code');
+        assert.equal(h.writes.filter(write => write[0] === 'insert').length, 1);
+        Object.assign(h.params, {
+            sys_id: new String(id), new_record: new String(''), field: new String(field),
+            value: new String('updated code'), original: new String(JSON.stringify({ [field]: 'new code' })),
+        });
+        assert.equal(h.api.saveField().success, true, table + ': save the newly created record');
+        assert.equal(h.row[field], 'updated code');
+        assert.equal(h.writes.filter(write => write[0] === 'insert').length, 1);
+        const existing = serverHarness(table, { params: {
+            sys_id: id, new_record: new String('true'), data: JSON.stringify({ [profile.primary]: 'Changed' }),
+        } });
+        assert.equal(existing.api.saveWidget().success, false);
+        assert.deepEqual(existing.writes, []);
+        const single = serverHarness(table, { params: { sys_id: '', new_record: new String('true'), field, value: 'code' } });
+        assert.equal(single.api.saveField().success, false);
+        assert.deepEqual(single.writes, []);
+        const missing = serverHarness(table, { params: { field } });
+        missing.params.original = JSON.stringify({ [field]: missing.row[field] });
+        assert.equal(missing.api.saveField().success, false);
+        assert.deepEqual(missing.writes, []);
+    }
+    const boolean = serverHarness('sys_script_include', { params: {
+        field: new String('sandbox_callable'), value: new String('true'),
+        original: new String(JSON.stringify({ sandbox_callable: false })),
+    } });
+    assert.equal(boolean.api.saveField().success, true);
+    assert.equal(boolean.row.sandbox_callable, '1');
+});
+
 test('new records enforce create and field permissions and reject missing required values', () => {
     for (const options of [
         { canCreate: false },

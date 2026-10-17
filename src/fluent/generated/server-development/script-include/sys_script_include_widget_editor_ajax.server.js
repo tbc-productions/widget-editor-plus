@@ -294,12 +294,15 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 profiles = this._getEditorProfiles();
             if (!Object.prototype.hasOwnProperty.call(profiles, table)) throw new Error('Record type not supported.');
             var sysId = String(this.getParameter('sys_id') || '');
-            var isNew = !singleField && this.getParameter('new_record') === 'true';
+            var isNew = !singleField && String(this.getParameter('new_record') || '') === 'true';
             if ((isNew && sysId) || (!isNew && !/^[a-f0-9]{32}$/i.test(sysId)))
                 throw new Error('An existing record is required.');
             var data = singleField ? Object.create(null) : JSON.parse(this.getParameter('data') || '{}');
             var original = JSON.parse(this.getParameter('original') || '{}');
-            if (singleField) data[String(this.getParameter('field') || '')] = this.getParameter('value');
+            if (singleField) {
+                var fieldValue = this.getParameter('value');
+                data[String(this.getParameter('field') || '')] = fieldValue == null ? fieldValue : String(fieldValue);
+            }
             if (
                 !data ||
                 Array.isArray(data) ||
