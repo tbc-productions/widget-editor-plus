@@ -83,7 +83,6 @@
         .dc-header {
             grid-row: 1;
             background: rgb(var(--now-color_chrome--brand-5, var(--now-color--primary-0, 221, 237, 233)));
-            border-bottom: 1px solid rgb(var(--now-color_border--secondary, var(--now-color_divider--secondary, 228, 230, 235)));
             flex-shrink: 0;
             z-index: 10;
             margin: 0;
@@ -1603,6 +1602,7 @@
         <header class="dc-header">
             <div class="dc-header-row">
                 <div class="dc-title">
+                    <we-app-drawer current-app="code-search" credit-available="${gs.hasRole('admin')}"></we-app-drawer>
                     <span>Code Search+</span>
                 </div>
 

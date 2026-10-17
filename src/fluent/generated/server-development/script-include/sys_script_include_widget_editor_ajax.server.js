@@ -117,6 +117,36 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         return this._answer({ success: true, types: types });
     },
 
+    getAppDrawerContext: function () {
+        var table = String(this.getParameter('table') || '');
+        var recordId = String(this.getParameter('record_id') || '');
+        var apps = {};
+        if (/^[a-z_][a-z0-9_]*$/i.test(table) && /^[0-9a-f]{32}$/i.test(recordId)) {
+            var record = new GlideRecordSecure(table);
+            if (record.isValid() && record.get(recordId) && record.canRead()) {
+                apps.assistant = true;
+                apps['widget-editor'] =
+                    table === 'sp_widget' || Object.prototype.hasOwnProperty.call(this._getEditorProfiles(), table);
+                try {
+                    apps.compare = this._getDiffFieldDefs(table).success === true;
+                } catch (error) {}
+                if (gs.hasRole('admin')) {
+                    try {
+                        apps.credit = false;
+                        if (new global.WidgetEditorCreditAjax()._fields(table).length > 0) {
+                            var updates = new GlideRecordSecure('sys_update_xml');
+                            updates.addQuery('name', table + '_' + recordId.toLowerCase());
+                            updates.setLimit(1);
+                            updates.query();
+                            apps.credit = updates.next();
+                        }
+                    } catch (error) {}
+                }
+            }
+        }
+        return this._answer({ success: true, apps: apps });
+    },
+
     _getEditorChoices: function (table, field) {
         var choices = [];
         var gr = new GlideRecord('sys_choice');
@@ -1233,20 +1263,23 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
      *   table_label: string}} Return value.
      */
     getDiffFieldDefs: function () {
-        var table = String(this.getParameter('table') || 'sp_widget');
+        return this._answer(this._getDiffFieldDefs(String(this.getParameter('table') || 'sp_widget')));
+    },
+
+    _getDiffFieldDefs: function (table) {
         if (this.DIFF_ALLOWED_TABLES.length > 0 && this.DIFF_ALLOWED_TABLES.indexOf(table) === -1) {
-            return this._answer({
+            return {
                 success: false,
                 error: 'Table not allowed: ' + table,
-            });
+            };
         }
 
         var labelGr = new GlideRecord('sys_db_object');
         if (!labelGr.get('name', table)) {
-            return this._answer({
+            return {
                 success: false,
                 error: 'Table not found: ' + table,
-            });
+            };
         }
 
         var fieldNames = [];
@@ -1264,10 +1297,10 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         }
 
         if (fieldNames.length === 0) {
-            return this._answer({
+            return {
                 success: false,
                 error: 'No Default view fields found for table: ' + table,
-            });
+            };
         }
 
         // Queries the full table hierarchy so inherited fields (e.g. active from sys_metadata) get the correct type/renderAs.
@@ -1419,12 +1452,12 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             tableLabel = table;
         }
 
-        return this._answer({
+        return {
             success: true,
             fields: fieldDefs,
             extra_fields: extraFieldDefs,
             table_label: tableLabel,
-        });
+        };
     },
 
     /**

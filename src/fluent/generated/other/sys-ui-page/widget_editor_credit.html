@@ -42,6 +42,7 @@
         <g:requires name="scripts/snc-code-editor/monaco.bundle.min.jsx" params="sysparm_substitute=false" />
         <g:requires name="monaco_plus_bootstrap.jsdbx" params="sysparm_substitute=false" />
         <g:requires name="we_history_sync.jsdbx" params="sysparm_substitute=false" />
+        <link rel="stylesheet" href="/styles/retina_icons/retina_icons.css" />
         <link rel="stylesheet" href="/scripts/icon-fonts/font-awesome/css/font-awesome.css" />
         <style>
         [ng-cloak], .ng-cloak, .ng-hide { display: none !important; }
@@ -76,7 +77,6 @@
         /* Header Bar */
         .dc-header {
             background: rgb(var(--now-color_chrome--brand-5, var(--now-color--primary-0, 221, 237, 233)));
-            border-bottom: 1px solid rgb(var(--now-color_border--secondary, var(--now-color_divider--secondary, 228, 230, 235)));
             flex-shrink: 0;
             position: sticky;
             top: 0;
@@ -760,7 +760,10 @@
         <main id="credit-plus" class="dc-app" ng-controller="CreditCtrl as ctrl" ng-cloak="ng-cloak">
             <header class="dc-header">
                 <div class="dc-header-row">
-                    <div class="dc-title" credit-record-pickers="" role="heading" aria-level="1"><span class="dc-title-label">Credit+&#160;</span><span id="cp-table-picker" class="dc-table-picker-wrap"><span id="cp-table-label" ng-bind="ctrl.tableLabel"></span></span><span class="dc-title-colon">:</span><span id="cp-record-picker" class="dc-picker-wrap"><strong id="cp-record-name" ng-bind="ctrl.recordName"></strong></span></div>
+                    <div class="we-app-drawer-heading">
+                        <we-app-drawer current-app="credit" credit-available="true"></we-app-drawer>
+                        <div class="dc-title" credit-record-pickers="" role="heading" aria-level="1"><span class="dc-title-label">Credit+&#160;</span><span id="cp-table-picker" class="dc-table-picker-wrap"><span id="cp-table-label" ng-bind="ctrl.tableLabel"></span></span><span class="dc-title-colon">:</span><span id="cp-record-picker" class="dc-picker-wrap"><strong id="cp-record-name" ng-bind="ctrl.recordName"></strong></span></div>
+                    </div>
                     <div class="dc-header-btns">
                         <button id="cp-retry" ng-click="ctrl.reload()" ng-disabled="ctrl.loading" type="button" class="btn btn-default" title="Reload" aria-label="Reload"><i class="icon-refresh" aria-hidden="true"></i></button>
                         <div id="cp-open-actions" class="btn-group" role="group" aria-label="Open widget" ng-show="ctrl.data.table === 'sp_widget' &amp;&amp; !ctrl.data.deleted" ng-class="{open: ctrl.editorMenuOpen}" ng-keydown="ctrl.editorMenuKeydown($event)">

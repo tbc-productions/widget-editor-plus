@@ -8,7 +8,8 @@ UiPage({
 
 Features version history, side-by-side diff comparison, related lists, and user preferences. Enforces read-only mode for protected widgets and displays volatility risk warnings for files subject to future platform updates.`,
     html: Now.include('./widget_editor_plus.html'),
-    clientScript: Now.include('./widget_editor_plus.client.js'),
+    clientScript: `${Now.include('./widget_editor_app_drawer.js')}
+${Now.include('./widget_editor_plus.client.js')}`,
     processingScript: `// Server-side logic is handled by the WidgetEditorAjax Script Include (AbstractAjaxProcessor).
 // Client calls are made via GlideAjax from client script.
 `,

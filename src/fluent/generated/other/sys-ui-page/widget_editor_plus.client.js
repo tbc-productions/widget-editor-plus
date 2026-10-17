@@ -448,6 +448,15 @@
                             return;
                         }
 
+                        // Keep the app switcher interactive inside the Open dialog's modal top layer.
+                        var header = attrs.weDialogHeader && document.querySelector(attrs.weDialogHeader);
+                        var headerAnchor = header && document.createComment('App header');
+                        if (header) header.before(headerAnchor);
+                        function restoreHeader() {
+                            if (header && headerAnchor.parentNode) headerAnchor.after(header);
+                        }
+                        scope.$on('$destroy', restoreHeader);
+
                         scope.$watch(attrs.weModalDialog, function (val) {
                             if (val) {
                                 if (!dialog.open) {
@@ -456,6 +465,7 @@
                                     } catch (e) {
                                         dialog.setAttribute('open', '');
                                     }
+                                    if (header) dialog.prepend(header);
                                 }
                             } else {
                                 if (dialog.open) {
@@ -465,6 +475,7 @@
                                         dialog.removeAttribute('open');
                                     }
                                 }
+                                restoreHeader();
                             }
                         });
 
@@ -1997,6 +2008,11 @@
                 };
 
                 function navigateToWidget(w) {
+                    if (w.href) {
+                        _bypassUnloadWarning = true;
+                        window.location.href = w.href;
+                        return;
+                    }
                     var table = w.table || 'sp_widget';
                     var recentWidgets =
                         table === 'sp_widget'
@@ -2043,6 +2059,18 @@
                         navigateToWidget(w);
                     }
                 };
+
+                function handleAppNavigation(event) {
+                    if (!hasUnsavedChanges()) return;
+                    event.preventDefault();
+                    $scope.$evalAsync(function () {
+                        $scope.pendingWidgetNav = event.detail;
+                    });
+                }
+                document.addEventListener('we-app-navigate', handleAppNavigation);
+                $scope.$on('$destroy', function () {
+                    document.removeEventListener('we-app-navigate', handleAppNavigation);
+                });
 
                 function navigateToNewWidget(table) {
                     _bypassUnloadWarning = true;
@@ -2128,32 +2156,47 @@
                 };
 
                 $scope.cancelWidgetNav = function () {
-                    $scope.pendingWidgetNav = null;
+                    if (!$scope.savingBeforeWidgetNav) $scope.pendingWidgetNav = null;
                 };
 
                 $scope.discardAndOpenWidget = function () {
+                    if ($scope.savingBeforeWidgetNav || !$scope.pendingWidgetNav || !_discardPageDraft()) return;
                     var target = $scope.pendingWidgetNav;
                     $scope.pendingWidgetNav = null;
-                    _discardPageDraft();
                     _bypassUnloadWarning = true;
                     navigateToWidget(target);
                 };
 
                 $scope.saveAndOpenWidget = function () {
+                    if ($scope.savingBeforeWidgetNav || !$scope.pendingWidgetNav) return;
                     var target = $scope.pendingWidgetNav;
-                    $scope.pendingWidgetNav = null;
                     var payload = _buildSavePayload();
-                    ajax('saveWidget', {
+                    $scope.savingBeforeWidgetNav = true;
+                    $scope.saveError = null;
+                    return ajax('saveWidget', {
                         sys_id: SYS_ID,
                         data: JSON.stringify(payload),
-                    }).then(function (data) {
-                        if (!data.success) {
-                            $scope.saveError = data.error || 'Save failed';
-                            return;
-                        }
-                        _acceptWidgetSave(payload);
-                        navigateToWidget(target);
-                    });
+                    })
+                        .then(function (data) {
+                            if (!data.success) {
+                                $scope.saveError = data.error || 'Save failed';
+                                return;
+                            }
+                            _acceptWidgetSave(payload);
+                            if (!$scope.isNewWidget && hasUnsavedChanges()) {
+                                $scope.saveError =
+                                    'Some fields still have unsaved changes. Save those fields before continuing.';
+                                return;
+                            }
+                            $scope.pendingWidgetNav = null;
+                            navigateToWidget(target);
+                        })
+                        .catch(function (error) {
+                            $scope.saveError = (error && error.message) || 'Save failed';
+                        })
+                        .finally(function () {
+                            $scope.savingBeforeWidgetNav = false;
+                        });
                 };
 
                 // Initialisation
@@ -9742,31 +9785,6 @@
                     _closeModal(function () {
                         $scope.showKeyboardShortcutsModal = false;
                     });
-                };
-
-                $scope.openCredit = function () {
-                    $scope.openDropdown = null;
-                    if ($scope.isNewWidget || !/^[0-9a-f]{32}$/i.test(SYS_ID || '')) return;
-                    window.open(
-                        '/nav_to.do?uri=' +
-                            encodeURIComponent(
-                                'ui_page.do?sys_id=9c5bf170283e4d6394aa639c79936587&sysparm_table=' +
-                                    ($scope.recordTable || 'sp_widget') +
-                                    '&sysparm_record=' +
-                                    SYS_ID
-                            ),
-                        '_blank',
-                        'noopener,noreferrer'
-                    );
-                };
-
-                $scope.openCodeSearch = function () {
-                    window.open(
-                        '/nav_to.do?uri=ui_page.do%3Fsys_id%3D27a85cdf06a14eba97d2ffc3b57c4a46',
-                        '_blank',
-                        'noopener,noreferrer'
-                    );
-                    $scope.openDropdown = null;
                 };
 
                 $scope.openApiDocs = function () {

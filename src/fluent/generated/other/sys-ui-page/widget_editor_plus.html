@@ -12,6 +12,7 @@
 	<g:requires name="scripts/snc-code-editor/monaco.bundle.min.jsx" params="sysparm_substitute=false" />
 	<g:requires name="monaco_plus_bootstrap.jsdbx" params="sysparm_substitute=false" />
 	<g:requires name="we_history_sync.jsdbx" params="sysparm_substitute=false" />
+    <link rel="stylesheet" href="/styles/retina_icons/retina_icons.css" />
 
     <g:requires name="scripts/angular_1.5.11/angular.min.js" position="last" />
     <g:requires name="scripts/js_includes_amb.jsx" params="sysparm_substitute=false" />
@@ -88,10 +89,12 @@
             padding: 0.75rem 1.25rem;
             min-height: 3.5rem;
             background: rgb(var(--now-color_chrome--brand-5, var(--now-color--primary-0, 221, 237, 233)));
-            border-bottom: 1px solid rgb(var(--now-color_border--secondary, var(--now-color_divider--secondary, 228, 230, 235)));
             flex-shrink: 0;
             overflow: visible;
         }
+
+        .we-alert-pills-row--empty .we-alert-pill-wrapper { display: none; }
+        dialog .we-alert-pills-row { position: absolute; inset: 0 0 auto; }
 
         .we-record-name {
             min-width: 0;
@@ -2003,7 +2006,8 @@
             align-items: center;
             justify-content: center;
             gap: 0.75rem;
-            height: 100%;
+            flex: 1;
+            min-height: 0;
             color: rgba(var(--now-color_text--primary), 0.65);
             font-size: var(--now-font-size--lg);
         }
@@ -2779,111 +2783,10 @@
     <main ng-app="widgetEditor" ng-controller="WidgetEditorCtrl" ng-cloak="">
 
         <div class="we-app">
-
-            <!-- Loading state -->
-            <div class="we-loading" ng-if="loading">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
-                    <defs>
-                        <linearGradient id="we-gradient" gradientUnits="userSpaceOnUse" x1="-100%" y1="-100%" x2="0%" y2="0%">
-                            <animate attributeName="x1" values="-100%; 100%" dur="3s" repeatCount="indefinite" />
-                            <animate attributeName="y1" values="-100%; 100%" dur="3s" repeatCount="indefinite" />
-                            <animate attributeName="x2" values="0%; 200%" dur="3s" repeatCount="indefinite" />
-                            <animate attributeName="y2" values="0%; 200%" dur="3s" repeatCount="indefinite" />
-                            <stop offset="0%" stop-color="currentColor" stop-opacity="0.4" />
-                            <stop offset="50%" stop-color="currentColor" stop-opacity="1" />
-                            <stop offset="100%" stop-color="currentColor" stop-opacity="0.4" />
-                        </linearGradient>
-                    </defs>
-                    <style>
-                        /* Monochrome setup inheriting text color */
-                        .stroke-element {
-                        fill: none;
-                        stroke: url(#we-gradient);
-                        stroke-width: 4;
-                        stroke-linecap: round;
-                        stroke-linejoin: round;
-                        }
-                        .fill-element {
-                        fill: url(#we-gradient);
-                        }
-
-                        /* Animation assignments */
-                        .container { animation: fadeOut 3s ease-in-out infinite; }
-                        .frame     { animation: drawFrame 3s ease-in-out infinite; stroke-dasharray: 320; stroke-dashoffset: 320; }
-                        .header    { animation: dropHeader 3s cubic-bezier(0.175, 0.885, 0.32, 1.275) infinite; }
-                        .block1    { animation: popBlock1 3s cubic-bezier(0.175, 0.885, 0.32, 1.275) infinite; transform-origin: 32.5px 60px; }
-                        .block2    { animation: popBlock2 3s cubic-bezier(0.175, 0.885, 0.32, 1.275) infinite; transform-origin: 66px 47.5px; }
-                        .block3    { animation: popBlock3 3s cubic-bezier(0.175, 0.885, 0.32, 1.275) infinite; transform-origin: 66px 71px; }
-
-                        /* Keyframes */
-                        @keyframes drawFrame {
-                        0%, 5% { stroke-dashoffset: 320; }
-                        30%, 90% { stroke-dashoffset: 0; }
-                        90.1%, 100% { stroke-dashoffset: 320; }
-                        }
-                        @keyframes dropHeader {
-                        0%, 20% { opacity: 0; transform: translateY(-10px); }
-                        35%, 90% { opacity: 1; transform: translateY(0); }
-                        90.1%, 100% { opacity: 0; transform: translateY(-10px); }
-                        }
-                        @keyframes popBlock1 {
-                        0%, 30% { opacity: 0; transform: scale(0.5); }
-                        45%, 90% { opacity: 1; transform: scale(1); }
-                        90.1%, 100% { opacity: 0; transform: scale(0.5); }
-                        }
-                        @keyframes popBlock2 {
-                        0%, 40% { opacity: 0; transform: scale(0.5); }
-                        55%, 90% { opacity: 1; transform: scale(1); }
-                        90.1%, 100% { opacity: 0; transform: scale(0.5); }
-                        }
-                        @keyframes popBlock3 {
-                        0%, 50% { opacity: 0; transform: scale(0.5); }
-                        65%, 90% { opacity: 1; transform: scale(1); }
-                        90.1%, 100% { opacity: 0; transform: scale(0.5); }
-                        }
-                        @keyframes fadeOut {
-                        0%, 80% { opacity: 1; }
-                        90%, 100% { opacity: 0; }
-                        }
-                    </style>
-
-                    <g class="container">
-                        <rect class="stroke-element frame" x="10" y="10" width="80" height="80" rx="8" />
-                        
-                        <g class="header">
-                        <rect class="fill-element" x="20" y="22" width="60" height="12" rx="3" />
-                        </g>
-                        <g class="block1">
-                        <rect class="fill-element" x="20" y="40" width="25" height="40" rx="3" />
-                        </g>
-                        <g class="block2">
-                        <rect class="fill-element" x="52" y="40" width="28" height="15" rx="3" />
-                        </g>
-                        <g class="block3">
-                        <rect class="fill-element" x="52" y="62" width="28" height="18" rx="3" />
-                        </g>
-                    </g>
-                    </svg>
-                <span ng-if="loadingWidgetName">Loading {{loadingWidgetName}}…</span>
-                <span ng-if="!loadingWidgetName">Loading {{recordLabel}}…</span>
-            </div>
-
-            <!-- Error state -->
-            <div class="we-not-found" ng-if="loadError">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="72" height="72" aria-hidden="true" class="we-not-found-icon">
-                    <circle cx="50" cy="50" r="46" fill="none" stroke="currentColor" stroke-width="5"/>
-                    <circle cx="35" cy="40" r="5" fill="currentColor"/>
-                    <circle cx="65" cy="40" r="5" fill="currentColor"/>
-                    <path d="M32 68 Q50 54 68 68" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
-                </svg>
-                <p class="we-not-found-title">{{recordLabel}} not found</p>
-                <button class="btn btn-default" ng-click="openWidgetPickerModal()">Open another {{isWidgetRecord ? 'widget' : 'record'}}</button>
-            </div>
-
-
             <!-- Top Status Pills Alert Ribbon -->
-            <div class="we-alert-pills-row" ng-show="!loading &amp;&amp; !loadError &amp;&amp; !showPicker">
-                <span class="we-record-name" ng-attr-title="{{widget[recordPrimaryField] || (isNewWidget ? 'New ' + recordLabel : recordLabel)}}">{{widget[recordPrimaryField] || (isNewWidget ? 'New ' + recordLabel : recordLabel)}}</span>
+            <div class="we-alert-pills-row" ng-class="{'we-alert-pills-row--empty': loading || loadError || showPicker}" ng-click="(showWidgetPickerModal || showPicker) &amp;&amp; $event.stopPropagation()">
+                <we-app-drawer current-app="widget-editor" credit-available="${gs.hasRole('admin')}"></we-app-drawer>
+                <span class="we-record-name" ng-attr-title="{{loading || loadError || showPicker ? 'Widget Editor+' : (widget[recordPrimaryField] || (isNewWidget ? 'New ' + recordLabel : recordLabel))}}">{{loading || loadError || showPicker ? 'Widget Editor+' : (widget[recordPrimaryField] || (isNewWidget ? 'New ' + recordLabel : recordLabel))}}</span>
 
                 <!-- ==================== 1. CRITICAL PILLS ==================== -->
 
@@ -3161,6 +3064,109 @@
                 </div>
 
             </div>
+
+
+
+            <!-- Loading state -->
+            <div class="we-loading" ng-if="loading">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+                    <defs>
+                        <linearGradient id="we-gradient" gradientUnits="userSpaceOnUse" x1="-100%" y1="-100%" x2="0%" y2="0%">
+                            <animate attributeName="x1" values="-100%; 100%" dur="3s" repeatCount="indefinite" />
+                            <animate attributeName="y1" values="-100%; 100%" dur="3s" repeatCount="indefinite" />
+                            <animate attributeName="x2" values="0%; 200%" dur="3s" repeatCount="indefinite" />
+                            <animate attributeName="y2" values="0%; 200%" dur="3s" repeatCount="indefinite" />
+                            <stop offset="0%" stop-color="currentColor" stop-opacity="0.4" />
+                            <stop offset="50%" stop-color="currentColor" stop-opacity="1" />
+                            <stop offset="100%" stop-color="currentColor" stop-opacity="0.4" />
+                        </linearGradient>
+                    </defs>
+                    <style>
+                        /* Monochrome setup inheriting text color */
+                        .stroke-element {
+                        fill: none;
+                        stroke: url(#we-gradient);
+                        stroke-width: 4;
+                        stroke-linecap: round;
+                        stroke-linejoin: round;
+                        }
+                        .fill-element {
+                        fill: url(#we-gradient);
+                        }
+
+                        /* Animation assignments */
+                        .container { animation: fadeOut 3s ease-in-out infinite; }
+                        .frame     { animation: drawFrame 3s ease-in-out infinite; stroke-dasharray: 320; stroke-dashoffset: 320; }
+                        .header    { animation: dropHeader 3s cubic-bezier(0.175, 0.885, 0.32, 1.275) infinite; }
+                        .block1    { animation: popBlock1 3s cubic-bezier(0.175, 0.885, 0.32, 1.275) infinite; transform-origin: 32.5px 60px; }
+                        .block2    { animation: popBlock2 3s cubic-bezier(0.175, 0.885, 0.32, 1.275) infinite; transform-origin: 66px 47.5px; }
+                        .block3    { animation: popBlock3 3s cubic-bezier(0.175, 0.885, 0.32, 1.275) infinite; transform-origin: 66px 71px; }
+
+                        /* Keyframes */
+                        @keyframes drawFrame {
+                        0%, 5% { stroke-dashoffset: 320; }
+                        30%, 90% { stroke-dashoffset: 0; }
+                        90.1%, 100% { stroke-dashoffset: 320; }
+                        }
+                        @keyframes dropHeader {
+                        0%, 20% { opacity: 0; transform: translateY(-10px); }
+                        35%, 90% { opacity: 1; transform: translateY(0); }
+                        90.1%, 100% { opacity: 0; transform: translateY(-10px); }
+                        }
+                        @keyframes popBlock1 {
+                        0%, 30% { opacity: 0; transform: scale(0.5); }
+                        45%, 90% { opacity: 1; transform: scale(1); }
+                        90.1%, 100% { opacity: 0; transform: scale(0.5); }
+                        }
+                        @keyframes popBlock2 {
+                        0%, 40% { opacity: 0; transform: scale(0.5); }
+                        55%, 90% { opacity: 1; transform: scale(1); }
+                        90.1%, 100% { opacity: 0; transform: scale(0.5); }
+                        }
+                        @keyframes popBlock3 {
+                        0%, 50% { opacity: 0; transform: scale(0.5); }
+                        65%, 90% { opacity: 1; transform: scale(1); }
+                        90.1%, 100% { opacity: 0; transform: scale(0.5); }
+                        }
+                        @keyframes fadeOut {
+                        0%, 80% { opacity: 1; }
+                        90%, 100% { opacity: 0; }
+                        }
+                    </style>
+
+                    <g class="container">
+                        <rect class="stroke-element frame" x="10" y="10" width="80" height="80" rx="8" />
+
+                        <g class="header">
+                        <rect class="fill-element" x="20" y="22" width="60" height="12" rx="3" />
+                        </g>
+                        <g class="block1">
+                        <rect class="fill-element" x="20" y="40" width="25" height="40" rx="3" />
+                        </g>
+                        <g class="block2">
+                        <rect class="fill-element" x="52" y="40" width="28" height="15" rx="3" />
+                        </g>
+                        <g class="block3">
+                        <rect class="fill-element" x="52" y="62" width="28" height="18" rx="3" />
+                        </g>
+                    </g>
+                    </svg>
+                <span ng-if="loadingWidgetName">Loading {{loadingWidgetName}}…</span>
+                <span ng-if="!loadingWidgetName">Loading {{recordLabel}}…</span>
+            </div>
+
+            <!-- Error state -->
+            <div class="we-not-found" ng-if="loadError">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="72" height="72" aria-hidden="true" class="we-not-found-icon">
+                    <circle cx="50" cy="50" r="46" fill="none" stroke="currentColor" stroke-width="5"/>
+                    <circle cx="35" cy="40" r="5" fill="currentColor"/>
+                    <circle cx="65" cy="40" r="5" fill="currentColor"/>
+                    <path d="M32 68 Q50 54 68 68" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
+                </svg>
+                <p class="we-not-found-title">{{recordLabel}} not found</p>
+                <button class="btn btn-default" ng-click="openWidgetPickerModal()">Open another {{isWidgetRecord ? 'widget' : 'record'}}</button>
+            </div>
+
 
             <!--  Header -->
             <div class="we-header" ng-class="{'we-header--deprecated': widget.deprecated}" ng-if="!loading &amp;&amp; !loadError &amp;&amp; !showPicker">
@@ -3581,8 +3587,6 @@
                             <div class="we-dropdown-divider--group" ng-if="!isNewWidget"></div>
                             <div class="we-dropdown-item" ng-click="openUserPrefsModal()">User preferences</div>
                             <div class="we-dropdown-item" ng-click="openKeyboardShortcutsModal()">Keyboard shortcuts</div>
-                            <j:if test="${gs.hasRole('admin')}"><div class="we-dropdown-item" ng-if="!isNewWidget" ng-click="openCredit()">Credit+</div></j:if>
-                            <div class="we-dropdown-item" ng-click="openCodeSearch()">Code Search+</div>
                             <div class="we-dropdown-item" ng-click="openApiDocs()">API documentation <span class="we-ext-icon we-icon-secondary" aria-hidden="true"></span></div>
                         </div>
                     </div>
@@ -4350,7 +4354,7 @@
         </dialog>
 
         <!-- Widget picker modal -->
-        <dialog class="we-modal-backdrop we-modal-anchored-top" we-modal-dialog="showWidgetPickerModal || showPicker" we-dialog-cancel="!showPicker &amp;&amp; closeWidgetPickerModal()" ng-click="openDropdown = null; !showPicker &amp;&amp; closeWidgetPickerModal()">
+        <dialog class="we-modal-backdrop we-modal-anchored-top" we-modal-dialog="showWidgetPickerModal || showPicker" we-dialog-header=".we-alert-pills-row" we-dialog-cancel="!showPicker &amp;&amp; closeWidgetPickerModal()" ng-click="openDropdown = null; !showPicker &amp;&amp; closeWidgetPickerModal()">
             <div class="we-picker-box" ng-click="openDropdown === 'pickerType' &amp;&amp; (openDropdown = null); $event.stopPropagation()" ng-class="{'we-picker-box--split': userPrefs.showRecentlyOpenedWidgets !== false &amp;&amp; userPrefs.showOpenHistory &amp;&amp; recentWidgetsResolved.length}">
                 <!-- Header -->
                 <div class="we-picker-title-row">
@@ -4495,17 +4499,19 @@
             </div>
         </dialog>
 
-        <!-- Unsaved changes confirmation — open existing widget -->
-        <dialog class="we-modal-backdrop" we-modal-dialog="pendingWidgetNav" we-dialog-cancel="cancelWidgetNav()" ng-click="cancelWidgetNav()">
+        <!-- Unsaved changes confirmation — open a record or app -->
+        <dialog class="we-modal-backdrop" we-modal-dialog="pendingWidgetNav" we-dialog-cancel="cancelWidgetNav()" ng-click="cancelWidgetNav()" ng-disabled="savingBeforeWidgetNav">
             <div class="we-modal-box" style="width:25rem" ng-click="$event.stopPropagation()">
                 <div class="we-modal-title">Unsaved Changes</div>
                 <div class="we-modal-body">
                     <p>You have unsaved changes. What would you like to do before opening&nbsp;<strong ng-bind="pendingWidgetNav.name"></strong>?</p>
+                    <p ng-if="saveError" role="alert" ng-bind="saveError"></p>
+                    <p ng-if="localDraftError" role="alert" ng-bind="localDraftError"></p>
                 </div>
                 <div class="we-modal-actions">
-                    <button class="btn btn-primary" ng-click="saveAndOpenWidget()">Save &amp; Open</button>
-                    <button class="btn btn-danger" ng-click="discardAndOpenWidget()">Discard &amp; Open</button>
-                    <button class="btn btn-default" ng-click="cancelWidgetNav()">Cancel</button>
+                    <button class="btn btn-primary" ng-click="saveAndOpenWidget()" ng-disabled="savingBeforeWidgetNav">Save &amp; Open</button>
+                    <button class="btn btn-danger" ng-click="discardAndOpenWidget()" ng-disabled="savingBeforeWidgetNav">Discard &amp; Open</button>
+                    <button class="btn btn-default" ng-click="cancelWidgetNav()" ng-disabled="savingBeforeWidgetNav">Cancel</button>
                 </div>
             </div>
         </dialog>

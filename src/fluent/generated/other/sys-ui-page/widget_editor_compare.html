@@ -15,6 +15,7 @@
     <g:requires name="monaco_plus_bootstrap.jsdbx" params="sysparm_substitute=false" />
     <g:requires name="widget_editor_xml_export.jsdbx" params="sysparm_substitute=false" />
     <g:requires name="we_history_sync.jsdbx" params="sysparm_substitute=false" />
+    <link rel="stylesheet" href="/styles/retina_icons/retina_icons.css" />
     <g:requires name="scripts/angular_1.5.11/angular.min.js" position="last" />
 
     <script>
@@ -105,7 +106,6 @@
         /* Header Bar */
         .dc-header {
             background: rgb(var(--now-color_chrome--brand-5, var(--now-color--primary-0, 221, 237, 233)));
-            border-bottom: 1px solid rgb(var(--now-color_border--secondary, var(--now-color_divider--secondary, 228, 230, 235)));
             flex-shrink: 0;
             position: sticky;
             top: 0;
@@ -1403,6 +1403,7 @@
             <div class="dc-header">
                 <div class="dc-header-row" ng-hide="ctrl.isEmbedded">
                     <div class="dc-title">
+                        <we-app-drawer current-app="compare" credit-available="${gs.hasRole('admin')}"></we-app-drawer>
                         <span class="dc-title-label" ng-if="ctrl.expandedIndex === null &amp;&amp; ctrl.expandedExtraIndex === null &amp;&amp; !ctrl.expandedString">Compare+&nbsp;</span>
                         <span class="dc-table-picker-wrap" ng-show="ctrl.expandedIndex === null &amp;&amp; ctrl.expandedExtraIndex === null &amp;&amp; !ctrl.expandedString" we-diff-table-picker="we-diff-table-picker"></span>
                         <span class="dc-title-colon" ng-if="ctrl.expandedIndex === null &amp;&amp; ctrl.expandedExtraIndex === null &amp;&amp; !ctrl.expandedString &amp;&amp; !ctrl.tableNoVersions">:</span>

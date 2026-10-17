@@ -695,6 +695,7 @@ test('the real Angular page preserves widgets and opens and saves the six additi
                 };
             }, { table, id, fixture, types });
             await page.addScriptTag({ path: require.resolve('angular/angular.js') });
+            await page.addScriptTag({ path: 'src/fluent/generated/other/sys-ui-page/widget_editor_app_drawer.js' });
             await page.addScriptTag({ content: browserClient });
             await page.evaluate(() => {
                 angular.bootstrap(document.querySelector('main'), ['widgetEditor']);
@@ -702,15 +703,27 @@ test('the real Angular page preserves widgets and opens and saves the six additi
             });
             if (table !== 'sp_widget')
                 assert.equal((await page.locator('.we-loading').innerText()).trim(), 'Loading ' + fixture.record_label + '…');
-            assert.equal(await page.locator('.we-alert-pills-row').isVisible(), false, table);
+            assert.equal(await page.locator('.we-alert-pills-row').isVisible(), true, table);
+            assert.equal((await page.locator('.we-record-name').innerText()).trim(), 'Widget Editor+');
+            const loadingHeader = await page.locator('.we-alert-pills-row').boundingBox();
+            const appBounds = await page.locator('.we-app').boundingBox();
+            const loadingBounds = await page.locator('.we-loading').boundingBox();
+            assert.equal(loadingHeader.y, appBounds.y, table + ' keeps the header at the top during loading');
+            assert.ok(loadingBounds.y >= loadingHeader.y + loadingHeader.height, table + ' loads below the header');
+            assert.ok(loadingBounds.y + loadingBounds.height <= appBounds.y + appBounds.height + 1, table + ' loading fits the remaining viewport');
+            assert.equal(await page.getByRole('button', { name: 'Apps', exact: true }).isVisible(), true);
             await page.evaluate(() => finishRecordLoad());
             await page.waitForFunction(() => !editorScope.loading);
             assert.equal(await page.evaluate(() => editorScope.loadError), null, table);
             assert.equal(await page.locator('.we-alert-pills-row').isVisible(), true, table);
-            for (const state of [{ loadError: 'Record unavailable' }, { showPicker: true }]) {
+            assert.equal((await page.locator('.we-alert-pills-row').boundingBox()).y, loadingHeader.y, table + ' does not move the header after loading');
+            for (const state of [{ loading: true }, { loadError: 'Record unavailable' }, { showPicker: true }]) {
                 await page.evaluate(state => editorScope.$apply(() => Object.assign(editorScope, state)), state);
-                assert.equal(await page.locator('.we-alert-pills-row').isVisible(), false, table);
-                await page.evaluate(() => editorScope.$apply(() => { editorScope.loadError = null; editorScope.showPicker = false; }));
+                assert.equal(await page.locator('.we-alert-pills-row').isVisible(), true, table);
+                assert.equal((await page.locator('.we-record-name').innerText()).trim(), 'Widget Editor+');
+                assert.equal((await page.locator('.we-alert-pills-row').boundingBox()).y, loadingHeader.y, table + ' keeps a stable header in loading, error and picker states');
+                await page.evaluate(() => editorScope.$apply(() => { editorScope.loading = false; editorScope.loadError = null; editorScope.showPicker = false; }));
+                assert.equal((await page.locator('.we-alert-pills-row').boundingBox()).y, loadingHeader.y, table + ' restores the header to the same position');
             }
             assert.equal(await page.locator('.we-alert-pills-row').isVisible(), true, table);
             assert.equal(await page.locator('.we-record-name').innerText(), fixture.widget[fixture.primary_field || 'name'], table);
@@ -1117,4 +1130,181 @@ test('new records open directly in Editor+, create on Save and retain newer typi
     } finally {
         await browser.close();
     }
+});
+
+test('app switching reuses the unsaved dialog and never leaves after a failed or incomplete save', async () => {
+    let dirty = true, discardAllowed = true, acceptSave = true, response = { success: true }, reject = false;
+    const scope = { pendingWidgetNav: null, $evalAsync: fn => fn() };
+    const context = vm.createContext({
+        $scope: scope, SYS_ID: id, window: { location: { href: '' } }, _bypassUnloadWarning: false,
+        hasUnsavedChanges: () => dirty, _discardPageDraft: () => discardAllowed,
+        _buildSavePayload: () => ({ name: 'Changed' }), _acceptWidgetSave: () => { if (acceptSave) dirty = false; },
+        ajax: async () => { if (reject) throw new Error('Connection lost'); return response; },
+    });
+    clientFunction('handleAppNavigation', context);
+    clientFunction('navigateToWidget', context);
+    const start = client.indexOf('                $scope.cancelWidgetNav = function');
+    vm.runInContext(client.slice(start, client.indexOf('                // Initialisation', start)), context);
+    const target = { href: '/ui_page.do?sys_id=compare', name: 'Compare+' };
+    let prevented = 0;
+    const event = { detail: target, preventDefault: () => prevented++ };
+    context.handleAppNavigation(event);
+    assert.equal(prevented, 1);
+    assert.equal(scope.pendingWidgetNav, target);
+    assert.equal(context.window.location.href, '');
+    scope.cancelWidgetNav();
+    assert.equal(scope.pendingWidgetNav, null);
+    assert.equal(dirty, true);
+    context.handleAppNavigation(event);
+    discardAllowed = false;
+    scope.discardAndOpenWidget();
+    assert.equal(scope.pendingWidgetNav, target);
+    assert.equal(context.window.location.href, '');
+    discardAllowed = true;
+    scope.discardAndOpenWidget();
+    assert.equal(context.window.location.href, target.href);
+    assert.equal(context._bypassUnloadWarning, true);
+    context.window.location.href = '';
+    context._bypassUnloadWarning = false;
+    context.handleAppNavigation(event);
+    response = { success: false, error: 'Save rejected' };
+    await scope.saveAndOpenWidget();
+    assert.equal(scope.saveError, 'Save rejected');
+    assert.equal(scope.pendingWidgetNav, target);
+    assert.equal(context.window.location.href, '');
+    reject = true;
+    await scope.saveAndOpenWidget();
+    assert.equal(scope.saveError, 'Connection lost');
+    assert.equal(scope.pendingWidgetNav, target);
+    assert.equal(context._bypassUnloadWarning, false);
+    reject = false;
+    response = { success: true };
+    acceptSave = false;
+    await scope.saveAndOpenWidget();
+    assert.match(scope.saveError, /still have unsaved changes/);
+    assert.equal(scope.pendingWidgetNav, target);
+    assert.equal(context.window.location.href, '');
+    let finish;
+    context.ajax = () => new Promise(resolve => { finish = resolve; });
+    acceptSave = true;
+    const save = scope.saveAndOpenWidget();
+    scope.cancelWidgetNav();
+    scope.discardAndOpenWidget();
+    assert.equal(scope.saveAndOpenWidget(), undefined);
+    assert.equal(scope.pendingWidgetNav, target);
+    assert.equal(context.window.location.href, '');
+    finish(response);
+    await save;
+    assert.equal(scope.savingBeforeWidgetNav, false);
+    assert.equal(scope.pendingWidgetNav, null);
+    assert.equal(context.window.location.href, target.href);
+    assert.equal(context._bypassUnloadWarning, true);
+    context.handleAppNavigation(event);
+    assert.equal(scope.pendingWidgetNav, null, 'clean editors use normal same-tab navigation');
+});
+
+test('the real editor keeps its drawer clickable in the initial Open modal and guards same-tab app switches', async () => {
+    const { chromium, expect } = require('@playwright/test');
+    const { markup, browserClient } = browserFixture();
+    const drawer = fs.readFileSync('src/fluent/generated/other/sys-ui-page/widget_editor_app_drawer.js', 'utf8');
+    const fixture = serverHarness('sys_script_include').api.getWidget();
+    const types = serverHarness().api.getEditorRecordTypes().types;
+    const browser = await chromium.launch({ headless: true });
+    try {
+        for (const mode of ['initial', 'discard', 'save']) {
+            const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+            await context.route('https://instance.test/**', route => route.fulfill({ contentType: 'text/html', body: '<html><body>Destination</body></html>' }));
+            const page = await context.newPage();
+            const errors = [];
+            page.on('pageerror', error => errors.push(error.message));
+            await page.goto('https://instance.test/ui_page.do?sys_id=8b2e70458373fe1070b8b5dfeeaad35e' + (mode === 'initial' ? '' : '&record_table=sys_script_include&record_sys_id=' + id));
+            await page.setContent(markup);
+            await page.addStyleTag({ content: ':root { --now-color_chrome--brand-5: 3,45,62; --now-color--neutral-0: 255,255,255; --now-color_background--secondary: 242,247,248; --now-color_text--primary: 29,49,56; }' });
+            await page.evaluate(({ id, fixture, types, mode }) => {
+                window.WE_CONFIG = { record_table: 'sys_script_include', sys_id: mode === 'initial' ? '' : id, widgetPageSysId: '8b2e70458373fe1070b8b5dfeeaad35e' };
+                window.require = () => {};
+                window.GlideAjax = function () {
+                    const params = {};
+                    this.addParam = (name, value) => { params[name] = value; };
+                    this.getXMLAnswer = callback => callback(JSON.stringify({ success: true, apps: { 'widget-editor': true, compare: true, credit: true } }));
+                    this.getXML = callback => {
+                        const action = params.sysparm_name;
+                        const answer = action === 'getWidget' ? fixture
+                            : action === 'getEditorRecordTypes' ? { success: true, types }
+                            : action === 'getUserPrefs' ? { success: true, value: JSON.stringify({ showRecentlyOpenedWidgets: false }) }
+                            : action === 'saveWidget' && window.failSave ? { success: false, error: 'Save rejected' }
+                            : { success: true, versions: [], widgets: [], templates: [], providers: [], dependencies: [], choices: [] };
+                        if (action === 'saveWidget') sessionStorage.setItem('lastAppSave', params.data);
+                        callback({ responseXML: { documentElement: { getAttribute: () => JSON.stringify(answer) } } });
+                    };
+                };
+            }, { id, fixture, types, mode });
+            await page.addScriptTag({ path: require.resolve('angular/angular.js') });
+            await page.addScriptTag({ content: drawer });
+            await page.addScriptTag({ content: browserClient });
+            await page.evaluate(() => {
+                angular.bootstrap(document.querySelector('main'), ['widgetEditor']);
+                window.editorScope = angular.element(document.querySelector('main')).scope();
+            });
+            await page.waitForFunction(() => !editorScope.loading);
+            const trigger = page.getByRole('button', { name: 'Apps', exact: true });
+            const open = page.locator('[we-modal-dialog="showWidgetPickerModal || showPicker"]');
+            const unsaved = page.locator('[we-modal-dialog="pendingWidgetNav"]');
+            if (mode === 'initial') {
+                await expect(open).toBeVisible();
+                await expect(page.locator('.we-record-name')).toHaveText('Widget Editor+');
+                assert.equal(await trigger.evaluate(button => {
+                    const r = button.getBoundingClientRect();
+                    return button.closest('dialog')?.open && button.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+                }), true, 'the modal must not make the app switcher inert or obscure it');
+            } else {
+                await page.locator('#record-field-name').fill('Changed record');
+                await page.getByRole('button', { name: 'Open…', exact: true }).click();
+                await expect(open).toBeVisible();
+                await trigger.click();
+                await expect(page.locator('nav.we-app-drawer-popover')).toBeVisible();
+                await expect(open).toBeVisible();
+                await page.keyboard.press('Escape');
+                await expect(open).toBeVisible();
+                await page.keyboard.press('Escape');
+                await expect(open).toBeHidden();
+                assert.equal(await trigger.evaluate(button => button.closest('dialog')), null, 'closing Open restores the header');
+            }
+            await trigger.click();
+            const row = page.locator('[data-app="compare"]');
+            await row.locator('.we-app-drawer-link').hover();
+            const destination = new URL(await row.locator('.we-app-drawer-link').getAttribute('href'), page.url()).href;
+            if (mode !== 'initial') {
+                const popupPromise = page.waitForEvent('popup');
+                await row.locator('.we-app-drawer-new-tab').click();
+                const popup = await popupPromise;
+                await popup.waitForLoadState();
+                assert.equal(popup.url(), destination);
+                await expect(unsaved).toBeHidden();
+                await popup.close();
+            }
+            await row.locator('.we-app-drawer-link').click();
+            if (mode !== 'initial') {
+                await expect(unsaved).toBeVisible();
+                await expect(unsaved.locator('strong')).toHaveText('Compare+');
+                await unsaved.getByRole('button', { name: 'Cancel', exact: true }).click();
+                await expect(unsaved).toBeHidden();
+                await expect(page.locator('#record-field-name')).toHaveValue('Changed record');
+                await trigger.click();
+                await row.locator('.we-app-drawer-link').click();
+                await expect(unsaved).toBeVisible();
+                await page.evaluate(() => { window.failSave = true; });
+                await unsaved.getByRole('button', { name: 'Save & Open', exact: true }).click();
+                await expect(unsaved.getByRole('alert')).toHaveText('Save rejected');
+                await expect(unsaved).toBeVisible();
+                await page.evaluate(() => { window.failSave = false; });
+                await unsaved.getByRole('button', { name: mode === 'save' ? 'Save & Open' : 'Discard & Open', exact: true }).click();
+            }
+            await expect(page).toHaveURL(destination);
+            assert.equal(context.pages().length, 1);
+            if (mode === 'save') assert.equal(await page.evaluate(() => JSON.parse(sessionStorage.getItem('lastAppSave')).name), 'Changed record');
+            assert.deepEqual(errors, []);
+            await context.close();
+        }
+    } finally { await browser.close(); }
 });
