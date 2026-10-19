@@ -87,7 +87,13 @@ function serverHarness(table = 'sys_ui_page', options = {}) {
             canRead: () => !(options.noRead || []).includes(field),
             canWrite: () => !(options.noWrite || []).includes(field),
             isMandatory: () => (options.mandatory || []).includes(field),
-            getED: () => ({ getLength: () => options.maxLength || 1000000 }),
+            getED: () => ({
+                getLength: () => options.dictionary?.[field]?.maxLength ?? 1000000,
+                getInternalType: () => options.dictionary?.[field]?.type ?? ({
+                    script: 'script', client_script: 'script_plain', processing_script: 'script',
+                    html: 'html', template: 'html_template', css: 'css',
+                }[field] ?? 'string'),
+            }),
         });
         this.addQuery = (field, value) => {
             filters[field] = value;
@@ -333,6 +339,74 @@ test('saving one code field preserves the other fields for every additional type
     }
 });
 
+test('code fields save beyond dictionary lengths through full-record and per-field saves', () => {
+    for (const [table, field, type, maxLength = 8000] of [
+        ['sys_script_include', 'script', 'script', 80],
+        ['sys_script_include', 'script', 'script'],
+        ['sys_ui_script', 'script', 'script_plain'],
+        ['sp_angular_provider', 'script', 'script_client'],
+        ['sys_ui_page', 'processing_script', 'script_server'],
+        ['sys_ui_page', 'client_script', 'script_plain'],
+        ['sys_ui_page', 'html', 'html'],
+        ['sp_css', 'css', 'css'],
+        ['sp_ng_template', 'template', 'html_template'],
+    ]) {
+        for (const action of ['saveWidget', 'saveField']) {
+            const h = serverHarness(table, { dictionary: { [field]: { type, maxLength } } });
+            const value = 'x'.repeat(30001);
+            Object.assign(h.params, {
+                field, value, data: JSON.stringify({ [field]: value }),
+                original: JSON.stringify({ [field]: h.row[field] }),
+            });
+            assert.equal(h.api[action]().success, true, `${table}.${field}: ${action}`);
+            assert.equal(h.row[field], value);
+            assert.deepEqual(h.writes, [[field, value], ['update']]);
+        }
+    }
+});
+
+test('bounded strings enforce dictionary lengths, including the 255 boundary and code-rendered strings', () => {
+    for (const action of ['saveWidget', 'saveField']) {
+        for (const field of ['name', 'script']) {
+            for (const type of ['string', 'string_full_utf8', 'translated_field']) {
+                for (const maxLength of [3, 80, 255]) {
+                    for (const length of [maxLength - 1, maxLength, maxLength + 1]) {
+                        const h = serverHarness('sys_script_include', { dictionary: { [field]: { type, maxLength } } });
+                        const previous = { ...h.row }, value = 'x'.repeat(length);
+                        Object.assign(h.params, {
+                            field, value, data: JSON.stringify({ description: 'edited', [field]: value }),
+                            original: JSON.stringify({ description: h.row.description, [field]: h.row[field] }),
+                        });
+                        const result = h.api[action]();
+                        assert.equal(result.success, length <= maxLength, `${action}: ${field} (${type}), ${length}/${maxLength}`);
+                        if (length > maxLength) {
+                            assert.equal(result.error, `${field === 'name' ? 'Name' : 'Script'} exceeds its maximum length.`);
+                            assert.deepEqual(h.writes, []);
+                            assert.deepEqual(h.row, previous);
+                        } else assert.equal(h.row[field], value);
+                    }
+                }
+            }
+        }
+    }
+});
+
+test('large-text strings and strings without a positive dictionary limit can exceed that length', () => {
+    for (const action of ['saveWidget', 'saveField']) {
+        for (const maxLength of [0, 256, 4000]) {
+            const h = serverHarness('sys_script_include', { dictionary: { description: { type: 'string', maxLength } } });
+            const value = 'x'.repeat(30001);
+            Object.assign(h.params, {
+                field: 'description', value, data: JSON.stringify({ description: value }),
+                original: JSON.stringify({ description: h.row.description }),
+            });
+            assert.equal(h.api[action]().success, true, `${action}: ${maxLength}`);
+            assert.equal(h.row.description, value);
+            assert.deepEqual(h.writes, [['description', value], ['update']]);
+        }
+    }
+});
+
 test('all six new record types load defaults without inserting and create only on explicit Save', () => {
     for (const table of supported.slice(1)) {
         const h = serverHarness(table, { params: { sys_id: '' } });
@@ -440,7 +514,6 @@ test('record saves validate every field before writing, reject stale values and 
         { canRead: false },
         { canWrite: false },
         { row: { sys_policy: 'read' } },
-        { maxLength: 3 },
     ]) {
         const h = serverHarness('sys_ui_page', {
             ...options,

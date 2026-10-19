@@ -429,8 +429,17 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 var element = gr.getElement(name);
                 if (element.isMandatory && element.isMandatory() && (value === '' || value === null))
                     throw new Error(def.label + ' is required.');
-                var maxLength = Number(element.getED().getLength());
-                if (typeof value === 'string' && maxLength > 0 && value.length > maxLength)
+                var descriptor = element.getED();
+                var fieldType = String(descriptor.getInternalType());
+                var maxLength = Number(descriptor.getLength());
+                // Script and large-text dictionary lengths are not storage limits.
+                if (
+                    typeof value === 'string' &&
+                    ['string', 'string_full_utf8', 'translated_field'].indexOf(fieldType) !== -1 &&
+                    maxLength > 0 &&
+                    maxLength <= 255 &&
+                    value.length > maxLength
+                )
                     throw new Error(def.label + ' exceeds its maximum length.');
                 values[name] = def.type === 'boolean' ? (value ? '1' : '0') : value;
             }
