@@ -501,7 +501,7 @@ test('merge view exposes the middle editor above the full-screen diff and saves 
                 ctrl.leftFields = { script: 'previous script', css: 'previous css', name: 'Previous name', number: '0', unchanged: 'same', sys_name: 'Previous system name' }; ctrl.rightFields = { ...sourceRight }; ctrl.rightDisplayFields = ctrl.rightFields;
                 ctrl.isChanged = key => ctrl.leftFields[key] !== ctrl.rightFields[key];
                 ctrl.editors = { 0: { getModifiedEditor: () => ({ getDomNode: () => document.getElementById('original-right') }) } }; ctrl.extraEditors = {};
-                ctrl.leftLabel = () => 'Previous version'; ctrl.rightLabel = () => 'Later version';
+                ctrl.leftLabel = () => 'Older version'; ctrl.rightLabel = () => 'Newer version';
                 ctrl.expandedFieldLabel = () => 'Record — field';
                 ctrl.toggleExpand = index => { ctrl.expandedIndex = index; };
                 ctrl.collapseExpanded = () => { ctrl.expandedIndex = null; };
@@ -555,6 +555,8 @@ test('merge view exposes the middle editor above the full-screen diff and saves 
         const middle = page.getByRole('textbox', { name: 'Merge+ (editable)', exact: true });
         await middle.waitFor();
         assert.equal(await page.locator('.dc-merge-pane').count(), 3);
+        assert.equal(await page.getByRole('textbox', { name: 'Older version (read only)', exact: true }).count(), 1);
+        assert.equal(await page.getByRole('textbox', { name: 'Newer version (read only)', exact: true }).count(), 1);
         assert.equal(await middle.inputValue(), 'later script');
         assert.ok(Math.abs((await page.getByRole('button', { name: 'Undo', exact: true }).boundingBox()).x - (await page.locator('.dc-merge-pane').nth(1).boundingBox()).x) < 1, 'undo aligns with the editable middle pane');
         assert.equal(await page.locator('.dc-merge-heading').innerText(), 'Merge+');
@@ -698,6 +700,8 @@ test('merge origins distinguish source and custom lines and block arrows fit Ser
         await fire(0, [change(2, 2, 2, 2)]);
         assert.deepEqual(await origins(0), [[2, 2, 'dc-merge-previous']]);
         assert.deepEqual(await origins(2), [[2, 2, 'dc-merge-later']]);
+        assert.equal(await page.evaluate(() => editors[0].decorations[0].options.hoverMessage.value), 'Older version');
+        assert.equal(await page.evaluate(() => editors[2].decorations[0].options.hoverMessage.value), 'Newer version');
         await fire(1, [change(2, 0, 3, 4)]);
         assert.deepEqual(await origins(1), [], 'wait for both comparisons before assigning origins');
         await fire(2, [change(1, 0, 2, 2), change(2, 0, 4, 4)]);
@@ -709,7 +713,7 @@ test('merge origins distinguish source and custom lines and block arrows fit Ser
         assert.deepEqual(await origins(1), oldOrigins, 'one completed comparison cannot replace the existing colours');
         await fire(1, [change(2, 4, 2, 2)]);
         assert.deepEqual(await origins(1), [[2, 2, 'dc-merge-custom']]);
-        const arrow = page.getByRole('button', { name: 'Use previous block at line 2', exact: true });
+        const arrow = page.getByRole('button', { name: 'Use older block at line 2', exact: true });
         assert.equal(await arrow.locator('.icon-arrow-right[aria-hidden="true"]').count(), 1);
         assert.equal(await page.locator('.dc-merge-gutter').last().locator('.icon-arrow-left').count() > 0, true);
         assert.deepEqual(await arrow.evaluate(el => ({ width: el.getBoundingClientRect().width, height: el.getBoundingClientRect().height })), { width: 26, height: 24 });
@@ -731,7 +735,7 @@ test('merge origins distinguish source and custom lines and block arrows fit Ser
             editors[1].setSelection(new monaco.Selection(2, 1, 3, 1));
             editors[0].setSelection(new monaco.Selection(3, 1, 4, 1));
         });
-        const previousSelection = page.getByRole('button', { name: 'Use selected previous text', exact: true });
+        const previousSelection = page.getByRole('button', { name: 'Use selected older text', exact: true });
         assert.equal(await previousSelection.locator('.icon-arrow-right').count(), 1);
         assert.equal(await previousSelection.isVisible(), true, 'unchanged source lines can also be selected and merged');
         assert.equal(await arrow.isVisible(), false, 'selection merging replaces the block action while text is selected');
@@ -743,8 +747,8 @@ test('merge origins distinguish source and custom lines and block arrows fit Ser
             editors[1].setSelection(new monaco.Selection(1, 7, 1, 7));
             editors[2].setSelection(new monaco.Selection(2, 1, 2, 4));
         });
-        assert.equal(await page.getByRole('button', { name: 'Use selected later text', exact: true }).locator('.icon-arrow-left').count(), 1);
-        await page.getByRole('button', { name: 'Use selected later text', exact: true }).click();
+        assert.equal(await page.getByRole('button', { name: 'Use selected newer text', exact: true }).locator('.icon-arrow-left').count(), 1);
+        await page.getByRole('button', { name: 'Use selected newer text', exact: true }).click();
         assert.equal(await page.evaluate(() => merge.getValue()), 'commonnew\nshared\nshared\nbase\nend');
         assert.deepEqual(await page.evaluate(() => editors[1].getPosition()), { lineNumber: 1, column: 10 });
         assert.deepEqual(await page.evaluate(() => [models[0].getValue(), models[2].getValue()]), ['common\nold\nshared\nbase\nend', 'common\nnew\nshared\nbase\nend']);

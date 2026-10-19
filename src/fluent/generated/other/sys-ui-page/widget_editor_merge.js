@@ -47,7 +47,7 @@
                 model: model,
                 automaticLayout: true,
                 readOnly: index !== 1,
-                ariaLabel: ['Previous version (read only)', 'Merge+ (editable)', 'Later version (read only)'][index],
+                ariaLabel: ['Older version (read only)', 'Merge+ (editable)', 'Newer version (read only)'][index],
                 scrollBeyondLastLine: false,
                 wordWrap: wordWrap ? 'on' : 'off',
                 minimap: { enabled: false },
@@ -70,7 +70,7 @@
                     isWholeLine: true,
                     className: 'dc-merge-' + origin,
                     hoverMessage: {
-                        value: { previous: 'Previous version', later: 'Later version', custom: 'Custom edit' }[origin],
+                        value: { previous: 'Older version', later: 'Newer version', custom: 'Custom edit' }[origin],
                     },
                 },
             };
@@ -154,7 +154,7 @@
             selectionIcon.className = 'icon ' + (side === 0 ? 'icon-arrow-right' : 'icon-arrow-left');
             selectionIcon.setAttribute('aria-hidden', 'true');
             selectionButton.appendChild(selectionIcon);
-            selectionButton.title = 'Use selected ' + (side === 0 ? 'previous' : 'later') + ' text';
+            selectionButton.title = 'Use selected ' + (side === 0 ? 'older' : 'newer') + ' text';
             selectionButton.setAttribute('aria-label', selectionButton.title);
             selectionButton.style.display = 'none';
             gutters[index].appendChild(selectionButton);
@@ -213,10 +213,7 @@
                     button.className = 'dc-merge-arrow';
                     button.appendChild(selectionIcon.cloneNode(true));
                     button.title =
-                        'Use ' +
-                        (side === 0 ? 'previous' : 'later') +
-                        ' block at line ' +
-                        change.originalStartLineNumber;
+                        'Use ' + (side === 0 ? 'older' : 'newer') + ' block at line ' + change.originalStartLineNumber;
                     button.setAttribute('aria-label', button.title);
                     button.mergeLine = Math.max(
                         1,
