@@ -136,7 +136,7 @@ function controller() {
         scriptFields: [{ key: 'script', label: 'Script', language: 'javascript', isScript: true }, { key: 'css', label: 'CSS', language: 'css', isScript: true }],
         leftFields: { script: 'previous script', css: 'previous css' }, rightFields: { script: 'later script', css: 'later css' } };
     const ctx = { ctrl, _mergedFields: Object.create(null), _mergeEditor: null, _recordData: { writable_fields: { script: true, css: true, extra_script: true, name: true, mode: true }, values: { script: 'current script', css: 'current css' } }, _savedRecordData: null,
-        _apply: fn => fn(), _headerHeight: () => 100, _setWrapTop() {}, _langForEditor: value => value, _syncScope() {},
+        _apply: fn => fn(), _headerHeight: () => 100, _setWrapTop() {}, _langForEditor: value => value, _syncScope() {}, _setupLanguageServices() {},
         document: { getElementById: () => ({ style: {} }) }, tableParam: 'sp_widget', recordId: 'a'.repeat(32),
         $timeout: Object.assign((fn, delay) => { if (!delay) return fn(); const timer = { fn }; timers.push(timer); return timer; }, { cancel() {} }), $scope: { $on() {} },
         _ajax: (name, params, callback) => requests.push({ name, params, callback }),
@@ -486,7 +486,7 @@ test('merge view exposes the middle editor above the full-screen diff and saves 
                 const tableParam = 'sp_widget', recordId = 'a'.repeat(32);
                 const _apply = fn => $scope.$$phase ? fn() : $scope.$apply(fn);
                 const _headerHeight = () => document.querySelector('.dc-header').getBoundingClientRect().bottom;
-                const _setWrapTop = () => {}, _langForEditor = value => value;
+                const _setWrapTop = () => {}, _langForEditor = value => value, _setupLanguageServices = () => {};
                 const sourceRight = { script: 'later script', css: 'later css', name: 'Later name', number: '1', unchanged: 'same', sys_name: 'Later system name' };
                 const _syncScope = () => { ctrl.rightFields = _mergePreview({ ...sourceRight }); ctrl.rightDisplayFields = ctrl.rightFields; };
                 const _ajax = (name, params, callback) => {
@@ -523,6 +523,8 @@ test('merge view exposes the middle editor above the full-screen diff and saves 
         }));
         assert.equal(await mode.count(), 0, 'identical versions do not offer Merge+');
         assert.equal(await info.innerText(), 'No differences found.');
+        assert.equal(await info.locator('.icon-info[aria-hidden="true"]').count(), 1);
+        assert.ok(await info.evaluate(el => el.children[1].getBoundingClientRect().left - el.children[0].getBoundingClientRect().right >= 6), 'the info icon has space before the alert text');
         assert.ok((await info.boundingBox()).y >= (await page.locator('.dc-header').boundingBox()).y + (await page.locator('.dc-header').boundingBox()).height);
         assert.ok((await info.boundingBox()).y + (await info.boundingBox()).height <= (await page.locator('table').boundingBox()).y);
         await page.evaluate(() => angular.element(document.getElementById('fixture')).scope().$apply(() => { ctrl.loadingRight = true; }));
@@ -760,4 +762,43 @@ test('CSS comparison and merge models use SCSS while other language mappings are
     for (const [input, expected] of [['css', 'scss'], ['sass', 'scss'], ['scss', 'scss'], ['json', 'we-json'], ['javascript', 'javascript'], ['', 'plaintext']]) {
         assert.equal(ctx._langForEditor(input), expected);
     }
+});
+
+test('Compare registers SCSS before creating models and loads the shared tokenizer on a limited ServiceNow Monaco bundle', async () => {
+    const cssSource = fs.readFileSync(root + 'client-development/ui-script/monaco_language_css.js', 'utf8');
+    for (const builtInScss of [false, true]) {
+        const languages = [{ id: 'css' }], registrations = [], tokens = {}, initialisations = [];
+        if (builtInScss) languages.push({ id: 'scss' });
+        const monaco = { languages: {
+            getLanguages: () => languages,
+            register: language => { registrations.push(language.id); languages.push(language); },
+            setLanguageConfiguration() {}, setMonarchTokensProvider: (language, provider) => { tokens[language] = provider; },
+            registerCompletionItemProvider() {}, registerHoverProvider() {},
+        }, editor: { createModel: (_value, language) => ({ getLanguageId: () => languages.some(item => item.id === language) ? language : 'plaintext' }) } };
+        const ctx = { monaco, _registerSnProviders() {}, window: { monaco } };
+        ctx.window.SNMonacoPlusBootstrap = { init(config) {
+            initialisations.push(config.language);
+            if (config.language === 'scss') ctx.window.MONACO_LANGUAGE_CSS.register(monaco);
+            return Promise.resolve({});
+        } };
+        vm.createContext(ctx); vm.runInContext(cssSource, ctx);
+        vm.runInContext(client.slice(client.indexOf('var _langServicesSetup ='), client.indexOf('function _langForEditor(')), ctx);
+        vm.runInContext(client.slice(client.indexOf('var _mplusInitialized ='), client.indexOf('var recordId =')), ctx);
+        ctx._setupLanguageServices(); ctx._setupLanguageServices();
+        await Promise.resolve();
+        assert.equal(monaco.editor.createModel('$accent: red;', 'scss').getLanguageId(), 'scss', 'SCSS must exist before a model is created');
+        assert.ok(tokens.scss, 'the existing shared SCSS tokenizer is loaded');
+        assert.equal(tokens.scss.tokenPostfix, '.scss');
+        assert.deepEqual(initialisations, ['typescript', 'html', 'scss']);
+        assert.equal(registrations.filter(id => id === 'scss').length, builtInScss ? 0 : 1);
+    }
+});
+
+test('Merge+ prepares language services before creating its editors, even when no comparison editor has opened', () => {
+    const h = controller(), calls = [];
+    const create = h.ctx.window.WEMergeEditor.create;
+    h.ctx._setupLanguageServices = () => calls.push('languages');
+    h.ctx.window.WEMergeEditor.create = (...args) => { calls.push('editors'); return create(...args); };
+    h.ctrl.startMerge();
+    assert.deepEqual(calls, ['languages', 'editors']);
 });

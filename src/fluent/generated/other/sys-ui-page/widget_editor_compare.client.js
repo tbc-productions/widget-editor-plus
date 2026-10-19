@@ -75,6 +75,15 @@
             }
         }
 
+        if (
+            monaco.languages &&
+            !monaco.languages.getLanguages().some(function (language) {
+                return language.id === 'scss';
+            })
+        ) {
+            monaco.languages.register({ id: 'scss', extensions: ['.scss'], mimetypes: ['text/x-scss'] });
+        }
+
         _initMonacoPlus();
 
         // Register a lightweight JSON tokenizer (no worker, no validation squiggles)
@@ -196,6 +205,7 @@
             _registerSnProviders();
         });
         _bs.init({ language: 'html' });
+        _bs.init({ language: 'scss' });
     }
 
     var recordId = pageConfig.record_id || '';
@@ -1428,6 +1438,7 @@
                             var container = document.getElementById('dc-merge-editor');
                             if (!container || ctrl.merge !== session) return;
                             try {
+                                _setupLanguageServices();
                                 _mergeEditor = window.WEMergeEditor.create(
                                     container,
                                     previous,
