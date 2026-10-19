@@ -26,7 +26,7 @@ function server(extra = {}) {
     const context = {
         Class: { create: () => function () { } },
         AbstractAjaxProcessor: {},
-        Object: { keys: Object.keys, prototype: Object.prototype, extendsObject: (_base, methods) => methods },
+        Object: { keys: Object.keys, create: Object.create, prototype: Object.prototype, extendsObject: (_base, methods) => methods },
         gs: { getProperty: () => 'https://example.service-now.com/', hasRole: () => false, setProperty: () => { throw Error('unexpected write'); } },
         GlideRecordSecure: function () { this.isValid = () => false; this.get = this.next = () => false; this.addQuery = this.setLimit = this.query = () => { }; },
         GlideTableHierarchy: function () { this.getBase = () => ''; },
@@ -51,6 +51,9 @@ function server(extra = {}) {
     };
     vm.createContext(context);
     vm.runInContext(serverSource, context);
+    context.gs.getProperty ||= (_, fallback) => fallback;
+    vm.runInContext(fs.readFileSync('src/fluent/generated/server-development/script-include/sys_script_include_widget_editor_ajax.server.js', 'utf8'), context);
+    context.global = context;
     const api = context.WidgetEditorMarkdownAjax.prototype;
     api.setAnswer = value => JSON.parse(value);
     api.getParameter = () => '';
@@ -1476,6 +1479,8 @@ test('table property rows validate before writes, save individually and delete p
         GlideRecordSecure: function (table) {
             let name, data = {};
             this.get = (_field, value) => { name = value; return table === 'sys_db_object' ? !!fields[value] : Object.hasOwn(values, value); };
+            this.isValid = () => !!fields[table];
+            this.getLabel = () => 'Example';
             this.isValidField = field => (fields[table] || []).includes(field);
             this.initialize = () => { };
             this.setValue = (key, value) => { data[key] = value; };
@@ -1503,6 +1508,26 @@ test('table property rows validate before writes, save individually and delete p
     assert.equal(api.deleteTableProperty().success, true);
     assert.equal(Object.hasOwn(values, 'monaco.plus.assistant.table_config.widget'), false);
     assert.equal(Object.hasOwn(values, 'monaco.plus.code_search.display_fields.widget'), true);
+    params = { kind: 'editor_config', table: 'widget', description: 'Editor layout', property_value: JSON.stringify({
+        primaryField: 'name', label: 'Custom Editor', icon: 'icon-mail', allowCreate: true,
+        scriptFields: [{ name: 'script', language: 'javascript', scriptKind: 'server' }],
+        headerFields: ['name'], additionalFields: [{ name: 'sys_id', readOnly: true }],
+    }) };
+    assert.equal(api.saveTableProperty().success, true);
+    assert.equal(writes.at(-1).description, 'Editor layout');
+    assert.ok(Object.hasOwn(values, 'monaco.plus.editor.table_config.widget'));
+    assert.equal(JSON.parse(values['monaco.plus.editor.table_config.widget']).label, 'Custom Editor');
+    const writesBefore = writes.length;
+    for (const change of [{ headerFields: ['name', 'script'] }, { additionalFields: ['missing'] }, { icon: 'bad icon' }, { label: false }]) {
+        const config = JSON.parse(values['monaco.plus.editor.table_config.widget']);
+        params.property_value = JSON.stringify({ ...config, ...change });
+        assert.equal(api.saveTableProperty().success, false);
+    }
+    assert.equal(writes.length, writesBefore);
+    params.description = 'x'.repeat(513);
+    assert.equal(api.saveTableProperty().success, false);
+    assert.equal(api.deleteTableProperty().success, true);
+    assert.equal(Object.hasOwn(values, 'monaco.plus.editor.table_config.widget'), false);
     params.kind = 'arbitrary';
     assert.equal(api.deleteTableProperty().success, false);
 });
@@ -1580,6 +1605,7 @@ test('property tables render row saves and remove the saved property only after 
                     { name: 'monaco.plus.code_search.display_fields.widget', value: 'name', description: '', type: 'string' },
                     { name: 'monaco.plus.code_search.display_fields.other', value: 'name', description: '', type: 'string' },
                     { name: 'monaco.plus.assistant.table_config.widget', value: '{"rules":[]}', description: 'Example', type: 'string' },
+                    { name: 'monaco.plus.editor.table_config.sys_script_email', value: '{"primaryField":"name","scriptFields":[],"headerFields":["name"],"additionalFields":[]}', description: 'Email scripts', type: 'string' },
                     { name: 'monaco.plus.update_sets.markdown_display', value: '{"widget":{"display_value":"name","additional_fields":"script"}}', description: '', type: 'string' }
                 ]
             }));
@@ -1605,8 +1631,16 @@ test('property tables render row saves and remove the saved property only after 
     };
     while (frames.length) frames.shift()();
     const cards = roots['wep-sections'].querySelectorAll('.wep-card');
-    assert.equal(cards.length, 3);
+    assert.equal(cards.length, 4);
     const code = cards.find(c => c._prop.kind === 'display_fields'), assistant = cards.find(c => c._prop.kind === 'table_config');
+    const editor = cards.find(c => c._prop.kind === 'editor_config');
+    assert.equal(editor.parentNode.getAttribute('data-feature'), 'Widget Editor+');
+    assert.deepEqual(descendants(editor).filter(n => n.tagName === 'TH').map(n => n.textContent), ['Table', 'Description', 'JSON', 'Actions', 'Updated']);
+    const editorJson = descendants(editor).find(n => n.getAttribute('aria-label') === 'JSON');
+    editorJson.value = '{}'; editorJson.oninput();
+    descendants(editor).find(n => n.getAttribute('aria-label') === 'Save property').onclick(); await tick();
+    assert.equal(requests.filter(r => r.sysparm_name === 'saveTableProperty').at(-1).kind, 'editor_config');
+    assert.equal(requests.filter(r => r.sysparm_name === 'saveTableProperty').at(-1).table, 'sys_script_email');
     assert.deepEqual(descendants(code).filter(n => n.tagName === 'TH').map(n => n.textContent), ['Table', 'Fields', 'Actions', 'Updated']);
     assert.deepEqual(descendants(assistant).filter(n => n.tagName === 'TH').map(n => n.textContent), ['Table', 'Description', 'JSON', 'Actions', 'Updated']);
     assert.ok(cards.every(c => c._prop.name.endsWith('.*')));
@@ -1615,7 +1649,7 @@ test('property tables render row saves and remove the saved property only after 
     assert.ok(jsonFallback.className.includes('wep-json-fallback'));
     assert.equal(jsonFallback.hidden, true); assert.equal(jsonFallback.style.display, 'none');
     assert.equal(assistant.querySelectorAll('.wep-monaco').length, 1);
-    assert.equal(pickers.length, 4);
+    assert.equal(pickers.length, 5);
     assert.ok(pickers.every(p => p.node.type === 'hidden' && p.options.query && !p.enabled));
     const markdown = cards.find(c => c._prop.kind === 'markdown_display');
     assert.deepEqual(descendants(markdown).filter(n => n.tagName === 'TH').map(n => n.textContent), ['Table', 'Display fields', 'Additional fields', 'Actions', 'Updated']);

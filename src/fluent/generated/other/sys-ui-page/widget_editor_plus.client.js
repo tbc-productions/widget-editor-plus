@@ -339,6 +339,102 @@
             },
         ])
 
+        .directive('weSelect2Reference', [
+            '$timeout',
+            function ($timeout) {
+                return {
+                    restrict: 'A',
+                    require: 'ngModel',
+                    link: function (scope, element, attrs, model) {
+                        var field = scope.$eval(attrs.weSelect2Reference),
+                            picker,
+                            timer,
+                            destroyed = false;
+                        var sequence = 0,
+                            renderSequence = 0,
+                            choices = Object.create(null);
+                        var init = $timeout(function () {
+                            var jq = window.$j || window.jQuery;
+                            if (!jq || !jq.fn || !jq.fn.select2) {
+                                scope.referenceErrors[field.name] = 'Reference picker is unavailable. Reload the page.';
+                                return;
+                            }
+                            picker = jq(element[0]);
+                            var initial = model.$viewValue || '';
+                            if (initial) choices[initial] = { id: initial, text: field.displayValue || initial };
+                            picker.val(initial);
+                            picker.select2({
+                                width: field.more ? '29.375rem' : '18rem',
+                                placeholder: 'Select ' + field.label,
+                                allowClear: !field.required,
+                                minimumInputLength: 0,
+                                initSelection: function (_, callback) {
+                                    callback(choices[model.$viewValue] || null);
+                                },
+                                query: function (query) {
+                                    var request = ++sequence;
+                                    $timeout.cancel(timer);
+                                    timer = $timeout(function () {
+                                        scope.referenceErrors[field.name] = '';
+                                        scope
+                                            .searchEditorReferences(field.name, query.term || '', query.page || 1)
+                                            .then(function (data) {
+                                                if (destroyed || request !== sequence) return;
+                                                if (!data.success)
+                                                    scope.referenceErrors[field.name] =
+                                                        data.error || 'Reference lookup failed.';
+                                                (data.results || []).forEach(function (choice) {
+                                                    choices[choice.id] = choice;
+                                                });
+                                                query.callback({ results: data.results || [], more: !!data.has_more });
+                                            });
+                                    }, 250);
+                                },
+                            });
+                            model.$render = function () {
+                                var value = model.$viewValue || '',
+                                    request = ++renderSequence;
+                                picker.select2('data', value ? choices[value] || { id: value, text: value } : null);
+                                if (value && !choices[value]) {
+                                    scope.searchEditorReferences(field.name, '', 1, value).then(function (data) {
+                                        if (destroyed || request !== renderSequence || model.$viewValue !== value)
+                                            return;
+                                        if (data.success && data.results && data.results[0]) {
+                                            choices[value] = data.results[0];
+                                            picker.select2('data', choices[value]);
+                                        }
+                                    });
+                                }
+                            };
+                            model.$render();
+                            picker.on('change.weReference', function () {
+                                if (scope.$eval(attrs.ngDisabled)) return;
+                                var selected = picker.select2('data');
+                                scope.$evalAsync(function () {
+                                    if (selected) choices[selected.id] = selected;
+                                    scope.referenceErrors[field.name] = '';
+                                    model.$setViewValue(selected ? selected.id : '');
+                                    field.displayValue = selected ? selected.text : '';
+                                });
+                            });
+                            scope.$watch(attrs.ngDisabled, function (disabled) {
+                                picker.select2('enable', !disabled);
+                            });
+                        }, 0);
+                        scope.$on('$destroy', function () {
+                            destroyed = true;
+                            $timeout.cancel(init);
+                            $timeout.cancel(timer);
+                            if (picker) {
+                                picker.off('.weReference');
+                                picker.select2('destroy');
+                            }
+                        });
+                    },
+                };
+            },
+        ])
+
         // Directive: we-modal-draggable — Enables dragging a modal dialog by its header. Apply to .we-modal-header.
         .directive('weModalDraggable', [
             function () {
@@ -862,18 +958,10 @@
                 var SYS_ID = _weConfig.sys_id || _params.get('record_sys_id') || _params.get('widget_id') || '';
                 $scope.recordTable = RECORD_TABLE;
                 $scope.isWidgetRecord = RECORD_TABLE === 'sp_widget';
-                $scope.recordLabel =
-                    {
-                        sp_widget: 'Widget',
-                        sys_script_include: 'Script Include',
-                        sp_css: 'Style Sheet',
-                        sys_ui_script: 'UI Script',
-                        sp_angular_provider: 'Angular Provider',
-                        sys_ui_page: 'UI Page',
-                        sp_ng_template: 'Angular HTML Template',
-                    }[RECORD_TABLE] || 'Record';
+                $scope.recordAllowsCreate = $scope.isWidgetRecord;
+                $scope.recordLabel = $scope.isWidgetRecord ? 'Widget' : 'Record';
                 $scope.recordPrimaryField = 'name';
-                $scope.recordTypes = [{ table: 'sp_widget', label: 'Widgets', singular: 'Widget' }];
+                $scope.recordTypes = [{ table: 'sp_widget', label: 'Widgets', singular: 'Widget', allowCreate: true }];
                 var VERSION_ID = _weConfig.version_id || _params.get('version_id') || '';
                 var IS_NEW = _weConfig.is_new !== undefined ? !!_weConfig.is_new : _params.get('new') === '1';
                 var APP_TITLE = 'Widget Editor+';
@@ -1224,6 +1312,16 @@
                 // Roles
                 $scope.rolesList = [];
                 $scope.additionalWidgetFields = [];
+                $scope.referenceErrors = {};
+                $scope.searchEditorReferences = function (field, search, page, value) {
+                    return ajax('getEditorReferenceChoices', {
+                        sys_id: SYS_ID,
+                        field: field,
+                        search: search,
+                        offset: (page - 1) * 20,
+                        value: value || '',
+                    });
+                };
 
                 // Reverted notification
                 $scope.widgetReverted = false;
@@ -1755,22 +1853,11 @@
                     if (w.canWrite === false) {
                         return 'icon-locked';
                     }
-                    switch (w.table) {
-                        case 'sys_script_include':
-                            return 'icon-document-code';
-                        case 'sp_css':
-                            return 'icon-marker';
-                        case 'sys_ui_script':
-                            return 'icon-code';
-                        case 'sp_angular_provider':
-                            return 'icon-console';
-                        case 'sys_ui_page':
-                            return 'icon-application-generic';
-                        case 'sp_ng_template':
-                            return 'icon-layout';
-                        default:
-                            return 'icon-script';
-                    }
+                    if (!w.table || w.table === 'sp_widget') return 'icon-script';
+                    var type = $scope.recordTypes.find(function (entry) {
+                        return entry.table === w.table;
+                    });
+                    return type && type.icon ? type.icon : 'icon-document-code';
                 };
 
                 function _handleListSearchKeydown(event, itemSelector, onEnterFirst) {
@@ -2092,7 +2179,7 @@
                     table = table || RECORD_TABLE;
                     if (
                         !$scope.recordTypes.some(function (type) {
-                            return type.table === table;
+                            return type.table === table && type.allowCreate !== false;
                         })
                     )
                         return;
@@ -2356,7 +2443,14 @@
 
                 function init() {
                     ajax('getEditorRecordTypes', {}).then(function (data) {
-                        if (data.success) $scope.recordTypes = data.types;
+                        if (data.success) {
+                            $scope.recordTypes = data.types;
+                            var type = data.types.find(function (item) {
+                                return item.table === RECORD_TABLE;
+                            });
+                            $scope.recordAllowsCreate = !!type && type.allowCreate !== false;
+                            if (type) $scope.recordLabel = type.singular;
+                        }
                     });
                     if (!SYS_ID) {
                         if (IS_NEW && $scope.isWidgetRecord) {

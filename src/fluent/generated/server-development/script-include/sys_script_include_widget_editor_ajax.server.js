@@ -23,90 +23,133 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
 
     RELATED_CELL_MAX_LENGTH: 100,
 
+    EDITOR_CONFIG_PREFIX: 'monaco.plus.editor.table_config.',
+
     _getEditorProfiles: function () {
+        var profiles = Object.create(null);
+        var properties = new GlideRecord('sys_properties');
+        properties.addQuery('name', 'STARTSWITH', this.EDITOR_CONFIG_PREFIX);
+        properties.orderBy('name');
+        properties.query();
+        while (properties.next()) {
+            var name = String(properties.getValue('name') || '');
+            var table = name.slice(this.EDITOR_CONFIG_PREFIX.length);
+            try {
+                profiles[table] = this._parseEditorConfig(
+                    table,
+                    JSON.parse(String(properties.getValue('value') || '')),
+                    true
+                );
+            } catch (error) {
+                gs.warn('WidgetEditorAjax: invalid configuration ' + name + ': ' + error.message);
+            }
+        }
+        return profiles;
+    },
+
+    _parseEditorConfig: function (table, config, skipMissingFields) {
+        if (!/^[a-z][a-z0-9_]*$/i.test(table) || table === 'sp_widget')
+            throw new Error('Invalid non-widget table: ' + table);
+        var probe = new GlideRecordSecure(table);
+        if (!probe.isValid()) throw new Error('Invalid table: ' + table);
+        function object(value, allowed) {
+            if (
+                !value ||
+                typeof value !== 'object' ||
+                Array.isArray(value) ||
+                Object.keys(value).some(function (key) {
+                    return allowed.indexOf(key) === -1;
+                })
+            )
+                throw new Error('Invalid editor configuration schema.');
+        }
+        object(config, [
+            'primaryField',
+            'label',
+            'icon',
+            'allowCreate',
+            'supportsEs12',
+            'scriptFields',
+            'headerFields',
+            'additionalFields',
+        ]);
+        if (typeof config.primaryField !== 'string' || !probe.isValidField(config.primaryField))
+            throw new Error('Invalid primaryField.');
+        if (config.label !== undefined && (typeof config.label !== 'string' || !config.label.trim()))
+            throw new Error('label must be a non-empty string.');
+        ['allowCreate', 'supportsEs12'].forEach(function (key) {
+            if (config[key] !== undefined && typeof config[key] !== 'boolean')
+                throw new Error(key + ' must be a boolean.');
+        });
+        if (config.icon !== undefined && (typeof config.icon !== 'string' || !/^icon-[a-z0-9-]+$/.test(config.icon)))
+            throw new Error('icon must be a Retina icon class.');
+        var fields = [],
+            seen = Object.create(null);
+        ['headerFields', 'additionalFields', 'scriptFields'].forEach(function (group) {
+            var entries = config[group] === undefined && group !== 'scriptFields' ? [] : config[group];
+            if (!Array.isArray(entries) || (group === 'scriptFields' && !entries.length))
+                throw new Error(group + ' must be ' + (group === 'scriptFields' ? 'a non-empty' : 'an') + ' array.');
+            entries.forEach(function (entry) {
+                if (typeof entry === 'string' && group !== 'scriptFields') entry = { name: entry };
+                object(
+                    entry,
+                    group === 'scriptFields'
+                        ? ['name', 'language', 'scriptKind', 'readOnly']
+                        : ['name', 'label', 'readOnly', 'multiline']
+                );
+                if (typeof entry.name !== 'string' || !/^[a-z][a-z0-9_]*$/i.test(entry.name))
+                    throw new Error('Invalid field: ' + table + '.' + entry.name);
+                if (seen[entry.name]) throw new Error('Duplicate field: ' + entry.name);
+                seen[entry.name] = group;
+                ['readOnly', 'multiline'].forEach(function (key) {
+                    if (entry[key] !== undefined && typeof entry[key] !== 'boolean')
+                        throw new Error(key + ' must be a boolean.');
+                });
+                if (entry.label !== undefined && (typeof entry.label !== 'string' || !entry.label.trim()))
+                    throw new Error('label must be a non-empty string.');
+                if (!probe.isValidField(entry.name)) {
+                    // Optional fields vary between instances, as with the original editor profiles.
+                    if (skipMissingFields) return;
+                    throw new Error('Invalid field: ' + table + '.' + entry.name);
+                }
+                var def = { name: entry.name };
+                if (entry.label !== undefined) def.shortLabel = entry.label;
+                if (entry.readOnly) def.readOnly = true;
+                if (entry.multiline !== undefined) def.multiline = entry.multiline;
+                if (group === 'additionalFields') def.more = true;
+                if (group === 'scriptFields') {
+                    if (
+                        ['javascript', 'html', 'css', 'scss', 'json', 'xml', 'plaintext'].indexOf(entry.language) === -1
+                    )
+                        throw new Error('Invalid editor language for ' + entry.name + '.');
+                    if (
+                        (entry.language === 'javascript' || entry.scriptKind !== undefined) &&
+                        ['client', 'server'].indexOf(entry.scriptKind) === -1
+                    )
+                        throw new Error('scriptKind must be client or server for ' + entry.name + '.');
+                    def.language = entry.language;
+                    def.scriptKind = entry.scriptKind || '';
+                }
+                if (entry.name === config.primaryField) def.required = true;
+                fields.push(def);
+            });
+        });
+        if (seen[config.primaryField] !== 'headerFields') throw new Error('primaryField must appear in headerFields.');
+        if (
+            !fields.some(function (field) {
+                return field.language;
+            })
+        )
+            throw new Error('No available script fields for ' + table + '.');
+        var label = config.label === undefined ? String(probe.getLabel()) : config.label.trim();
         return {
-            sys_script_include: {
-                label: 'Script Includes',
-                singular: 'Script Include',
-                primary: 'name',
-                fields: [
-                    { name: 'name', required: true },
-                    { name: 'active', type: 'boolean' },
-                    { name: 'client_callable', shortLabel: 'Client', type: 'boolean' },
-                    { name: 'sandbox_callable', shortLabel: 'Sandbox', type: 'boolean' },
-                    { name: 'access', type: 'choice' },
-                    { name: 'description', multiline: true, more: true },
-                    { name: 'api_name', readOnly: true, more: true },
-                    { name: 'mobile_callable', type: 'boolean', more: true },
-                    { name: 'sys_policy', readOnly: true, more: true },
-                    { name: 'script', language: 'javascript', scriptKind: 'server' },
-                ],
-            },
-            sp_css: {
-                label: 'CSS',
-                singular: 'Style Sheet',
-                primary: 'name',
-                fields: [
-                    { name: 'name', required: true },
-                    { name: 'active', type: 'boolean' },
-                    { name: 'turn_off_scss_compilation', type: 'boolean', more: true },
-                    { name: 'css', language: 'scss' },
-                ],
-            },
-            sys_ui_script: {
-                label: 'UI Scripts',
-                singular: 'UI Script',
-                primary: 'name',
-                fields: [
-                    { name: 'name', required: true },
-                    { name: 'active', type: 'boolean' },
-                    { name: 'global', type: 'boolean' },
-                    { name: 'ui_type', type: 'choice' },
-                    { name: 'description', multiline: true, more: true },
-                    { name: 'script', language: 'javascript', scriptKind: 'client' },
-                ],
-            },
-            sp_angular_provider: {
-                label: 'Angular Providers',
-                singular: 'Angular Provider',
-                primary: 'name',
-                fields: [
-                    { name: 'name', required: true },
-                    { name: 'active', type: 'boolean' },
-                    { name: 'type', type: 'choice' },
-                    { name: 'script', language: 'javascript', scriptKind: 'client' },
-                ],
-            },
-            sys_ui_page: {
-                label: 'UI Pages',
-                singular: 'UI Page',
-                primary: 'name',
-                fields: [
-                    { name: 'name', required: true },
-                    { name: 'active', type: 'boolean' },
-                    { name: 'category', type: 'choice' },
-                    { name: 'direct', type: 'boolean' },
-                    { name: 'description', multiline: true, more: true },
-                    { name: 'html', language: 'html' },
-                    { name: 'client_script', language: 'javascript', scriptKind: 'client' },
-                    {
-                        name: 'processing_script',
-                        language: 'javascript',
-                        scriptKind: 'server',
-                    },
-                ],
-            },
-            sp_ng_template: {
-                label: 'Angular HTML templates',
-                singular: 'Angular HTML Template',
-                primary: 'id',
-                fields: [
-                    { name: 'id', required: true },
-                    { name: 'active', type: 'boolean' },
-                    { name: 'sp_widget', type: 'reference', readOnly: true },
-                    { name: 'template', language: 'html' },
-                ],
-            },
+            label: label,
+            singular: label,
+            primary: config.primaryField,
+            icon: config.icon || 'icon-document-code',
+            allowCreate: config.allowCreate === true,
+            supportsEs12: config.supportsEs12 === true,
+            fields: fields,
         };
     },
 
@@ -118,7 +161,13 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         var types = [{ table: 'sp_widget', label: 'Widgets', singular: 'Widget' }];
         var profiles = this._getEditorProfiles();
         Object.keys(profiles).forEach(function (table) {
-            types.push({ table: table, label: profiles[table].label, singular: profiles[table].singular });
+            types.push({
+                table: table,
+                label: profiles[table].label,
+                singular: profiles[table].singular,
+                icon: profiles[table].icon,
+                allowCreate: profiles[table].allowCreate,
+            });
         });
         return this._answer({ success: true, types: types });
     },
@@ -173,12 +222,103 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 def[key] = source[key];
             });
             def.label = String(element.getLabel());
-            def.type = def.type || 'string';
+            var descriptor = element.getED();
+            var type = String(descriptor.getInternalType());
+            def.type =
+                type === 'boolean' || type === 'reference'
+                    ? type
+                    : Number(descriptor.getChoice()) > 0
+                      ? 'choice'
+                      : 'string';
+            if (def.type === 'reference') def.reference = String(descriptor.getReference() || '');
+            if (def.type !== 'string') def.multiline = false;
+            if (element.isMandatory && element.isMandatory()) def.required = true;
+            if (def.multiline === undefined && !def.language && def.type === 'string')
+                def.multiline = Number(descriptor.getLength()) > 255;
             def.canWrite = !def.readOnly && element.canWrite();
             if (def.type === 'choice') def.choices = this._getEditorChoices(gr.getTableName(), def.name);
             defs.push(def);
         }
         return defs;
+    },
+
+    _editorReferenceRecord: function (record, field, value) {
+        var descriptor = record.getElement(field).getED();
+        var table = String(descriptor.getReference() || '');
+        if (!/^[a-z][a-z0-9_]*$/i.test(table)) throw new Error('Invalid reference field.');
+        var target = new GlideRecordSecure(table);
+        if (!target.isValid()) throw new Error('Invalid reference table.');
+        var qualifier = String(descriptor.getReferenceQualifier() || '');
+        // shortcut: scripted qualifiers need the native form until context-aware qualifier evaluation is supported.
+        if (/javascript:/i.test(qualifier)) throw new Error('Use the native form for scripted reference qualifiers.');
+        if (value) {
+            if (
+                !/^[a-f0-9]{32}$/i.test(value) ||
+                !target.get(value) ||
+                !target.canRead() ||
+                (qualifier && !GlideFilter.checkRecord(target, qualifier, true))
+            )
+                throw new Error('Invalid reference for ' + record.getElement(field).getLabel() + '.');
+        } else if (qualifier) target.addEncodedQuery(qualifier);
+        return target;
+    },
+
+    getEditorReferenceChoices: function () {
+        try {
+            var table = this._getEditorTable(),
+                profiles = this._getEditorProfiles();
+            if (!Object.prototype.hasOwnProperty.call(profiles, table)) throw new Error('Record type not supported.');
+            var record = new GlideRecordSecure(table),
+                sysId = String(this.getParameter('sys_id') || '');
+            if (sysId) {
+                if (!/^[a-f0-9]{32}$/i.test(sysId) || !record.get(sysId) || !record.canRead())
+                    throw new Error('Record not found or access denied.');
+            } else {
+                record.newRecord();
+                if (!profiles[table].allowCreate || !record.canCreate())
+                    throw new Error('Record creation is not allowed.');
+            }
+            var name = String(this.getParameter('field') || '');
+            var def = this._getEditorFieldDefs(record, profiles[table]).filter(function (field) {
+                return field.name === name && field.type === 'reference';
+            })[0];
+            if (!def) throw new Error('Reference field is not available.');
+            var value = String(this.getParameter('value') || '');
+            var target = this._editorReferenceRecord(record, name, value);
+            var display = String(target.getDisplayName());
+            if (!target.isValidField(display)) throw new Error('Reference display field is not available.');
+            if (value)
+                return this._answer({
+                    success: true,
+                    results: target.getElement(display).canRead()
+                        ? [{ id: target.getUniqueValue(), text: target.getDisplayValue() || value }]
+                        : [],
+                    has_more: false,
+                });
+            var search = String(this.getParameter('search') || '');
+            if (search) target.addQuery(display, 'CONTAINS', search);
+            var offset = Math.max(0, parseInt(this.getParameter('offset'), 10) || 0);
+            target.orderBy(display);
+            target.chooseWindow(offset, offset + 21);
+            target.query();
+            var results = [],
+                scanned = 0,
+                more = false;
+            while (target.next()) {
+                if (scanned++ === 20) {
+                    more = true;
+                    break;
+                }
+                if (!target.canRead() || !target.getElement(display).canRead()) continue;
+                results.push({
+                    id: target.getUniqueValue(),
+                    text: target.getDisplayValue() || target.getUniqueValue(),
+                });
+            }
+            return this._answer({ success: true, results: results, has_more: more });
+        } catch (error) {
+            return this._answer({ success: false, error: error.message || 'Reference lookup failed.' });
+        }
     },
 
     _editorValue: function (gr, def) {
@@ -272,6 +412,8 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             return this._answer({ success: false, error: 'An existing record is required.' });
         var gr = new GlideRecordSecure(table);
         if (isNew) {
+            if (!profiles[table].allowCreate)
+                return this._answer({ success: false, error: 'Creation is disabled for this record type.' });
             gr.newRecord();
             if (!gr.canCreate())
                 return this._answer({
@@ -318,9 +460,11 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         ) {
             return { success: false, error: 'Record not found or access denied.' };
         }
-        values.es12_supported = editors.some(function (editor) {
-            return editor.scriptKind === 'server';
-        });
+        values.es12_supported =
+            profile.supportsEs12 &&
+            editors.some(function (editor) {
+                return editor.scriptKind === 'server';
+            });
         values.es12 = false;
         values.es12_record_exists = false;
         if (sysId && values.es12_supported) {
@@ -382,6 +526,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 throw new Error('Invalid save payload.');
             var gr = new GlideRecordSecure(table);
             if (isNew) {
+                if (!profiles[table].allowCreate) throw new Error('Creation is disabled for this record type.');
                 gr.newRecord();
                 if (!gr.canCreate()) throw new Error('You do not have permission to create this record type.');
             } else if (!gr.get(sysId) || !gr.canRead() || !gr.canWrite())
@@ -426,6 +571,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                     })
                 )
                     throw new Error('Invalid choice for ' + def.label + '.');
+                if (def.type === 'reference' && value) this._editorReferenceRecord(gr, name, value);
                 var element = gr.getElement(name);
                 if (element.isMandatory && element.isMandatory() && (value === '' || value === null))
                     throw new Error(def.label + ' is required.');
@@ -2338,6 +2484,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 !record.get(sysId) ||
                 !record.canRead() ||
                 !record.canWrite() ||
+                !profiles[table].supportsEs12 ||
                 (record.isValidField('sys_policy') && record.getValue('sys_policy')) ||
                 !this._getEditorFieldDefs(record, profiles[table]).some(function (def) {
                     return def.scriptKind === 'server' && def.canWrite;

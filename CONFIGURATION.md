@@ -28,9 +28,10 @@ Use **Open…** and click the dotted record type in the title to choose a type:
 | UI Scripts | `sys_ui_script` | Script |
 | Angular Providers | `sp_angular_provider` | Script |
 | UI Pages | `sys_ui_page` | HTML/Jelly, client script and processing script |
-| Angular HTML templates | `sp_ng_template` | HTML template |
+| Angular Templates | `sp_ng_template` | HTML template |
+| Email Scripts | `sys_script_email` | Script |
 
-**New** opens an unsaved record of the selected type, using dictionary defaults and create permissions. Use the toolbar **Save** to create it; per-pane saves and local draft recovery become available after the first save. The parent widget of an Angular HTML template is read-only.
+**New** opens an unsaved record of the selected type, using dictionary defaults and create permissions. Use the toolbar **Save** to create it; per-pane saves and local draft recovery become available after the first save. The parent widget of an Angular HTML template can be selected using Select2.
 
 Save individual code panes or use the toolbar **Save** for all changed fields. **Revert** in the Unsaved changes popover discards this tab’s edits after confirmation. Saves respect record and field permissions, protection policies and validation. If a changed field also changed in ServiceNow, saving stops and retains your edits for comparison.
 
@@ -45,6 +46,31 @@ ui_page.do?sys_id=8b2e70458373fe1070b8b5dfeeaad35e&record_table=sys_ui_page&reco
 ```
 
 These links edit the record; they do not execute the target UI Page or script.
+
+### Table configuration
+
+In **Properties → Widget Editor+**, edit `monaco.plus.editor.table_config.*` to configure non-widget record types. Each row saves one `sys_properties` record, with up to 4,000 characters of JSON; its table-name suffix selects the table. The supplied properties cover the seven non-widget types above and preserve local changes on upgrades. Removing a row removes that type from the editor.
+
+For example, `monaco.plus.editor.table_config.sys_script_email`:
+
+```json
+{
+  "primaryField": "name",
+  "icon": "icon-envelope-subscribe",
+  "allowCreate": true,
+  "scriptFields": [
+    { "name": "script", "language": "javascript", "scriptKind": "server" }
+  ],
+  "headerFields": ["name", "new_lines_to_html"],
+  "additionalFields": [{ "name": "sys_policy", "readOnly": true }]
+}
+```
+
+Arrays set field order. `scriptFields` defines the Monaco panes; JavaScript fields require `scriptKind: "client"` or `"server"`. `headerFields` and `additionalFields` accept field-name strings or objects with `name` and optional `label`, `readOnly` and `multiline` options. Additional fields appear in **More fields**. Application scope and available founder details always appear there automatically, even when `additionalFields` is empty; neither needs a config entry. Labels, boolean/choice controls, mandatory status and bounded-string lengths come from the dictionary; label overrides retain the dictionary label in the tooltip. Reference fields use Select2 to search readable records and save their sys_ids; field permissions and explicit `readOnly` settings still apply. Static dictionary reference qualifiers are honoured. Scripted qualifiers require the native form.
+
+`primaryField` must appear in `headerFields` and supplies the record title and picker search/sort field. Table names use their singular dictionary label unless the optional top-level `label` overrides it, for example `"label": "Angular Template"`. `icon` accepts a Retina class and defaults to `icon-document-code`. `allowCreate` defaults to `false`; include the required fields before enabling creation. `supportsEs12` also defaults to `false` and should only be enabled for tables that support per-record ES12 settings.
+
+Only administrators can save configuration. Properties rejects invalid tables, fields, duplicate placements and unsupported options. At runtime, fields unavailable on the instance are skipped; the primary field and at least one code field must exist. Invalid properties disable their table and log a warning. Record and field permissions, protection policies and save-conflict checks still apply. Reload the editor after configuration changes.
 
 ## Debug Menu
 
@@ -87,6 +113,7 @@ Admins can edit settings in **Widget Editor+ → Properties**.
 | `monaco.plus.update_sets.markdown_max_list_levels` | `9` | Maximum bullet indentation levels, counting the top level as 1. Records at the limit and deeper share the final level, formatted as name, additional display values, emoji and bold record type. Invalid or non-positive values fall back to 9. |
 | `monaco.plus.scss.variables` | `{ "$breakpoint-xs": "480px", ... }` | JSON string of SCSS variable name-value pairs for autocomplete suggestions. |
 | `monaco.plus.widget.deprecated` | `descriptionLIKEdeprecated` | Encoded query string evaluated against `sp_widget` to flag widgets as deprecated. |
+| `monaco.plus.editor.table_config.<table_name>` | *(JSON editor profiles)* | Ordered code panes, header and additional fields, Retina icon and creation options for non-widget types. |
 | `monaco.plus.widget.fields` | *(empty)* | Comma-separated list of additional fields on `sp_widget` to display inside Widget Editor+. |
 | `monaco.plus.widget.related_list_exclusions` | *(empty)* | Comma-separated list of `sys_ui_related_list_entry.related_list` values to exclude from related lists. |
 

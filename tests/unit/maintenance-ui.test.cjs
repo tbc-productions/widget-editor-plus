@@ -16,9 +16,9 @@ let browser;
 before(async () => { browser = await chromium.launch({ headless: true }); });
 after(async () => { await browser?.close(); });
 
-async function mount(h = harness(), width = 1280, fullProperties = false, {holdProperties = false, holdHierarchy = false, dark = false, propertiesError = false} = {}) {
+async function mount(h = harness(), width = 1280, fullProperties = false, {holdProperties = false, holdHierarchy = false, dark = false, propertiesError = false, editorProperties = []} = {}) {
     const page = await browser.newPage({ viewport: { width, height: 900 } });
-    const errors = [];
+    const errors = [], requests = [];
     page.on('pageerror', error => errors.push(error.message));
     let releaseProperties;
     const ready = new Promise(resolve => { releaseProperties = resolve; });
@@ -28,14 +28,16 @@ async function mount(h = harness(), width = 1280, fullProperties = false, {holdP
     await page.route('http://widget-editor.test/**', async route => {
         if (route.request().method() === 'POST') {
             const { method, params } = route.request().postDataJSON();
+            requests.push({ method, params });
             if (method === 'getProperties' && holdProperties) await ready;
             if (method === 'getRules' && holdHierarchy) {
                 hierarchyRequested();
                 await ready;
             }
             const result = method === 'getProperties'
-                ? propertiesError ? {success:false,error:'Unable to load properties.'} : { success: true, properties: [{ name: 'monaco.plus.record_limit', description: 'Record limit.', value: '500', type: 'integer' }].concat(holdHierarchy ? [{name:'monaco.plus.update_sets.markdown_groups',description:'Table hierarchy.',value:'{}',type:'string'}] : []) }
+                ? propertiesError ? {success:false,error:'Unable to load properties.'} : { success: true, properties: [{ name: 'monaco.plus.record_limit', description: 'Record limit.', value: '500', type: 'integer' }].concat(editorProperties).concat(holdHierarchy ? [{name:'monaco.plus.update_sets.markdown_groups',description:'Table hierarchy.',value:'{}',type:'string'}] : []) }
                 : method === 'getRules' && holdHierarchy ? {success:true,config:{},rules:{groups:Array.from({length:35},(_,i)=>({id:'group_'+i,table:'table_'+i,label:'Table '+i,children:[]}))}}
+                : method === 'saveTableProperty' && editorProperties.length ? {success:true,value:params.property_value}
                 : h.call(method, params);
             await route.fulfill({ contentType: 'application/json', body: JSON.stringify(result) });
         } else await route.fulfill({ contentType: 'text/html; charset=utf-8', body: '<style>' + style + theme + '</style>' + (fullProperties
@@ -55,8 +57,41 @@ async function mount(h = harness(), width = 1280, fullProperties = false, {holdP
     await page.goto('http://widget-editor.test/');
     if (fullProperties) await page.addScriptTag({ content: propertiesScript });
     await page.addScriptTag({ content: script });
-    return { page, h, errors, releaseProperties, hierarchyStarted };
+    return { page, h, errors, requests, releaseProperties, hierarchyStarted };
 }
+
+test('editor table properties use the Widget Editor+ JSON table layout and save mixed field entries', async () => {
+    const file = 'src/fluent/generated/properties/system-property/sys_properties_widget_editor_table_config.now.ts';
+    const property = {
+        name: readFluentField(file, 'name', 'editorTableConfigSysScriptEmailProperty'),
+        value: readFluentField(file, 'value', 'editorTableConfigSysScriptEmailProperty'),
+        description: 'Email Scripts', type: 'string',
+    };
+    for (const width of [1280, 390]) {
+        const { page, errors, requests } = await mount(harness(), width, true, { editorProperties: [property] });
+        try {
+            const section = page.locator('section[data-feature="Widget Editor+"]');
+            const card = section.locator('.wep-card').filter({ has: page.getByRole('heading', { name: 'monaco.plus.editor.table_config.*', exact: true }) });
+            await expect(card).toBeVisible();
+            assert.deepEqual(await card.locator('th').allTextContents(), ['Table', 'Description', 'JSON', 'Actions', 'Updated']);
+            const json = card.getByLabel('JSON', { exact: true });
+            await expect(json).toBeVisible();
+            assert.deepEqual(JSON.parse(await json.inputValue()).headerFields, ['name', 'new_lines_to_html']);
+            const config = JSON.parse(property.value);
+            config.headerFields = ['name', { name: 'new_lines_to_html', label: 'HTML' }];
+            await json.fill(JSON.stringify(config, null, 2));
+            await card.getByRole('button', { name: 'Save property', exact: true }).click();
+            await expect(card.locator('.wep-status')).toContainText('Saved.');
+            const save = requests.find(request => request.method === 'saveTableProperty');
+            assert.equal(save.params.kind, 'editor_config');
+            assert.equal(save.params.table, 'sys_script_email');
+            assert.deepEqual(JSON.parse(save.params.property_value).headerFields, config.headerFields);
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+            assert.deepEqual(errors, []);
+            if (width === 1280) await page.screenshot({ path: '/tmp/widget-editor-table-properties.png', fullPage: true });
+        } finally { await page.close(); }
+    }
+});
 
 test('maintenance is the final Properties section, with shared navigation, search and keyboard accordions', async () => {
     const { page, errors } = await mount(harness(), 390, true);

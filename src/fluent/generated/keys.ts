@@ -464,6 +464,62 @@ declare global {
                         table: 'sys_app_module'
                         id: 'bc7f98e35baa4911b82d59b8365a264a'
                     }
+                    'widget-editor-editor-table-config-sp-angular-provider': {
+                        table: 'sys_properties'
+                        id: '8f93e78e1cc2498088588417e09efcec'
+                    }
+                    'widget-editor-editor-table-config-sp-angular-provider-category': {
+                        table: 'sys_properties_category_m2m'
+                        id: 'f063a921577844d596e0443b9b9c05e1'
+                    }
+                    'widget-editor-editor-table-config-sp-css': {
+                        table: 'sys_properties'
+                        id: 'cf599ad5abf646faafe263ddd72f76cd'
+                    }
+                    'widget-editor-editor-table-config-sp-css-category': {
+                        table: 'sys_properties_category_m2m'
+                        id: '31374d829dd94615a4e2892199d119f8'
+                    }
+                    'widget-editor-editor-table-config-sp-ng-template': {
+                        table: 'sys_properties'
+                        id: '06120eddfe4b4f5ab69cf2ec0b3baab1'
+                    }
+                    'widget-editor-editor-table-config-sp-ng-template-category': {
+                        table: 'sys_properties_category_m2m'
+                        id: '4a9b2f3823704cc8834fe89b55e23b0d'
+                    }
+                    'widget-editor-editor-table-config-sys-script-email': {
+                        table: 'sys_properties'
+                        id: 'b4181f8cee9c41e79bfbf506c03e219a'
+                    }
+                    'widget-editor-editor-table-config-sys-script-email-category': {
+                        table: 'sys_properties_category_m2m'
+                        id: 'ca79856803ee48369b03d2279f854a43'
+                    }
+                    'widget-editor-editor-table-config-sys-script-include': {
+                        table: 'sys_properties'
+                        id: 'acdeab7ffc2248008de4000c36204fc4'
+                    }
+                    'widget-editor-editor-table-config-sys-script-include-category': {
+                        table: 'sys_properties_category_m2m'
+                        id: 'eac2a106dadb43c3b196df1358a0f5c5'
+                    }
+                    'widget-editor-editor-table-config-sys-ui-page': {
+                        table: 'sys_properties'
+                        id: 'b016444e63b94e8dae4b3c210b854f5b'
+                    }
+                    'widget-editor-editor-table-config-sys-ui-page-category': {
+                        table: 'sys_properties_category_m2m'
+                        id: '1b1e1060646b48f7aa080fc1fe0eceae'
+                    }
+                    'widget-editor-editor-table-config-sys-ui-script': {
+                        table: 'sys_properties'
+                        id: '7561541219cd40d1894a78f08d127790'
+                    }
+                    'widget-editor-editor-table-config-sys-ui-script-category': {
+                        table: 'sys_properties_category_m2m'
+                        id: 'a2e2df1372244376a55f03a1236aae62'
+                    }
                     'widget-editor-group-end-module': {
                         table: 'sys_app_module'
                         id: 'd2a550f6aa7f404a8c8031f910e40563'

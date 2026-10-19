@@ -1683,7 +1683,11 @@ WidgetEditorMarkdownAjax.prototype = Object.extendsObject(AbstractAjaxProcessor,
                 error: 'Invalid Widget Editor+ property.',
             });
         }
-        if (/^monaco\.plus\.(?:code_search\.display_fields\.|assistant\.table_config\.)/.test(name)) {
+        if (
+            /^monaco\.plus\.(?:code_search\.display_fields\.|assistant\.table_config\.|editor\.table_config\.)/.test(
+                name
+            )
+        ) {
             return this._answer({
                 success: false,
                 error: 'Use the table configuration editor.',
@@ -1786,6 +1790,7 @@ WidgetEditorMarkdownAjax.prototype = Object.extendsObject(AbstractAjaxProcessor,
         if (kind === 'markdown_display') return this.DISPLAY_PROPERTY + '.';
         if (kind === 'display_fields') return 'monaco.plus.code_search.display_fields.';
         if (kind === 'table_config') return 'monaco.plus.assistant.table_config.';
+        if (kind === 'editor_config') return 'monaco.plus.editor.table_config.';
         throw new Error('Invalid property family.');
     },
     _requireConfigTable: function (table) {
@@ -1885,7 +1890,7 @@ WidgetEditorMarkdownAjax.prototype = Object.extendsObject(AbstractAjaxProcessor,
             var description = String(this.getParameter('description') || '');
             if (kind !== 'markdown_display' && value.length > 4000)
                 throw new Error('Property value exceeds 4000 characters.');
-            if (kind === 'table_config' && description.length > 512)
+            if ((kind === 'table_config' || kind === 'editor_config') && description.length > 512)
                 throw new Error('Description exceeds 512 characters.');
             if (kind === 'display_fields') {
                 var self = this,
@@ -1916,6 +1921,8 @@ WidgetEditorMarkdownAjax.prototype = Object.extendsObject(AbstractAjaxProcessor,
                 var error = this._validateDisplayConfig(configs);
                 if (error) throw new Error(error);
                 value = JSON.stringify(display, null, 4);
+            } else if (kind === 'editor_config') {
+                new global.WidgetEditorAjax()._parseEditorConfig(table, JSON.parse(value));
             } else this._validateAssistantConfig(table, JSON.parse(value));
             var name = prefix + table,
                 property = new GlideRecordSecure('sys_properties');
@@ -1928,7 +1935,7 @@ WidgetEditorMarkdownAjax.prototype = Object.extendsObject(AbstractAjaxProcessor,
                 property.setValue('write_roles', 'admin');
                 property.setValue('ignore_cache', true);
             }
-            if (kind === 'table_config') property.setValue('description', description);
+            if (kind === 'table_config' || kind === 'editor_config') property.setValue('description', description);
             property.setValue('value', value);
             if (!(exists ? property.update() : property.insert())) throw new Error('Could not save property.');
             this._ensurePropertyCategory(property);

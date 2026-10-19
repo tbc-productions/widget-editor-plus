@@ -280,7 +280,7 @@
             if (name.indexOf('monaco.plus.assistant.') === 0) return 'Assistant+';
             if (name.indexOf('monaco.plus.code_search.') === 0) return 'Code Search+';
             var other = name.match(/^monaco\.plus\.([a-z0-9_]+)\./);
-            if (other && ['widget', 'css', 'scss'].indexOf(other[1]) === -1) {
+            if (other && ['widget', 'editor', 'css', 'scss'].indexOf(other[1]) === -1) {
                 return (
                     other[1].replace(/_/g, ' ').replace(/\b\w/g, function (c) {
                         return c.toUpperCase();
@@ -291,7 +291,11 @@
         }
         function isJsonProperty(property) {
             if (property.name === 'monaco.plus.update_sets.markdown_display') return true;
-            if (/^monaco\.plus\.(?:assistant\.table_config\.|css\.variables$|scss\.variables$)/.test(property.name))
+            if (
+                /^monaco\.plus\.(?:(?:assistant|editor)\.table_config\.|css\.variables$|scss\.variables$)/.test(
+                    property.name
+                )
+            )
                 return true;
             try {
                 var value = JSON.parse(property.value);
@@ -605,17 +609,18 @@
             return timestamp;
         }
         function tableProperties(body, family) {
-            var assistant = family.kind === 'table_config',
+            var editorConfig = family.kind === 'editor_config',
+                jsonConfig = family.kind === 'table_config' || editorConfig,
                 markdown = family.kind === 'markdown_display';
             var table = el(
                 'table',
                 'table table-striped wep-properties-table wep-config-table' +
-                    (assistant ? ' wep-assistant-config-table' : '')
+                    (jsonConfig ? ' wep-assistant-config-table' : '')
             );
             var head = el('thead'),
                 headings = el('tr'),
                 rows = el('tbody');
-            (assistant
+            (jsonConfig
                 ? ['Table', 'Description', 'JSON', 'Actions', 'Updated']
                 : markdown
                   ? ['Table', 'Display fields', 'Additional fields', 'Actions', 'Updated']
@@ -651,7 +656,7 @@
                 row.appendChild(nameCell);
                 var description = el(
                     markdown ? 'input' : 'textarea',
-                    'form-control' + (assistant ? ' wep-description-input' : '')
+                    'form-control' + (jsonConfig ? ' wep-description-input' : '')
                 );
                 description.rows = 2;
                 var displayConfig = markdown && property ? JSON.parse(property.value) : {};
@@ -661,29 +666,31 @@
                     description.placeholder = 'name,short_description';
                     description.title = 'Use commas for primary fallbacks, or periods to join fields with a period.';
                 }
-                if (assistant) description.setAttribute('maxlength', '512');
-                var descriptionCounter = markdown ? null : characterCount(assistant ? 512 : 4000);
+                if (jsonConfig) description.setAttribute('maxlength', '512');
+                var descriptionCounter = markdown ? null : characterCount(jsonConfig ? 512 : 4000);
                 if (descriptionCounter) description.setAttribute('aria-describedby', descriptionCounter.id);
-                if (assistant || markdown) {
+                if (jsonConfig || markdown) {
                     var descCell = el('td');
                     descCell.appendChild(description);
                     if (descriptionCounter) descCell.appendChild(descriptionCounter);
                     row.appendChild(descCell);
                 }
                 var input = el(
-                    assistant ? 'textarea' : 'input',
-                    'form-control' + (assistant ? ' wep-json-fallback' : '')
+                    jsonConfig ? 'textarea' : 'input',
+                    'form-control' + (jsonConfig ? ' wep-json-fallback' : '')
                 );
-                input.rows = assistant ? 6 : 2;
+                input.rows = jsonConfig ? 6 : 2;
                 input.value = markdown
                     ? displayConfig.additional_fields || ''
                     : property
                       ? property.value
-                      : assistant
-                        ? '{"rules":[],"pickerFields":[]}'
+                      : jsonConfig
+                        ? editorConfig
+                            ? '{"primaryField":"name","scriptFields":[{"name":"script","language":"javascript","scriptKind":"server"}],"headerFields":["name"],"additionalFields":[]}'
+                            : '{"rules":[],"pickerFields":[]}'
                         : '';
-                input.setAttribute('aria-label', assistant ? 'JSON' : markdown ? 'Additional fields' : 'Fields');
-                if (!assistant) input.placeholder = 'name,description';
+                input.setAttribute('aria-label', jsonConfig ? 'JSON' : markdown ? 'Additional fields' : 'Fields');
+                if (!jsonConfig) input.placeholder = 'name,description';
                 var counter = markdown ? null : characterCount();
                 if (counter) input.setAttribute('aria-describedby', counter.id);
                 valueCell.appendChild(input);
@@ -715,7 +722,7 @@
                         !name.value.trim() ||
                         (!markdown && propertyValue().length > 4000) ||
                         (markdown && !description.value.trim()) ||
-                        (assistant && description.value.length > 512);
+                        (jsonConfig && description.value.length > 512);
                     remove.disabled = busy;
                 }
                 function pending(value) {
@@ -734,7 +741,7 @@
                         status(note, 'This table already has a row.', 'error');
                         return;
                     }
-                    if (assistant) {
+                    if (jsonConfig) {
                         try {
                             JSON.parse(input.value);
                         } catch (e) {
@@ -748,7 +755,7 @@
                         kind: family.kind,
                         table: target,
                         property_value: propertyValue(),
-                        description: assistant ? description.value : '',
+                        description: jsonConfig ? description.value : '',
                     })
                         .then(function (result) {
                             if (!saved) {
@@ -845,11 +852,11 @@
                     description.oninput =
                     input.oninput =
                         function () {
-                            if (assistant) resizePlainTextarea(description);
+                            if (jsonConfig) resizePlainTextarea(description);
                             refresh();
                             status(note, 'Unsaved changes', 'dirty');
                         };
-                if (assistant) {
+                if (jsonConfig) {
                     plainTextareas.push(description);
                     window.requestAnimationFrame(function () {
                         if (active) resizePlainTextarea(description);
@@ -901,7 +908,7 @@
                     });
                 } else status(note, 'The Select2 table picker is unavailable. Reload the page.', 'error');
                 refresh();
-                if (assistant) {
+                if (jsonConfig) {
                     var host = el('div', 'wep-monaco');
                     valueCell.insertBefore(host, counter);
                     window.requestAnimationFrame(function () {
@@ -1442,13 +1449,15 @@
             if (nav) nav.appendChild(item);
         }
         function render(properties) {
-            ['display_fields', 'table_config', 'markdown_display'].forEach(function (kind) {
+            ['display_fields', 'table_config', 'editor_config', 'markdown_display'].forEach(function (kind) {
                 var prefix =
                     kind === 'display_fields'
                         ? 'monaco.plus.code_search.display_fields.'
                         : kind === 'table_config'
                           ? 'monaco.plus.assistant.table_config.'
-                          : 'monaco.plus.update_sets.markdown_display.';
+                          : kind === 'editor_config'
+                            ? 'monaco.plus.editor.table_config.'
+                            : 'monaco.plus.update_sets.markdown_display.';
                 var rows = properties.filter(function (property) {
                     return property.name.indexOf(prefix) === 0;
                 });
@@ -1490,7 +1499,9 @@
                             ? 'Display fields by table. Enter comma-separated field names.'
                             : kind === 'markdown_display'
                               ? 'Primary fields use commas for fallbacks and periods to join fields with a period. Empty fields are skipped. Additional fields are separate.'
-                              : 'Assistant configuration by table.',
+                              : kind === 'editor_config'
+                                ? 'Widget Editor+ configuration by table. Set ordered scriptFields, headerFields and additionalFields; header and additional entries accept field names or objects with label and readOnly options.'
+                                : 'Assistant configuration by table.',
                 });
             });
             if (sections) sections.textContent = '';
