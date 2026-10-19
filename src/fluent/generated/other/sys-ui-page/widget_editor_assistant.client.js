@@ -2259,6 +2259,11 @@
                     loadingMore: false,
                     recordActiveSearch: '',
                     selectingPrimary: false,
+                    showRecent: true,
+                    recentManuallyHidden: false,
+                    recentRecords: [],
+                    recentLoading: false,
+                    recentError: '',
                 };
 
                 ctrl.usPicker = {
@@ -4121,6 +4126,37 @@
                 }
 
                 // Lookup Modal methods
+                ctrl.toggleRecentHistory = function () {
+                    ctrl.lookup.showRecent = !ctrl.lookup.showRecent;
+                    ctrl.lookup.recentManuallyHidden = !ctrl.lookup.showRecent;
+                };
+
+                ctrl.backToTables = function () {
+                    ctrl.lookup.step = 'table';
+                    ctrl.lookup.showRecent = !ctrl.lookup.recentManuallyHidden;
+                };
+
+                var _recentRequestId = 0;
+                ctrl.loadRecentRecords = function () {
+                    var requestId = ++_recentRequestId;
+                    ctrl.lookup.recentRecords = [];
+                    ctrl.lookup.recentLoading = true;
+                    ctrl.lookup.recentError = '';
+                    return ajax('getRecentRecords', {})
+                        .then(function (res) {
+                            if (requestId !== _recentRequestId) return;
+                            if (!res.success) throw new Error('Recent records unavailable');
+                            ctrl.lookup.recentRecords = filterOutSelectedRecords(res.records || []);
+                        })
+                        .catch(function () {
+                            if (requestId === _recentRequestId)
+                                ctrl.lookup.recentError = 'Recent records could not be loaded.';
+                        })
+                        .finally(function () {
+                            if (requestId === _recentRequestId) ctrl.lookup.recentLoading = false;
+                        });
+                };
+
                 function resetLookupResults() {
                     ctrl.lookup.tableQuery = '';
                     ctrl.lookup.tableResults = [];
@@ -4143,9 +4179,10 @@
                     ctrl.lookup.open = true;
                     ctrl.lookup.mode = mode;
                     ctrl.lookup.targetRow = null;
-                    ctrl.lookup.step = 'table';
+                    ctrl.backToTables();
                     ctrl.lookup.selectingPrimary = false;
                     resetLookupResults();
+                    ctrl.loadRecentRecords();
                 };
 
                 ctrl.openLookupForRow = function (row, step) {
@@ -4156,8 +4193,10 @@
                     ctrl.lookup.chosenTable = row.table;
                     ctrl.lookup.tableLabel = row.tableLabel || tableLabel(row.table);
                     ctrl.lookup.step = step;
+                    ctrl.lookup.showRecent = step === 'table' && !ctrl.lookup.recentManuallyHidden;
                     ctrl.lookup.selectingPrimary = false;
                     resetLookupResults();
+                    ctrl.loadRecentRecords();
                     if (step === 'record') {
                         loadRecords('', false);
                     }
@@ -4236,24 +4275,23 @@
                 // records have already been added while more are selected.
                 function filterOutSelectedRecords(records) {
                     if (ctrl.lookup.mode === 'add') return records;
-                    var excludeSysId = ctrl.lookup.targetRow ? ctrl.lookup.targetRow.sys_id : null;
+                    var excludeKey = ctrl.lookup.targetRow ? rowKey(ctrl.lookup.targetRow) : null;
                     var selected = {};
                     for (var i = 0; i < ctrl.related.length; i++) {
                         var r = ctrl.related[i];
-                        if (r.table === ctrl.lookup.chosenTable && r.sys_id !== excludeSysId) {
-                            selected[r.sys_id] = true;
-                        }
+                        if (rowKey(r) !== excludeKey) selected[rowKey(r)] = true;
                     }
                     return records.filter(function (rec) {
-                        return !selected[rec.sys_id];
+                        return !selected[(rec.table || ctrl.lookup.chosenTable) + ':' + rec.sys_id];
                     });
                 }
 
                 ctrl.isRecordSelected = function (record) {
+                    var table = record.table || ctrl.lookup.chosenTable;
                     return (
-                        (ctrl.primary.table === ctrl.lookup.chosenTable && ctrl.primary.sysId === record.sys_id) ||
+                        (ctrl.primary.table === table && ctrl.primary.sysId === record.sys_id) ||
                         ctrl.related.some(function (row) {
-                            return row.table === ctrl.lookup.chosenTable && row.sys_id === record.sys_id;
+                            return row.table === table && row.sys_id === record.sys_id;
                         })
                     );
                 };
@@ -4407,13 +4445,13 @@
                 }
 
                 ctrl.onTableSearchKeydown = function (event) {
-                    onListSearchKeydown(event, '.we-picker-col-main .we-picker-item', function () {
+                    onListSearchKeydown(event, '.we-picker-col-main', function () {
                         if (ctrl.lookup.tableResults.length) ctrl.chooseTable(ctrl.lookup.tableResults[0]);
                     });
                 };
 
                 ctrl.onRecordSearchKeydown = function (event) {
-                    onListSearchKeydown(event, '.we-picker-col-main .we-picker-item', function () {
+                    onListSearchKeydown(event, '.we-picker-col-main', function () {
                         if (ctrl.lookup.recordResults.length) ctrl.chooseRecord(ctrl.lookup.recordResults[0]);
                     });
                 };
@@ -4434,6 +4472,7 @@
                     ctrl.lookup.chosenTable = t.name;
                     ctrl.lookup.tableLabel = t.label;
                     ctrl.lookup.step = 'record';
+                    ctrl.lookup.showRecent = false;
                     ctrl.lookup.recordQuery = '';
                     loadRecords('', false);
                 };
@@ -4452,13 +4491,15 @@
 
                 ctrl.chooseRecord = function (r) {
                     if (ctrl.lookup.selectingPrimary) return;
+                    var table = r.table || ctrl.lookup.chosenTable;
+                    var label = r.tableLabel || ctrl.lookup.tableLabel;
                     if (ctrl.lookup.mode === 'primary') {
                         var replacingPrimary = !!ctrl.primary.sysId;
                         ctrl.primary = {
-                            table: ctrl.lookup.chosenTable,
+                            table: table,
                             sysId: r.sys_id,
                             label: r.label,
-                            tableLabel: ctrl.lookup.tableLabel,
+                            tableLabel: label,
                             updatedOn: r.updatedOn,
                         };
                         updatePrimaryUrl(ctrl.primary.table, ctrl.primary.sysId);
@@ -4481,8 +4522,8 @@
                         delete ctrl.lookup.targetRow.previousVersion;
                         delete ctrl.lookup.targetRow.previousVersionBytes;
                         delete ctrl.lookup.targetRow.previousVersionError;
-                        ctrl.lookup.targetRow.table = ctrl.lookup.chosenTable;
-                        ctrl.lookup.targetRow.tableLabel = ctrl.lookup.tableLabel;
+                        ctrl.lookup.targetRow.table = table;
+                        ctrl.lookup.targetRow.tableLabel = label;
                         ctrl.lookup.targetRow.sys_id = r.sys_id;
                         ctrl.lookup.targetRow.label = r.label;
                         ctrl.lookup.targetRow.updatedOn = r.updatedOn;
@@ -4496,14 +4537,14 @@
 
                     if (ctrl.lookup.mode === 'group' && ctrl.manageGroup) {
                         var groupExists = ctrl.manageGroup.records.some(function (row) {
-                            return row.table === ctrl.lookup.chosenTable && row.sys_id === r.sys_id;
+                            return row.table === table && row.sys_id === r.sys_id;
                         });
                         if (!groupExists) {
                             ctrl.manageGroup.records.push({
-                                table: ctrl.lookup.chosenTable,
+                                table: table,
                                 sys_id: r.sys_id,
                                 label: r.label,
-                                tableLabel: ctrl.lookup.tableLabel,
+                                tableLabel: label,
                                 updatedOn: r.updatedOn,
                             });
                             sortGroupRecords(ctrl.manageGroup.records);
@@ -4513,22 +4554,22 @@
                     }
 
                     // Add mode
-                    if (ctrl.primary.table === ctrl.lookup.chosenTable && ctrl.primary.sysId === r.sys_id) {
+                    if (ctrl.primary.table === table && ctrl.primary.sysId === r.sys_id) {
                         removePrimaryFromPicker();
                         return;
                     }
                     var existing = ctrl.related.filter(function (row) {
-                        return row.table === ctrl.lookup.chosenTable && row.sys_id === r.sys_id;
+                        return row.table === table && row.sys_id === r.sys_id;
                     })[0];
                     if (existing) {
                         ctrl.removeRow(existing);
                         return;
                     }
                     var newRecord = {
-                        table: ctrl.lookup.chosenTable,
+                        table: table,
                         sys_id: r.sys_id,
                         label: r.label,
-                        tableLabel: ctrl.lookup.tableLabel,
+                        tableLabel: label,
                         category: 'Manual',
                         choiceTable: r.choiceTable,
                         choiceField: r.choiceField,

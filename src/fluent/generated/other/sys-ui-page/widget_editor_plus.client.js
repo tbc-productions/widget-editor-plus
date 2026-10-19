@@ -3711,7 +3711,8 @@
                         !$scope.canWriteWidget ||
                         (pane.hasIdInput && !pane.editorUnlocked) ||
                         !!pane.readOnly;
-                    var lang = pane.language || 'javascript';
+                    var lang =
+                        pane.language === 'css' || pane.language === 'sass' ? 'scss' : pane.language || 'javascript';
 
                     function _create() {
                         if (monacoEditors[pane.key]) {
@@ -7170,6 +7171,33 @@
                     }
                 };
 
+                $scope.revertVersion = function (version, event) {
+                    if (event) event.stopPropagation();
+                    var widgetSysId = $scope.widget && $scope.widget.sys_id;
+                    if (
+                        !widgetSysId ||
+                        !version ||
+                        !version.sys_id ||
+                        !$scope.canWriteWidget ||
+                        $scope.widgetSysPolicy ||
+                        $scope.isNewWidget ||
+                        version.state === 'current' ||
+                        !$scope.versions.length ||
+                        version.sys_id === $scope.versions[0].sys_id
+                    )
+                        return;
+                    $scope.openDropdown = null;
+                    $scope.openCompactSubmenu = null;
+                    try {
+                        localStorage.setItem('_weRevertPending_' + widgetSysId, Date.now().toString());
+                    } catch (e) {}
+                    var dialog = new GlideModal('revert_update_version_confirm', true, 300);
+                    dialog.setTitle('Revert');
+                    dialog.setPreference('sysparm_sys_id', version.sys_id);
+                    dialog.setPreference('focusTrap', true);
+                    dialog.render();
+                };
+
                 $scope.openVersionDiff = function (version) {
                     $scope.openDropdown = null;
                     var widgetSysId = $scope.widget && $scope.widget.sys_id;
@@ -7198,6 +7226,15 @@
                 };
 
                 $scope.closeVersionDiffModal = function () {
+                    var iframe = document.querySelector && document.querySelector('.we-diff-iframe');
+                    var compare = iframe && iframe.contentWindow;
+                    if (
+                        compare &&
+                        compare.WE_HAS_UNSAVED_MERGE &&
+                        compare.WE_HAS_UNSAVED_MERGE() &&
+                        !window.confirm('Discard the unsaved merged fields in Compare+?')
+                    )
+                        return;
                     _closeModal(function () {
                         $scope.versionDiffModal.open = false;
                         $scope.versionDiffModal.url = null;
@@ -7219,8 +7256,79 @@
                     }
                 };
 
-                // Listen for expand/collapse notifications from the diff iframe
+                function _acceptCompareSave(data) {
+                    Object.keys(data.values).forEach(function (field) {
+                        var value = data.values[field];
+                        $scope.widget[field] = value;
+                        var def = $scope.coreEditorDefs.find(function (item) {
+                            return item.field === field;
+                        });
+                        if (def) {
+                            originalValues[field] = lastServerValues[field] = value;
+                            var editor = monacoEditors[def.key];
+                            if (editor && editor.getValue() !== value) editor.setValue(value);
+                            var pane = paneMap[def.key];
+                            if (pane) {
+                                pane.dirty = false;
+                                pane.savedAt = null;
+                                pane.saveError = null;
+                                pane.externalChange = null;
+                            }
+                            _selfSavingFields[field] = value;
+                            $timeout(function () {
+                                if (_selfSavingFields[field] === value) delete _selfSavingFields[field];
+                            }, 5000);
+                        } else if (Object.prototype.hasOwnProperty.call(originalHeader, field)) {
+                            originalHeader[field] = field === 'controller_as' ? value || 'c' : value;
+                            $scope.headerDirty[field] = false;
+                        }
+                        if (field === 'option_schema' || field === 'demo_data') {
+                            if (_draftJson[field]) _draftJson[field] = { base: value, value: value };
+                            var jsonEditor = field === 'option_schema' ? _optionSchemaEditor : _demoDataEditor;
+                            if (jsonEditor && jsonEditor.getValue() !== value) jsonEditor.setValue(value);
+                            $scope.widget[field + '_has_value'] = _hasProperJsonObjectValue(value);
+                        }
+                    });
+                    if (
+                        $scope.isWidgetRecord === false &&
+                        $scope.recordPrimaryField === 'id' &&
+                        Object.prototype.hasOwnProperty.call(data.values, 'id')
+                    ) {
+                        $scope.widget.name = originalHeader.name = data.values.id;
+                        $scope.headerDirty.name = false;
+                    }
+                    $scope.widget.sys_updated_on = data.sys_updated_on;
+                    $scope.widget.sys_updated_by = data.sys_updated_by;
+                    _writeLocalDraft(true);
+                    $scope.$applyAsync();
+                    ajax('getVersions', { sys_id: $scope.widget.sys_id }).then(function (result) {
+                        if (result.success) $scope.versions = result.versions;
+                    });
+                }
+
+                // Listen for notifications from the diff iframe.
                 window.addEventListener('message', function (e) {
+                    if (e.data && e.data.type === 'we-diff-saved') {
+                        var iframe = document.querySelector('.we-diff-iframe');
+                        if (
+                            e.origin !== window.location.origin ||
+                            !iframe ||
+                            e.source !== iframe.contentWindow ||
+                            !$scope.versionDiffModal.open ||
+                            $scope.isVersionView ||
+                            e.data.table !== $scope.recordTable ||
+                            e.data.recordId !== $scope.widget.sys_id ||
+                            !e.data.values ||
+                            typeof e.data.values !== 'object' ||
+                            Array.isArray(e.data.values) ||
+                            !Object.keys(e.data.values).every(function (field) {
+                                return typeof e.data.values[field] === 'string';
+                            })
+                        )
+                            return;
+                        _acceptCompareSave(e.data);
+                        return;
+                    }
                     if (!e.data || e.data.type !== 'we-diff-expand') {
                         return;
                     }

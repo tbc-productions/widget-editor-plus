@@ -106,7 +106,7 @@
     }
 
     function _langForEditor(lang) {
-        return lang === 'json' ? 'we-json' : lang || 'plaintext';
+        return lang === 'json' ? 'we-json' : lang === 'css' || lang === 'sass' ? 'scss' : lang || 'plaintext';
     }
 
     var _snProvidersRegistered = false;
@@ -326,14 +326,14 @@
             var f = versionDataOrNull.fields || {};
             for (var i = 0; i < fieldDefs.length; i++) {
                 var key = fieldDefs[i].key;
-                var isCode = fieldDefs[i].renderAs === 'code';
+                var preserveWhitespace = fieldDefs[i].renderAs === 'code' || fieldDefs[i].mergeable === true;
                 var isBool = fieldDefs[i].renderAs === 'boolean';
                 /* absent from payload = null; present but empty = '' */
                 var raw = f[key] !== undefined ? (f[key] !== null ? String(f[key]) : null) : null;
                 if (isBool && raw !== null) {
                     result[key] = raw === 'true' || raw === '1' ? 'true' : 'false';
                 } else {
-                    result[key] = raw !== null && !isCode ? raw.trim() : raw;
+                    result[key] = raw !== null && !preserveWhitespace ? raw.trim() : raw;
                 }
             }
         } else {
@@ -341,7 +341,7 @@
             for (var j = 0; j < fieldDefs.length; j++) {
                 var k = fieldDefs[j].key;
                 var v = vals[k];
-                var isCodeField = fieldDefs[j].renderAs === 'code';
+                var preserveCurrentWhitespace = fieldDefs[j].renderAs === 'code' || fieldDefs[j].mergeable === true;
                 if (fieldDefs[j].renderAs === 'boolean') {
                     result[k] =
                         v === null || v === undefined
@@ -351,7 +351,7 @@
                               : 'false';
                 } else {
                     var rawStr = v !== null && v !== undefined ? String(v) : null;
-                    result[k] = rawStr !== null && !isCodeField ? rawStr.trim() : rawStr;
+                    result[k] = rawStr !== null && !preserveCurrentWhitespace ? rawStr.trim() : rawStr;
                 }
             }
         }
@@ -560,6 +560,12 @@
                     ctrl.expandedString = null; // { key, label, isExtra } when a long string field is expanded
                     ctrl.stringEditor = null; // shared Monaco diff editor for expanded strings
                     ctrl.hasChangedBelowViewport = false;
+                    ctrl.merge = null;
+                    ctrl.mergeMode = false;
+                    ctrl.mergeSaving = false;
+                    ctrl.mergeMessage = '';
+                    var _mergedFields = Object.create(null);
+                    var _mergeEditor = null;
 
                     ctrl.showBuilder = {};
                     ctrl.parsedCache = {};
@@ -790,7 +796,7 @@
                         var lf = _leftIsCurrentSaved
                             ? _buildFields(null, _savedRef, _fieldDefs)
                             : _buildFields(_leftVersionData, _recordData, _fieldDefs);
-                        var rf = _buildFields(_rightVersionData, _unsavedRef, _fieldDefs);
+                        var rf = _mergePreview(_buildFields(_rightVersionData, _unsavedRef, _fieldDefs));
 
                         // Preserve all loaded fields and raw values, independent of the visible diff filter.
                         _exportLeftValues = _leftIsCurrentSaved
@@ -808,7 +814,9 @@
                         ctrl.leftRefDisplay = _leftIsCurrentSaved
                             ? _buildRefDisplay(null, _savedRef, _fieldDefs)
                             : _buildRefDisplay(_leftVersionData, _recordData, _fieldDefs);
-                        ctrl.rightRefDisplay = _buildRefDisplay(_rightVersionData, _unsavedRef, _fieldDefs);
+                        ctrl.rightRefDisplay = _mergePreview(
+                            _buildRefDisplay(_rightVersionData, _unsavedRef, _fieldDefs)
+                        );
                         ctrl.leftListDisplay = _leftIsCurrentSaved
                             ? _buildListDisplay(null, _savedRef, _fieldDefs)
                             : _buildListDisplay(_leftVersionData, _recordData, _fieldDefs);
@@ -934,7 +942,7 @@
                             var lfe = _leftIsCurrentSaved
                                 ? _buildFields(null, _savedRef, _extraFieldDefs)
                                 : _buildFields(_leftVersionData, _recordData, _extraFieldDefs);
-                            var rfe = _buildFields(_rightVersionData, _unsavedRef, _extraFieldDefs);
+                            var rfe = _mergePreview(_buildFields(_rightVersionData, _unsavedRef, _extraFieldDefs));
                             ctrl.extraLeftFields = lfe;
                             ctrl.extraRightFields = rfe;
                             ctrl.extraLeftDisplayFields = _buildDisplayFields(lfe);
@@ -942,10 +950,8 @@
                             ctrl.extraLeftRefDisplay = _leftIsCurrentSaved
                                 ? _buildRefDisplay(null, _savedRef, _extraFieldDefs)
                                 : _buildRefDisplay(_leftVersionData, _recordData, _extraFieldDefs);
-                            ctrl.extraRightRefDisplay = _buildRefDisplay(
-                                _rightVersionData,
-                                _unsavedRef,
-                                _extraFieldDefs
+                            ctrl.extraRightRefDisplay = _mergePreview(
+                                _buildRefDisplay(_rightVersionData, _unsavedRef, _extraFieldDefs)
                             );
                             ctrl.extraLeftListDisplay = _leftIsCurrentSaved
                                 ? _buildListDisplay(null, _savedRef, _extraFieldDefs)
@@ -963,7 +969,7 @@
                                 var eDef = _extraFieldDefs[ei];
                                 var lv = (lfe[eDef.key] || '').replace(/\r\n/g, '\n');
                                 var rv = (rfe[eDef.key] || '').replace(/\r\n/g, '\n');
-                                if (lv === rv) {
+                                if (lv === rv && !ctrl.hasMergedField(eDef.key)) {
                                     continue;
                                 }
                                 if (eDef.renderAs === 'code' || eDef.type === 'html' || eDef.type === 'html_script') {
@@ -1300,6 +1306,295 @@
                         });
                     }
 
+                    //////// Merge selected text fields ///////////////////////////////////////
+
+                    ctrl.hasMergedField = function (key) {
+                        var field = _mergedFields[key];
+                        return !!field && field.value !== field.original;
+                    };
+                    function _mergePreview(fields) {
+                        Object.keys(_mergedFields).forEach(function (key) {
+                            if (ctrl.hasMergedField(key) && Object.prototype.hasOwnProperty.call(fields, key))
+                                fields[key] = _mergedFields[key].value;
+                        });
+                        return fields;
+                    }
+                    ctrl.hasMergeChanges = function () {
+                        return Object.keys(_mergedFields).some(ctrl.hasMergedField);
+                    };
+                    ctrl.canEditMerges = function () {
+                        return (
+                            ctrl.mergeMode &&
+                            ctrl.canWrite &&
+                            !ctrl.recordSysPolicy &&
+                            !ctrl.mergeSaving &&
+                            !ctrl.loadingLeft &&
+                            !ctrl.loadingRight
+                        );
+                    };
+                    ctrl.toggleMergeMode = function (event) {
+                        if (event) event.stopPropagation();
+                        if (
+                            !ctrl.canWrite ||
+                            ctrl.recordSysPolicy ||
+                            ctrl.mergeSaving ||
+                            ctrl.loadingLeft ||
+                            ctrl.loadingRight
+                        )
+                            return;
+                        if (ctrl.mergeMode) {
+                            if (ctrl.hasMergeChanges()) {
+                                ctrl.discardMerges();
+                                return;
+                            }
+                            ctrl.collapseAnyExpanded();
+                        }
+                        ctrl.mergeMode = !ctrl.mergeMode;
+                    };
+                    ctrl.canStartMerge = function () {
+                        var field =
+                            ctrl.expandedString ||
+                            (ctrl.expandedExtraIndex !== null
+                                ? ctrl.extraChangedScriptFields[ctrl.expandedExtraIndex]
+                                : ctrl.expandedIndex !== null
+                                  ? ctrl.scriptFields[ctrl.expandedIndex]
+                                  : null);
+                        return ctrl.canEditMerges() && ctrl.canMergeField(field);
+                    };
+                    ctrl.canMergeField = function (field) {
+                        var writable = (_savedRecordData || _recordData || {}).writable_fields || {};
+                        if (!field || writable[field.key] !== true || (!field.isScript && field.mergeable !== true))
+                            return false;
+                        return _fieldDiffers(field) || ctrl.hasMergedField(field.key);
+                    };
+                    function _fieldDiffers(field) {
+                        var left = (field.isExtra ? ctrl.extraLeftFields : ctrl.leftFields) || {};
+                        var right = (field.isExtra ? ctrl.extraRightFields : ctrl.rightFields) || {};
+                        return (
+                            (left[field.key] || '').replace(/\r\n/g, '\n') !==
+                            (right[field.key] || '').replace(/\r\n/g, '\n')
+                        );
+                    }
+                    ctrl.hasMergeableFields = function () {
+                        return (ctrl.fields || []).some(ctrl.canMergeField);
+                    };
+                    ctrl.hasDifferences = function () {
+                        return (ctrl.fields || []).some(_fieldDiffers);
+                    };
+                    ctrl.openStringMerge = function (field, event) {
+                        if (event) event.stopPropagation();
+                        if (!ctrl.canEditMerges() || !ctrl.canMergeField(field) || ctrl.merge) return;
+                        ctrl.collapseAnyExpanded();
+                        ctrl.toggleStringExpand(field, field.isExtra);
+                        ctrl.startMerge();
+                    };
+                    ctrl.openMergeField = function (index, extra, event) {
+                        if (event) event.stopPropagation();
+                        if (!ctrl.canEditMerges() || ctrl.merge) return;
+                        ctrl.collapseAnyExpanded();
+                        if (extra) ctrl.toggleExtraExpand(index);
+                        else ctrl.toggleExpand(index);
+                        ctrl.startMerge();
+                    };
+                    function _positionMerge() {
+                        var surface = document.getElementById('dc-merge-surface');
+                        if (surface) surface.style.top = _headerHeight() + 'px';
+                    }
+                    ctrl.startMerge = function () {
+                        if (ctrl.merge || !ctrl.canStartMerge()) return;
+                        var extra = ctrl.expandedString
+                            ? ctrl.expandedString.isExtra
+                            : ctrl.expandedExtraIndex !== null;
+                        var field =
+                            ctrl.expandedString ||
+                            (extra
+                                ? ctrl.extraChangedScriptFields[ctrl.expandedExtraIndex]
+                                : ctrl.scriptFields[ctrl.expandedIndex]);
+                        if (!field || !window.monaco || !window.WEMergeEditor) return;
+                        var previous = (extra ? ctrl.extraLeftFields : ctrl.leftFields)[field.key] || '';
+                        var existing = _mergedFields[field.key];
+                        var later = existing
+                            ? existing.later
+                            : (extra ? ctrl.extraRightFields : ctrl.rightFields)[field.key] || '';
+                        var current = ((_savedRecordData || _recordData).values || {})[field.key];
+                        var draft = existing || { original: String(current || ''), value: later, later: later };
+                        _mergedFields[field.key] = draft;
+                        ctrl.merge = { key: field.key, label: field.label };
+                        var session = ctrl.merge;
+                        ctrl.mergeMessage = '';
+                        ctrl.openVersionCol = null;
+                        $timeout(function () {
+                            _positionMerge();
+                            var container = document.getElementById('dc-merge-editor');
+                            if (!container || ctrl.merge !== session) return;
+                            try {
+                                _mergeEditor = window.WEMergeEditor.create(
+                                    container,
+                                    previous,
+                                    later,
+                                    _langForEditor(field.language),
+                                    ctrl.wordWrap,
+                                    function (value) {
+                                        draft.value = value;
+                                        _apply(function () {
+                                            if (ctrl.merge === session && !ctrl.mergeSaving) ctrl.mergeMessage = '';
+                                        });
+                                    },
+                                    draft.value
+                                );
+                            } catch (error) {
+                                ctrl.mergeMessage = 'Merge editor could not be opened: ' + error.message;
+                            }
+                        }, 0);
+                    };
+                    ctrl.endMerge = function () {
+                        if (ctrl.mergeSaving) return;
+                        var editing = !!ctrl.merge;
+                        if (ctrl.merge && !ctrl.hasMergedField(ctrl.merge.key)) delete _mergedFields[ctrl.merge.key];
+                        if (_mergeEditor) {
+                            _mergeEditor.dispose();
+                            _mergeEditor = null;
+                        }
+                        ctrl.merge = null;
+                        if (editing) _syncScope();
+                        $timeout(function () {
+                            if (ctrl.expandedIndex !== null) _setWrapTop(ctrl.expandedIndex, false);
+                            if (ctrl.expandedExtraIndex !== null) _setWrapTop(ctrl.expandedExtraIndex, true);
+                        }, 0);
+                    };
+                    ctrl.canUndoMerge = function () {
+                        return !!_mergeEditor && _mergeEditor.canUndo();
+                    };
+                    ctrl.canRedoMerge = function () {
+                        return !!_mergeEditor && _mergeEditor.canRedo();
+                    };
+                    ctrl.undoMerge = function () {
+                        if (ctrl.canUndoMerge() && !ctrl.mergeSaving) _mergeEditor.undo();
+                    };
+                    ctrl.redoMerge = function () {
+                        if (ctrl.canRedoMerge() && !ctrl.mergeSaving) _mergeEditor.redo();
+                    };
+                    ctrl.discardMerges = function () {
+                        if (ctrl.mergeSaving || !window.confirm('Discard all unsaved edits in Compare+?')) return;
+                        var editing = !!ctrl.merge;
+                        _mergedFields = Object.create(null);
+                        ctrl.mergeMode = false;
+                        ctrl.collapseAnyExpanded();
+                        if (!editing) _syncScope();
+                        ctrl.mergeMessage = '';
+                    };
+                    var _mergeSaveRequest = 0;
+                    ctrl.saveMerges = function () {
+                        if (
+                            ctrl.merge ||
+                            ctrl.mergeSaving ||
+                            !ctrl.hasMergeChanges() ||
+                            !ctrl.canWrite ||
+                            ctrl.recordSysPolicy
+                        )
+                            return;
+                        var fields = {},
+                            original = {};
+                        Object.keys(_mergedFields).forEach(function (key) {
+                            if (ctrl.hasMergedField(key)) {
+                                fields[key] = _mergedFields[key].value;
+                                original[key] = _mergedFields[key].original;
+                            }
+                        });
+                        ctrl.mergeSaving = true;
+                        ctrl.mergeMessage = '';
+                        var request = ++_mergeSaveRequest;
+                        var timeout = $timeout(function () {
+                            if (request !== _mergeSaveRequest) return;
+                            _mergeSaveRequest++;
+                            ctrl.mergeSaving = false;
+                            ctrl.mergeMessage =
+                                'Save timed out. Your merged edits are preserved. Check the record before retrying.';
+                        }, 30000);
+                        _ajax(
+                            'saveMergedFields',
+                            {
+                                table: tableParam,
+                                record_id: recordId,
+                                fields: JSON.stringify(fields),
+                                original: JSON.stringify(original),
+                            },
+                            function (data) {
+                                if (request !== _mergeSaveRequest) return;
+                                $timeout.cancel(timeout);
+                                _apply(function () {
+                                    ctrl.mergeSaving = false;
+                                    if (!data || !data.success || !data.values) {
+                                        ctrl.mergeMessage =
+                                            (data && data.error) || 'Save failed. Your merged fields are preserved.';
+                                        return;
+                                    }
+                                    Object.keys(data.values).forEach(function (key) {
+                                        _recordData.values[key] = data.values[key];
+                                    });
+                                    if (typeof data.name === 'string') _recordData.name = data.name;
+                                    _recordData.display_values = Object.assign(
+                                        _recordData.display_values || {},
+                                        data.display_values || {}
+                                    );
+                                    _recordData.sys_updated_on = data.sys_updated_on;
+                                    _recordData.sys_updated_by = data.sys_updated_by;
+                                    if (_savedRecordData) {
+                                        _recordData.canWrite = _savedRecordData.canWrite;
+                                        _recordData.writable_fields = _savedRecordData.writable_fields;
+                                    }
+                                    _savedRecordData = null;
+                                    ctrl.currentIsUnsaved = false;
+                                    _rightVersionData = null;
+                                    _currentRightId = 'current';
+                                    _mergedFields = Object.create(null);
+                                    ctrl.mergeMode = false;
+                                    ctrl.endMerge();
+                                    _syncScope();
+                                    ctrl.mergeMessage = '';
+                                    try {
+                                        if (window.parent !== window) {
+                                            window.parent.postMessage(
+                                                {
+                                                    type: 'we-diff-saved',
+                                                    table: tableParam,
+                                                    recordId: recordId,
+                                                    values: data.values,
+                                                    sys_updated_on: data.sys_updated_on,
+                                                    sys_updated_by: data.sys_updated_by,
+                                                },
+                                                window.location.origin
+                                            );
+                                        }
+                                    } catch (e) {}
+                                    _ajax(
+                                        'getVersionsForTable',
+                                        { table: tableParam, record_id: recordId },
+                                        function (versions) {
+                                            if (versions.success && versions.versions)
+                                                _apply(function () {
+                                                    _allVersionsData = versions.versions;
+                                                    _syncScope();
+                                                });
+                                        }
+                                    );
+                                });
+                            }
+                        );
+                    };
+                    function _warnUnsavedMerge(event) {
+                        if (!ctrl.hasMergeChanges()) return;
+                        event.preventDefault();
+                        event.returnValue = '';
+                    }
+                    window.WE_HAS_UNSAVED_MERGE = ctrl.hasMergeChanges;
+                    window.addEventListener('beforeunload', _warnUnsavedMerge);
+                    $scope.$on('$destroy', function () {
+                        window.removeEventListener('beforeunload', _warnUnsavedMerge);
+                        delete window.WE_HAS_UNSAVED_MERGE;
+                        if (_mergeEditor) _mergeEditor.dispose();
+                    });
+
                     //////// Expand / collapse //////////////////////////////////////////////
 
                     function _headerHeight() {
@@ -1308,6 +1603,26 @@
                             return 0;
                         }
                         return Math.ceil(h.getBoundingClientRect().bottom);
+                    }
+
+                    function _alignVersionColumns() {
+                        if (ctrl.merge) return;
+                        var editor =
+                            ctrl.expandedIndex !== null
+                                ? ctrl.editors[ctrl.expandedIndex]
+                                : ctrl.expandedExtraIndex !== null
+                                  ? ctrl.extraEditors[ctrl.expandedExtraIndex]
+                                  : ctrl.expandedString && ctrl.stringEditor;
+                        var row = document.querySelector('.dc-version-row');
+                        if (!editor || !row) return;
+                        var modified = editor.getModifiedEditor().getDomNode();
+                        if (!modified) return;
+                        var offset =
+                            modified.getBoundingClientRect().left -
+                            row.getBoundingClientRect().left -
+                            parseFloat(window.getComputedStyle(row).paddingLeft) -
+                            parseFloat(window.getComputedStyle(row.lastElementChild).paddingLeft);
+                        row.style.setProperty('--dc-right-editor-start', Math.max(0, offset) + 'px');
                     }
 
                     function _getEditorElements(index, isExtra) {
@@ -1336,6 +1651,7 @@
                         if (elements.container) {
                             elements.container.style.height = '100%';
                         }
+                        $timeout(_alignVersionColumns, 0, false);
                     }
 
                     function _clearWrapTop(index, isExtra) {
@@ -1557,6 +1873,7 @@
                         var top = _headerHeight();
                         wrap.style.top = top + 'px';
                         wrap.style.height = window.innerHeight - top + 'px';
+                        $timeout(_alignVersionColumns, 0, false);
                     }
 
                     ctrl.shouldShowStringExpand = function (f, isExtra) {
@@ -1631,6 +1948,7 @@
                             modified: monaco.editor.createModel(rf[key] || '', lang),
                         });
                         ctrl.stringEditor = diffEditor;
+                        diffEditor.getModifiedEditor().onDidLayoutChange(_alignVersionColumns);
                     };
 
                     ctrl.toggleStringExpand = function (f, isExtra, event) {
@@ -1655,9 +1973,11 @@
                             label: f.label,
                             isExtra: !!isExtra,
                             language: f.language || 'plaintext',
+                            mergeable: f.mergeable === true,
                         };
                         _notifyParentExpand(f.label || '');
                         $timeout(function () {
+                            if (ctrl.merge) return;
                             _setStringOverlayTop();
                             ctrl.initStringEditor();
                             _scheduleChangedBelowIndicatorUpdate();
@@ -1682,6 +2002,8 @@
                     };
 
                     ctrl.collapseAnyExpanded = function () {
+                        if (ctrl.mergeSaving) return;
+                        if (ctrl.merge) ctrl.endMerge();
                         if (ctrl.expandedIndex !== null) {
                             ctrl.collapseExpanded();
                         }
@@ -1709,6 +2031,7 @@
                     };
 
                     var _onWindowResize = function () {
+                        if (ctrl.merge) _positionMerge();
                         if (ctrl.expandedIndex !== null) {
                             _setWrapTop(ctrl.expandedIndex, false);
                             if (ctrl.editors[ctrl.expandedIndex]) {
@@ -2112,11 +2435,12 @@
                     };
 
                     ctrl.toggleVersionCol = function (side) {
-                        if (creditUpdateId) return;
+                        if (creditUpdateId || ctrl.merge || ctrl.hasMergeChanges()) return;
                         ctrl.openVersionCol = ctrl.openVersionCol === side ? null : side;
                     };
 
                     ctrl.selectLeftVersion = function (sysId) {
+                        if (ctrl.merge || ctrl.hasMergeChanges() || ctrl.mergeSaving) return;
                         ctrl.openVersionCol = null;
                         if (sysId === ctrl.leftVersionId) {
                             return;
@@ -2137,6 +2461,7 @@
                     };
 
                     ctrl.selectRightVersion = function (sysId) {
+                        if (ctrl.merge || ctrl.hasMergeChanges() || ctrl.mergeSaving) return;
                         ctrl.openVersionCol = null;
                         if (sysId === ctrl.rightVersionId) {
                             return;
@@ -2258,6 +2583,7 @@
                             });
                         });
                         ctrl.editors[index] = diffEditor;
+                        diffEditor.getModifiedEditor().onDidLayoutChange(_alignVersionColumns);
                         $timeout(function () {
                             ctrl.updateEditorHeight(index, false);
                         }, 50);
@@ -2307,6 +2633,7 @@
                             });
                         });
                         ctrl.extraEditors[index] = diffEditor;
+                        diffEditor.getModifiedEditor().onDidLayoutChange(_alignVersionColumns);
                         $timeout(function () {
                             ctrl.updateEditorHeight(index, true);
                         }, 50);

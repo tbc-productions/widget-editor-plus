@@ -1449,6 +1449,38 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         return this._answer(this._getDiffFieldDefs(String(this.getParameter('table') || 'sp_widget')));
     },
 
+    _isMergeableDiffFieldType: function (type) {
+        return (
+            [
+                'string',
+                'string_full_utf8',
+                'translated_field',
+                'translated_text',
+                'translated_html',
+                'script',
+                'script_plain',
+                'script_client',
+                'script_server',
+                'css',
+                'html',
+                'html_script',
+                'html_template',
+                'xml',
+                'json',
+                'properties',
+                'conditions',
+                'rebuilt_conditions',
+                'variable_conditions',
+                'url',
+                'email',
+                'phone_number',
+                'ph_number',
+                'ip_addr',
+                'ip_address',
+            ].indexOf(type) !== -1
+        );
+    },
+
     _getDiffFieldDefs: function (table) {
         if (this.DIFF_ALLOWED_TABLES.length > 0 && this.DIFF_ALLOWED_TABLES.indexOf(table) === -1) {
             return {
@@ -1531,6 +1563,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         demoGr.initialize();
 
         var CODE_TYPES = ['script', 'script_plain', 'css', 'html', 'html_script', 'html_template', 'xml', 'json'];
+        var canMergeType = this._isMergeableDiffFieldType;
 
         var _buildDef = function (fname, dict) {
             var fieldType = dict.type || 'string';
@@ -1564,7 +1597,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             }
             var language = 'plaintext';
             if (fieldType === 'css') {
-                language = 'css';
+                language = 'scss';
             } else if (fieldType === 'html' || fieldType === 'html_script' || fieldType === 'html_template') {
                 language = 'html';
             } else if (fieldType === 'json') {
@@ -1580,6 +1613,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 reference: refTable,
                 renderAs: renderAs,
                 language: language,
+                mergeable: canMergeType(fieldType),
                 dependent: dict.dependent || '',
             };
         };
@@ -1714,12 +1748,106 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         });
     },
 
+    // Validate every selected text field before updating the record once.
+    saveMergedFields: function () {
+        try {
+            var table = String(this.getParameter('table') || '');
+            var sysId = String(this.getParameter('record_id') || '');
+            var fields = JSON.parse(this.getParameter('fields') || '{}');
+            var original = JSON.parse(this.getParameter('original') || '{}');
+            if (
+                !/^[a-z][a-z0-9_]*$/i.test(table) ||
+                !/^[a-f0-9]{32}$/i.test(sysId) ||
+                !fields ||
+                typeof fields !== 'object' ||
+                Array.isArray(fields) ||
+                !original ||
+                typeof original !== 'object' ||
+                Array.isArray(original)
+            )
+                throw new Error('Invalid merge payload.');
+            var defs = this._getDiffFieldDefs(table);
+            if (!defs.success) throw new Error(defs.error || 'Table not allowed.');
+            var record = new GlideRecordSecure(table);
+            if (!record.get(sysId) || !record.canRead() || !record.canWrite())
+                throw new Error('Record not found or write access denied.');
+            if (
+                (record.isValidField('sys_policy') && record.getValue('sys_policy')) ||
+                (table === 'sp_widget' && record.getValue('servicenow') === '1')
+            )
+                throw new Error('This record is protected.');
+            var canMergeType = this._isMergeableDiffFieldType;
+            var allowed = (defs.fields || []).concat(defs.extra_fields || []).filter(function (field) {
+                return field.renderAs === 'code' || canMergeType(field.type);
+            });
+            var names = Object.keys(fields);
+            if (!names.length) throw new Error('No merged fields to save.');
+            names.forEach(function (name) {
+                if (
+                    !allowed.some(function (field) {
+                        return field.key === name;
+                    }) ||
+                    !record.isValidField(name)
+                )
+                    throw new Error('Field is not mergeable: ' + name);
+                var element = record.getElement(name);
+                if (!element.canRead() || !element.canWrite()) throw new Error('Field access denied: ' + name);
+                var descriptor = element.getED();
+                if (!canMergeType(String(descriptor.getInternalType())))
+                    throw new Error('Field is not mergeable: ' + name);
+                if (
+                    typeof fields[name] !== 'string' ||
+                    typeof original[name] !== 'string' ||
+                    !Object.prototype.hasOwnProperty.call(original, name)
+                )
+                    throw new Error('Invalid field value: ' + name);
+                if (original[name] !== String(record.getValue(name) || ''))
+                    throw new Error(
+                        name +
+                            ' changed in ServiceNow. Reopen the comparison before saving. Your merged edits are preserved.'
+                    );
+                if (element.isMandatory() && !fields[name].trim()) throw new Error(name + ' is required.');
+                var maxLength = Number(descriptor.getLength());
+                if (maxLength > 0 && fields[name].length > maxLength)
+                    throw new Error(name + ' exceeds its maximum length.');
+            });
+            names.forEach(function (name) {
+                record.setValue(name, fields[name]);
+            });
+            if (!record.update()) throw new Error('Save failed. Check permissions and record validation.');
+            if (!record.get(sysId) || !record.canRead())
+                throw new Error('The record was saved but could not be reloaded. Reopen Compare+ to check it.');
+            var values = {},
+                displayValues = {};
+            names.forEach(function (name) {
+                values[name] = record.getElement(name).canRead() ? String(record.getValue(name) || '') : null;
+                if (
+                    values[name] !== null &&
+                    allowed.some(function (field) {
+                        return field.key === name && field.renderAs === 'choice';
+                    })
+                )
+                    displayValues[name] = String(record.getDisplayValue(name) || '');
+            });
+            return this._answer({
+                success: true,
+                values: values,
+                name: String(record.getDisplayValue() || ''),
+                display_values: displayValues,
+                sys_updated_on: record.getValue('sys_updated_on') || '',
+                sys_updated_by: record.getValue('sys_updated_by') || '',
+            });
+        } catch (error) {
+            return this._answer({ success: false, error: error.message || 'Merge could not be saved.' });
+        }
+    },
+
     /**
      * Returns the current field values for a single record on any allowed table.
      * Also returns metadata (name, canWrite, sys_policy, update set).
      * Accepts `table` (ServiceNow table name) and `record_id` (sys_id of the record).
      * @returns {{success: boolean, record: {sys_id: string, name: string, values: Object,
-     *   sys_updated_on: string, sys_updated_by: string, canWrite: boolean,
+     *   sys_updated_on: string, sys_updated_by: string, canWrite: boolean, writable_fields: Object,
      *   sys_policy: string, sys_policy_display: string,
      *   update_set_sys_id: string, update_set_name: string}}} Return value.
      */
@@ -1750,6 +1878,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         // Queries the full table hierarchy via sys_dictionary so inherited fields (e.g. sys_scope) are included.
         var values = {};
         var displayValues = {};
+        var writableFields = {};
         // Convert the GlideTableHierarchy/TableUtils list to a plain JS array of strings
         var _hierArr = [];
         try {
@@ -1777,7 +1906,10 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             if (!fName) {
                 continue;
             }
+            writableFields[fName] = false;
             try {
+                var element = gr.getElement(fName);
+                writableFields[fName] = !!(gr.canWrite() && element && element.canRead() && element.canWrite());
                 var v = gr.getValue(fName);
                 values[fName] = v !== null && v !== undefined ? v : null;
                 var fType = fdGr.getValue('internal_type');
@@ -1821,6 +1953,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 es12_override: new WidgetEditorAssistantAjax()._getExportEs12Override(recordId),
                 values: values,
                 display_values: displayValues,
+                writable_fields: writableFields,
                 sys_updated_on: gr.getValue('sys_updated_on') || '',
                 sys_updated_by: gr.getValue('sys_updated_by') || '',
                 canWrite: gr.canWrite(),

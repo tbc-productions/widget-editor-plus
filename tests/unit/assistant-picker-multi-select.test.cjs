@@ -18,6 +18,7 @@ test('record picker adds several records from one table and toggles selected rec
     };
     const context = {
         ctrl,
+        rowKey: row => row.table + ':' + row.sys_id,
         rebuildRows() {},
         discoverGraphLinks() {},
         $timeout() {},

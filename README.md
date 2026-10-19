@@ -57,6 +57,7 @@ A Monaco-based editor for Service Portal widgets.
 Compare record versions from the editor, Debug Context Menu or version lists.
 
 - Side-by-side code and condition-builder diffs.
+- Merge text and code from both versions in an editable middle pane, then review and save the edited fields together.
 - Readable reference and list values.
 - Export both versions as XML, including unsaved changes where applicable.
 
