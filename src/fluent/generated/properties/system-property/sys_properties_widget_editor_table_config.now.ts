@@ -148,6 +148,7 @@ export const editorTableConfigSpAngularProviderProperty = Property({
     value: `{
   "label": "Angular Provider",
   "primaryField": "name",
+  "secondaryField": "type",
   "icon": "icon-console",
   "allowCreate": true,
   "scriptFields": [
@@ -239,6 +240,7 @@ export const editorTableConfigSpNgTemplateProperty = Property({
     value: `{
   "label": "Angular Template",
   "primaryField": "id",
+  "secondaryField": "sp_widget",
   "icon": "icon-layout",
   "allowCreate": true,
   "scriptFields": [

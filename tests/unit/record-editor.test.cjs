@@ -123,7 +123,7 @@ function serverHarness(table = 'sys_ui_page', options = {}) {
         };
         this.isValidField = (field) => Object.hasOwn(record, field);
         this.getValue = (field) => current[field] ?? null;
-        this.getDisplayValue = (field) => field === 'sys_policy' && options.policyDisplay !== undefined ? options.policyDisplay : (field === 'sp_widget' ? 'Parent widget' : String(current[field] || ''));
+        this.getDisplayValue = (field) => options.displayValues?.[field] ?? (field === 'sys_policy' && options.policyDisplay !== undefined ? options.policyDisplay : (field === 'sp_widget' ? 'Parent widget' : String(current[field] || '')));
         this.getElement = (field) => ({
             getLabel: () => options.labels?.[field] ?? ({
                 name: 'Name', id: 'ID', active: 'Active', global: 'Global',
@@ -376,6 +376,7 @@ test('invalid or missing editor configurations fail closed and never write recor
         '{', [], null, { ...valid, moreFields: [] },
         { ...valid, primaryField: 'missing' }, { ...valid, headerFields: [] },
         { ...valid, icon: 'icon-mail extra-class' }, { ...valid, allowCreate: 'true' },
+        { ...valid, secondaryField: false }, { ...valid, secondaryField: '' }, { ...valid, secondaryField: 'sp_widget.name' },
         { ...valid, label: 42 }, { ...valid, label: '' }, { ...valid, label: '   ' },
         { ...valid, supportsEs12: 'true' }, { ...valid, additionalFields: 'description' },
         { ...valid, additionalFields: ['name'] },
@@ -810,9 +811,34 @@ test('record picker does not return technical table names as record identifiers'
         const h = serverHarness(table);
         const result = h.api.getEditorRecords();
         assert.equal(result.widgets[0].table, table);
-        assert.equal(result.widgets[0].id, '');
+        assert.equal(result.widgets[0].id, table === 'sp_ng_template' ? 'Parent widget' : table === 'sp_angular_provider' ? 'factory' : '');
         assert.equal(result.widgets[0].name, h.row[h.api._getEditorProfiles()[table].primary]);
     }
+});
+
+test('picker secondary fields use display values, respect field access and remain optional', () => {
+    for (const [table, field, label] of [
+        ['sp_angular_provider', 'type', 'Factory'],
+        ['sp_ng_template', 'sp_widget', 'Parent widget'],
+    ]) {
+        assert.equal(configs[table].secondaryField, field);
+        for (const params of [{}, { sys_ids: id }]) {
+            const h = serverHarness(table, { displayValues: { [field]: label }, params });
+            assert.equal(h.api.getEditorRecords().widgets[0].id, label);
+        }
+        const hidden = serverHarness(table, { noRead: [field] }).api.getEditorRecords();
+        assert.equal(hidden.widgets.length, 1);
+        assert.equal(hidden.widgets[0].id, '');
+        const omitted = { ...configs[table] };
+        delete omitted.secondaryField;
+        assert.equal(serverHarness(table, { configs: { [table]: omitted } }).api.getEditorRecords().widgets[0].id, '');
+    }
+    const custom = { ...configs.sys_script_email, secondaryField: 'description' };
+    assert.equal(serverHarness('sys_script_email', { configs: { sys_script_email: custom } }).api.getEditorRecords().widgets[0].id, 'Description');
+    const missing = serverHarness('sp_ng_template');
+    delete missing.row.sp_widget;
+    assert.equal(missing.api.getEditorRecords().widgets[0].id, '');
+    assert.throws(() => missing.api._parseEditorConfig('sp_ng_template', configs.sp_ng_template), /Invalid secondaryField/);
 });
 
 test('picker paging continues past unreadable display fields and rejects invalid history IDs', () => {
@@ -1533,6 +1559,18 @@ test('the real Angular page preserves widgets and opens and saves the seven addi
                 sp_angular_provider: 'icon-console', sys_ui_page: 'icon-application-generic', sp_ng_template: 'icon-layout', sys_script_email: 'icon-envelope-subscribe',
             }[table];
             assert.equal(await page.locator('.we-picker-col-main .we-picker-item-icon i').first().getAttribute('class'), expectedIcon);
+            if (table === 'sp_angular_provider' || table === 'sp_ng_template') {
+                const records = serverHarness(table, { displayValues: { type: 'Factory' } }).api.getEditorRecords().widgets;
+                await page.evaluate(records => editorScope.$apply(() => {
+                    editorScope.pickerWidgets = records;
+                    editorScope.userPrefs.showRecentlyOpenedWidgets = true;
+                    editorScope.userPrefs.showOpenHistory = true;
+                    editorScope.recentWidgetsResolved = records;
+                }), records);
+                const secondary = table === 'sp_angular_provider' ? 'Factory' : 'Parent widget';
+                assert.equal(await page.locator('.we-picker-col-main .we-picker-item-id').innerText(), secondary);
+                assert.deepEqual(await page.locator('.we-picker-col-recent .we-picker-item-id').allTextContents(), [secondary, fixture.record_label]);
+            }
             const trigger = page.getByRole('button', { name: /^Record type:/ });
             assert.equal(await page.locator('.we-picker-type').evaluate(element => getComputedStyle(element).marginLeft), '8px');
             const triggerStyle = await trigger.evaluate(element => {

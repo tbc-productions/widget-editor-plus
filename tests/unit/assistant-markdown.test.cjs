@@ -1509,7 +1509,7 @@ test('table property rows validate before writes, save individually and delete p
     assert.equal(Object.hasOwn(values, 'monaco.plus.assistant.table_config.widget'), false);
     assert.equal(Object.hasOwn(values, 'monaco.plus.code_search.display_fields.widget'), true);
     params = { kind: 'editor_config', table: 'widget', description: 'Editor layout', property_value: JSON.stringify({
-        primaryField: 'name', label: 'Custom Editor', icon: 'icon-mail', allowCreate: true,
+        primaryField: 'name', secondaryField: 'sys_id', label: 'Custom Editor', icon: 'icon-mail', allowCreate: true,
         scriptFields: [{ name: 'script', language: 'javascript', scriptKind: 'server' }],
         headerFields: ['name'], additionalFields: [{ name: 'sys_id', readOnly: true }],
     }) };
@@ -1517,8 +1517,9 @@ test('table property rows validate before writes, save individually and delete p
     assert.equal(writes.at(-1).description, 'Editor layout');
     assert.ok(Object.hasOwn(values, 'monaco.plus.editor.table_config.widget'));
     assert.equal(JSON.parse(values['monaco.plus.editor.table_config.widget']).label, 'Custom Editor');
+    assert.equal(JSON.parse(values['monaco.plus.editor.table_config.widget']).secondaryField, 'sys_id');
     const writesBefore = writes.length;
-    for (const change of [{ headerFields: ['name', 'script'] }, { additionalFields: ['missing'] }, { icon: 'bad icon' }, { label: false }]) {
+    for (const change of [{ headerFields: ['name', 'script'] }, { additionalFields: ['missing'] }, { icon: 'bad icon' }, { label: false }, { secondaryField: 'missing' }, { secondaryField: 42 }]) {
         const config = JSON.parse(values['monaco.plus.editor.table_config.widget']);
         params.property_value = JSON.stringify({ ...config, ...change });
         assert.equal(api.saveTableProperty().success, false);

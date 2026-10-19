@@ -65,6 +65,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         }
         object(config, [
             'primaryField',
+            'secondaryField',
             'label',
             'icon',
             'allowCreate',
@@ -75,6 +76,13 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         ]);
         if (typeof config.primaryField !== 'string' || !probe.isValidField(config.primaryField))
             throw new Error('Invalid primaryField.');
+        if (
+            config.secondaryField !== undefined &&
+            (typeof config.secondaryField !== 'string' ||
+                !/^[a-z][a-z0-9_]*$/i.test(config.secondaryField) ||
+                (!skipMissingFields && !probe.isValidField(config.secondaryField)))
+        )
+            throw new Error('Invalid secondaryField.');
         if (config.label !== undefined && (typeof config.label !== 'string' || !config.label.trim()))
             throw new Error('label must be a non-empty string.');
         ['allowCreate', 'supportsEs12'].forEach(function (key) {
@@ -146,6 +154,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             label: label,
             singular: label,
             primary: config.primaryField,
+            secondary: config.secondaryField && probe.isValidField(config.secondaryField) ? config.secondaryField : '',
             icon: config.icon || 'icon-document-code',
             allowCreate: config.allowCreate === true,
             supportsEs12: config.supportsEs12 === true,
@@ -383,11 +392,12 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             }
             var primary = gr.getElement(profile.primary);
             if (!primary.canRead()) continue;
+            var secondary = profile.secondary && gr.getElement(profile.secondary);
             records.push({
                 table: table,
                 sys_id: gr.getUniqueValue(),
                 name: gr.getValue(profile.primary) || '',
-                id: '',
+                id: secondary && secondary.canRead() ? String(gr.getDisplayValue(profile.secondary) || '') : '',
                 canWrite: gr.canWrite(),
                 servicenow: false,
             });
