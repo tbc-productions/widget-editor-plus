@@ -514,12 +514,12 @@ test('Compare+ update-set dropdown shows date, set name and author columns and s
     } finally { await context.close(); }
 });
 
-test('Compare+ header pickers search and navigate safely, discarding old record-search replies', async () => {
+test('Credit+ header pickers wait for the record name, search and navigate safely, discarding old record-search replies', async () => {
     const context = await browser.newContext();
     try {
         const page = await context.newPage();
         await page.route('https://credit.test/**', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: markup }));
-        await page.goto('https://credit.test/?sysparm_update=' + update);
+        await page.goto('https://credit.test/?sysparm_update=' + update + '&sysparm_table=sp_widget&sysparm_record=' + fixture.record);
         await page.evaluate(fixture => {
             window.pickers = {}; window.calls = []; window.pendingRecords = null;
             window.$j = input => {
@@ -545,6 +545,7 @@ test('Compare+ header pickers search and navigate safely, discarding old record-
                     window.calls.push(params);
                     if (params.sysparm_name === 'getTables') callback(JSON.stringify({ success: true, results: [{ id: 'sp_widget', text: 'Widget' }], has_more: true }));
                     else if (params.sysparm_name === 'getRecords') window.pendingRecords = callback;
+                    else if (params.sysparm_name === 'getCredit' && !window.pendingCredit) window.pendingCredit = callback;
                     else if (params.sysparm_record) {
                         if (params.sysparm_record === '0'.repeat(32)) { callback(JSON.stringify({ success: false, error: 'No Customer Updates for this record.', errorCode: 'no_customer_updates' })); return; }
                         const id = 'e'.repeat(32);
@@ -554,6 +555,9 @@ test('Compare+ header pickers search and navigate safely, discarding old record-
             };
         }, fixture);
         await installCredit(page);
+        assert.equal(await page.evaluate(() => window.pickers['cp-record-input'].value), null, 'The record picker stays empty while its display name is loading');
+        await page.evaluate(fixture => window.pendingCredit(JSON.stringify(fixture)), fixture);
+        await settle(page);
         assert.deepEqual(await page.evaluate(() => window.pickers['cp-table-input'].value), { id: 'sp_widget', text: 'Widget' });
         assert.deepEqual(await page.evaluate(() => window.pickers['cp-record-input'].value), { id: fixture.record, text: 'My widget' });
         assert.equal(await page.evaluate(() => window.pickers['cp-table-input'].options.dropdownCssClass), 'dc-table-picker-drop');
@@ -1121,6 +1125,12 @@ test('statistics load only on demand, render safe leaderboards, cache while open
             await settle(page);
             assert.equal(await page.locator('.cp-stats-percentage, .cp-stats-medal').count(), 0);
             assert.deepEqual(await page.locator('.cp-stats-board p').allTextContents(), ['No additions', 'No removals', 'No additions', 'No removals']);
+            assert.equal(await page.locator('.cp-stats-board p').evaluateAll(nodes => nodes.every(node => {
+                const style = getComputedStyle(node), heading = node.previousElementSibling.getBoundingClientRect();
+                const range = document.createRange(); range.selectNodeContents(node);
+                return style.textAlign === 'center' && range.getBoundingClientRect().top - heading.bottom >= 24 && node.scrollWidth <= node.clientWidth;
+            })), true, 'Empty leaderboards centre their message with space below the heading at both viewport sizes');
+            await page.screenshot({ path: '/tmp/credit-statistics-empty-' + width + '.png', fullPage: true });
             await page.close();
         }
     } finally { await context.close(); }
