@@ -1015,6 +1015,10 @@ test('statistics load only on demand, render safe leaderboards, cache while open
             assert.equal(await page.locator('.cp-stats-board').count(), 4);
             assert.deepEqual(await page.locator('.cp-stats-board').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).borderTopColor)), ['rgba(9, 134, 88, 0.35)', 'rgba(191, 41, 41, 0.35)', 'rgba(9, 134, 88, 0.35)', 'rgba(191, 41, 41, 0.35)']);
             assert.equal(await page.locator('.cp-stats-board').first().locator('li').count(), 3);
+            assert.equal(await page.locator('.cp-stats-board li').evaluateAll(rows => rows.every(row => {
+                const bounds = row.getBoundingClientRect(), heading = row.closest('.cp-stats-board').querySelector('h3').getBoundingClientRect();
+                return Math.abs(bounds.left - heading.left) < 1 && Math.abs(bounds.right - heading.right) < 1;
+            })), true, 'Leaderboard rows extend to both card edges at both viewport sizes');
             assert.deepEqual(await page.locator('.cp-stats-percentage').allTextContents(), ['50.0%', '29.3%', '20.7%', '100.0%', '78.1%', '100.0%']);
             assert.deepEqual(await page.locator('.cp-stats-board').first().locator('.cp-stats-rank').allTextContents(), ['1', '2', '3']);
             assert.deepEqual(await page.locator('.cp-stats-contribution span').evaluateAll(nodes => nodes.map(node => node.style.width)), ['50%', '29.3%', '20.7%', '100%', '78.1%', '100%']);
@@ -1092,6 +1096,7 @@ test('statistics load only on demand, render safe leaderboards, cache while open
             assert.equal(await page.locator('#cp-statistics a .cp-stats-medal').count(), 0);
             const rankedUser = page.locator('.cp-stats-board').first().locator('li').nth(1);
             await rankedUser.locator('a').hover();
+            assert.equal(await rankedUser.evaluate(node => getComputedStyle(node).backgroundColor), 'rgba(9, 134, 88, 0.04)');
             assert.equal(await rankedUser.locator('.cp-stats-medal').evaluate(node => getComputedStyle(node).textDecorationLine), 'none');
             assert.equal(await rankedUser.locator('.cp-stats-medal').evaluate(node => parseFloat(getComputedStyle(node).fontSize) > parseFloat(getComputedStyle(node.previousElementSibling).fontSize)), true);
             assert.equal(await page.locator('#cp-statistics').evaluate(node => node.scrollWidth <= node.clientWidth), true);
@@ -1128,8 +1133,8 @@ test('statistics load only on demand, render safe leaderboards, cache while open
             assert.equal(await page.locator('.cp-stats-board p').evaluateAll(nodes => nodes.every(node => {
                 const style = getComputedStyle(node), heading = node.previousElementSibling.getBoundingClientRect();
                 const range = document.createRange(); range.selectNodeContents(node);
-                return style.textAlign === 'center' && range.getBoundingClientRect().top - heading.bottom >= 24 && node.scrollWidth <= node.clientWidth;
-            })), true, 'Empty leaderboards centre their message with space below the heading at both viewport sizes');
+                return style.textAlign === 'left' && range.getBoundingClientRect().top - heading.bottom >= 24 && node.scrollWidth <= node.clientWidth;
+            })), true, 'Empty leaderboards left-align their message with space below the heading at both viewport sizes');
             await page.screenshot({ path: '/tmp/credit-statistics-empty-' + width + '.png', fullPage: true });
             await page.close();
         }
