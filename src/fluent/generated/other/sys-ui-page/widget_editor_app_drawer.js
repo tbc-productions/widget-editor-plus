@@ -70,6 +70,13 @@
         }
         /* ServiceNow's nav reset overrides the browser's default hidden popover style. */
         we-app-drawer .we-app-drawer-popover:not(:popover-open) { display: none; }
+        @media (prefers-reduced-motion: no-preference) {
+            we-app-drawer .we-app-drawer-popover:popover-open { animation: we-app-drawer-reveal 160ms ease-out; }
+        }
+        @keyframes we-app-drawer-reveal {
+            from { opacity: 0; transform: translateY(-6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
         we-app-drawer .we-app-drawer-title {
             display: flex; align-items: center; justify-content: space-between; gap: 12px;
             padding: 14px 16px 12px; font-size: 14px; font-weight: 600;

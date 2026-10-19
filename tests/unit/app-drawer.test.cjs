@@ -78,6 +78,47 @@ test('ServiceNow normalisation cannot expose the closed drawer or cover the app 
     } finally { await page.close(); }
 });
 
+test('the drawer reveals downwards, dismisses during motion and respects reduced motion', async () => {
+    for (const reducedMotion of ['no-preference', 'reduce']) {
+        const page = await mount();
+        try {
+            await page.emulateMedia({ reducedMotion });
+            const nav = page.locator('nav');
+            const start = await nav.evaluate(element => {
+                element.showPopover();
+                const animation = element.getAnimations()[0];
+                if (!animation) return null;
+                animation.pause();
+                animation.currentTime = 0;
+                return { opacity: +getComputedStyle(element).opacity, y: new DOMMatrix(getComputedStyle(element).transform).m42 };
+            });
+            if (reducedMotion === 'reduce') {
+                assert.equal(start, null, 'reduced motion opens without an animation');
+            } else {
+                assert.ok(start.opacity < 1 && start.y < 0, 'the drawer starts faded and slightly above its resting position');
+                const middle = await nav.evaluate(element => {
+                    element.getAnimations()[0].currentTime = 80;
+                    return { opacity: +getComputedStyle(element).opacity, y: new DOMMatrix(getComputedStyle(element).transform).m42 };
+                });
+                assert.ok(middle.opacity > start.opacity && middle.opacity < 1);
+                assert.ok(middle.y > start.y && middle.y < 0);
+                await nav.evaluate(element => element.getAnimations()[0].finish());
+            }
+            await expect(nav).toHaveCSS('opacity', '1');
+            await expect(nav).toHaveCSS('transform', 'none');
+            await page.keyboard.press('Escape');
+            await expect(nav).toBeHidden();
+            await nav.evaluate(element => {
+                element.showPopover();
+                element.getAnimations().forEach(animation => animation.pause());
+            });
+            await page.keyboard.press('Escape');
+            await expect(nav).toBeHidden();
+            assert.equal(await nav.evaluate(element => element.getAnimations().length), 0);
+        } finally { await page.close(); }
+    }
+});
+
 test('launcher contrast stays visible on all six real header styles in light and dark themes', async () => {
     const themes = [
         { name: 'light page with dark brand header', header: '3,45,66', title: '255,255,255', page: '255,255,255', text: '23,43,49' },
