@@ -105,6 +105,9 @@ test('launcher contrast stays visible on all six real header styles in light and
                     document.querySelector('header').className = current === 'widget-editor' ? 'we-alert-pills-row' : 'dc-header';
                 }, current);
                 const trigger = page.getByRole('button', { name: 'Apps', exact: true });
+                await expect(trigger).toHaveCSS('border-top-width', '1px');
+                await expect(trigger).toHaveCSS('border-top-style', 'solid');
+                assert.match(await trigger.evaluate(button => getComputedStyle(button).borderTopColor), /\/ 0\.35\)/, 'the resting border follows the icon colour at 35% opacity');
                 for (const state of ['normal', 'hover', 'keyboard focus', 'open']) {
                     if (state === 'hover') await trigger.hover();
                     if (state === 'keyboard focus') { await page.mouse.move(700, 600); await trigger.focus(); }
@@ -299,6 +302,31 @@ const destinations = {
     assistant: ['record_table', 'record_sys_id'],
 };
 
+test('an open drawer enables record apps when a delayed context check completes during Angular startup', async () => {
+    const page = await mount({ search: '?widget_id=' + record, capabilities: support, holdContext: true });
+    try {
+        await page.getByRole('button', { name: 'Apps', exact: true }).click();
+        await expect(page.locator('nav')).toHaveAttribute('aria-busy', 'true');
+        assert.equal(await page.locator('a[aria-disabled="true"]').count(), 8);
+        await page.addScriptTag({ path: require.resolve('angular/angular.js') });
+        await page.evaluate(() => {
+            angular.module('drawerLoadingTest', []);
+            angular.bootstrap(document.querySelector('.clipped'), ['drawerLoadingTest']);
+            window.contextResponses[0]();
+        });
+        await expect(page.locator('nav')).toBeVisible();
+        await expect(page.locator('nav')).toHaveAttribute('aria-busy', 'false');
+        assert.equal(await page.locator('a[aria-disabled="true"]').count(), 0);
+        for (const [app, [tableParam, recordParam]] of Object.entries(destinations)) {
+            for (const link of await page.locator('[data-app="' + app + '"] a').all()) {
+                const url = drawerDestination(await link.getAttribute('href'));
+                assert.equal(url.searchParams.get(tableParam), 'sp_widget');
+                assert.equal(url.searchParams.get(recordParam), record);
+            }
+        }
+    } finally { await page.close(); }
+});
+
 test('record apps retain compatible context in both actions and primary clicks use the current tab', async () => {
     for (const [current, search] of [
         ['widget-editor', '?record_table=sys_script_include&record_sys_id=' + record],
@@ -390,6 +418,42 @@ test('context checks ignore stale responses and refresh after Credit+ selects a 
         await page.evaluate(() => { history.replaceState({}, '', '?sysparm_update=only-update-id'); document.querySelector('nav').hidePopover(); });
         await page.getByRole('button', { name: 'Apps', exact: true }).click();
         assert.match(drawerDestination(await page.locator('[data-app="compare"] .we-app-drawer-link').getAttribute('href')).search, /^\?sys_id=[a-f0-9]{32}$/);
+    } finally { await page.close(); }
+});
+
+test('the open drawer follows picker context changes and ignores the previous record response', async () => {
+    const page = await mount({ current: 'credit', search: '?sysparm_table=sp_widget&sysparm_record=' + record, capabilities: support, holdContext: true });
+    try {
+        await page.clock.install();
+        const trigger = page.getByRole('button', { name: 'Apps', exact: true });
+        const nav = page.locator('nav');
+        const link = page.locator('[data-app="widget-editor"] .we-app-drawer-link');
+        await trigger.click();
+        await expect(link).toHaveAttribute('aria-disabled', 'true');
+        await page.evaluate(() => history.replaceState({}, '', '?sysparm_table=sys_script_include&sysparm_record=' + 'b'.repeat(32)));
+        await page.clock.runFor(300);
+        assert.equal(await page.evaluate(() => window.contextResponses.length), 2);
+        await page.evaluate(() => window.contextResponses[0]());
+        await expect(link).toHaveAttribute('aria-disabled', 'true');
+        await page.evaluate(() => window.contextResponses[1]());
+        await expect(nav).toBeVisible();
+        await expect(nav).toHaveAttribute('aria-busy', 'false');
+        assert.equal(await page.locator('a[aria-disabled="true"]').count(), 0);
+        const url = drawerDestination(await link.getAttribute('href'));
+        assert.equal(url.searchParams.get('record_table'), 'sys_script_include');
+        assert.equal(url.searchParams.get('record_sys_id'), 'b'.repeat(32));
+        await page.clock.runFor(600);
+        assert.equal(await page.evaluate(() => window.contextResponses.length), 2, 'unchanged context reuses the compatibility check');
+        await page.keyboard.press('Escape');
+        await page.evaluate(() => history.replaceState({}, '', '?sysparm_table=sp_widget&sysparm_record=' + 'c'.repeat(32)));
+        await page.clock.runFor(600);
+        assert.equal(await page.evaluate(() => window.contextResponses.length), 2, 'closed drawers stop checking context');
+        await trigger.click();
+        assert.equal(await page.evaluate(() => window.contextResponses.length), 3);
+        await page.evaluate(() => document.querySelector('we-app-drawer').remove());
+        await page.evaluate(() => history.replaceState({}, '', '?sysparm_table=sp_widget&sysparm_record=' + 'd'.repeat(32)));
+        await page.clock.runFor(600);
+        assert.equal(await page.evaluate(() => window.contextResponses.length), 3, 'removed drawers stop checking context');
     } finally { await page.close(); }
 });
 

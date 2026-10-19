@@ -48,10 +48,10 @@
         .we-app-drawer-heading { display: flex; flex: 1; min-width: 0; align-items: center; gap: 10px; }
         we-app-drawer .we-app-drawer-trigger {
             all: unset; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center;
-            width: 36px; height: 36px; border: 1px solid transparent; border-radius: 4px;
+            width: 32px; height: 32px; border: 1px solid color-mix(in srgb, currentColor 35%, transparent); border-radius: 4px;
             color: rgb(var(--now-color--neutral-0, var(--now-color--neutral-12, 38, 50, 56))); cursor: pointer;
         }
-        we-app-drawer .we-app-drawer-trigger i { font-size: 20px; line-height: 1; }
+        we-app-drawer .we-app-drawer-trigger i { font-size: 18px; line-height: 1; }
         we-app-drawer .we-app-drawer-trigger:hover,
         we-app-drawer .we-app-drawer-trigger[aria-expanded="true"] {
             background: rgb(var(--now-color_background--primary, 255, 255, 255));
@@ -241,8 +241,13 @@
                 popover.style.maxHeight = Math.max(0, global.innerHeight - rect.bottom - 14) + 'px';
             }
             this._beforeToggle = function (event) {
+                global.clearInterval(drawer._refreshTimer);
                 if (event.newState === 'open') {
                     drawer.refreshLinks();
+                    // Pickers can update the record URL while the drawer stays open.
+                    drawer._refreshTimer = global.setInterval(function () {
+                        drawer.refreshLinks();
+                    }, 250);
                     position();
                 }
                 trigger.setAttribute('aria-expanded', String(event.newState === 'open'));
@@ -372,6 +377,7 @@
             if (global.jQuery) global.jQuery(this).off('.weAppDrawer');
             this.removeEventListener('click', this._click);
             global.removeEventListener('keydown', this._escape, true);
+            global.clearInterval(this._refreshTimer);
             global.clearTimeout(this._contextTimer);
             this._contextKey = null;
             var popover = this.querySelector('nav');
