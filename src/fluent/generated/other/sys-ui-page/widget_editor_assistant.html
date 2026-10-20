@@ -1103,6 +1103,9 @@
             width: min(64rem, 96vw);
             height: min(56rem, 90vh);
         }
+        .we-picker-box--split {
+            width: min(56rem, 95vw);
+        }
         .we-picker-title-row {
             display: flex;
             align-items: center;
@@ -1192,10 +1195,34 @@
         .we-picker-col-main {
             flex: 1;
             min-width: 0;
+            min-height: 0;
             display: flex;
             flex-direction: column;
             padding: 1rem 1.25rem 0.75rem 1.25rem;
             overflow: hidden;
+        }
+        .we-picker-columns--split .we-picker-col-main {
+            flex: 1.35;
+            border-right: 1px solid rgba(var(--now-color--neutral-0, 0 0 0), 0.08);
+        }
+        .we-picker-col-recent {
+            flex: 1;
+            min-width: 0;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            padding: 1rem 1.25rem 0.75rem 1.25rem;
+            background: rgba(var(--now-color_background--tertiary, 243 244 246), 0.3);
+            overflow: hidden;
+        }
+        @media (max-width: 640px) {
+            .we-picker-columns--split {
+                flex-direction: column;
+            }
+            .we-picker-columns--split .we-picker-col-main {
+                border-right: none;
+                border-bottom: 1px solid rgba(var(--now-color--neutral-0, 0 0 0), 0.08);
+            }
         }
 
         /* Search input bar */
@@ -2007,13 +2034,16 @@
 
         <!-- Table and Record Lookup Modal — same picker chrome as the Widget Editor+ modals -->
         <div class="we-modal-backdrop" ng-if="ctrl.lookup.open" ng-click="ctrl.onModalBackdropClick($event)">
-            <div class="we-picker-box" ng-click="$event.stopPropagation()">
+            <div class="we-picker-box" ng-class="{'we-picker-box--split': ctrl.lookup.showRecent}" ng-click="$event.stopPropagation()">
                 <div class="we-picker-title-row" we-modal-draggable="we-modal-draggable">
                     <div class="we-picker-title-left">
                         <span class="we-picker-title" ng-if="ctrl.lookup.step === 'table'">Select Table</span>
                         <span class="we-picker-title" ng-if="ctrl.lookup.step === 'record'">Select {{ctrl.lookup.tableLabel}}</span>
                     </div>
                     <div class="we-picker-title-actions">
+                        <button type="button" class="btn btn-default" ng-click="ctrl.toggleRecentHistory()" aria-label="History" aria-pressed="{{ctrl.lookup.showRecent}}" aria-expanded="{{ctrl.lookup.showRecent}}" aria-controls="we-assistant-recent-records" title="{{ctrl.lookup.showRecent ? 'Hide recently opened records' : 'Show recently opened records'}}">
+                            <i class="icon-history" aria-hidden="true"></i>
+                        </button>
                         <button type="button" class="btn btn-default" ng-if="ctrl.lookup.step === 'record' &amp;&amp; !ctrl.isPresetTable(ctrl.lookup.chosenTable)" ng-click="ctrl.toggleFavouriteTable()" ng-class="{'we-modal-fav-btn--active': ctrl.isFavouriteTable(ctrl.lookup.chosenTable)}" aria-pressed="{{ctrl.isFavouriteTable(ctrl.lookup.chosenTable)}}" title="{{ctrl.isFavouriteTable(ctrl.lookup.chosenTable) ? 'Remove ' + ctrl.lookup.tableLabel + ' from favourites' : 'Add ' + ctrl.lookup.tableLabel + ' to favourites'}}">
                             <i ng-class="ctrl.isFavouriteTable(ctrl.lookup.chosenTable) ? 'icon-star' : 'icon-star-empty'" aria-hidden="true"></i>
                         </button>
@@ -2023,7 +2053,7 @@
                     </div>
                 </div>
 
-                <div class="we-picker-columns">
+                <div class="we-picker-columns" ng-class="{'we-picker-columns--split': ctrl.lookup.showRecent}">
                     <div class="we-picker-col-main">
                         <!-- Step 1: Table Lookup -->
                         <div ng-if="ctrl.lookup.step === 'table'" style="display: flex; flex-direction: column; min-height: 0; flex: 1;">
@@ -2034,7 +2064,7 @@
                                 <i class="icon-search we-picker-search-icon" aria-hidden="true" ng-if="!ctrl.lookup.tableQuery &amp;&amp; !ctrl.lookup.tableLoading"></i>
                             </div>
 
-                            <div ng-if="!ctrl.lookup.tableQuery">
+                            <div ng-if="!ctrl.lookup.tableQuery" class="we-picker-list">
                                 <div class="we-picker-section-header">
                                     <span class="we-picker-section-title">Popular</span>
                                 </div>
@@ -2056,6 +2086,8 @@
                                         </button>
                                     </div>
                                 </div>
+
+
                             </div>
 
                             <div ng-if="ctrl.lookup.tableQuery" style="display: flex; flex-direction: column; min-height: 0; flex: 1;">
@@ -2085,7 +2117,7 @@
                         <!-- Step 2: Default List View Columns Lookup with Lazy-Loading -->
                         <div ng-if="ctrl.lookup.step === 'record'" style="display: flex; flex-direction: column; min-height: 0; flex: 1;">
                             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; flex-shrink: 0;">
-                                <button type="button" class="btn btn-default" ng-click="ctrl.lookup.step = 'table'">
+                                <button type="button" class="btn btn-default" ng-click="ctrl.backToTables()">
                                     <i class="icon-chevron-left" style="margin-right: 0.375rem;"></i>
                                     <span>Back to Tables</span>
                                 </button>
@@ -2129,6 +2161,28 @@
                                     </div>
                                 </div>
                                 <div class="we-picker-load-more" ng-if="ctrl.lookup.loadingMore"><we-loader></we-loader></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="we-assistant-recent-records" class="we-picker-col-recent" ng-if="ctrl.lookup.showRecent" role="region" aria-label="Recent records">
+                        <div class="we-picker-section-header">
+                            <span class="we-picker-section-title">Recent <span class="we-picker-count-badge" ng-if="ctrl.lookup.recentRecords.length" ng-bind="ctrl.lookup.recentRecords.length"></span><we-header-loader ng-if="ctrl.lookup.recentLoading"></we-header-loader></span>
+                        </div>
+                        <div class="we-picker-empty" ng-if="ctrl.lookup.recentLoading">Loading recent records…</div>
+                        <div class="we-picker-empty" ng-if="ctrl.lookup.recentError" role="alert">
+                            <span ng-bind="ctrl.lookup.recentError"></span>
+                            <button type="button" class="btn btn-default" ng-click="ctrl.loadRecentRecords()">Retry</button>
+                        </div>
+                        <div class="we-picker-empty" ng-if="!ctrl.lookup.recentLoading &amp;&amp; !ctrl.lookup.recentError &amp;&amp; !ctrl.lookup.recentRecords.length">No recent records available</div>
+                        <div class="we-picker-list">
+                            <div class="we-picker-item" ng-repeat="r in ctrl.lookup.recentRecords track by r.table + ':' + r.sys_id" ng-class="{'we-picker-item--selected': ctrl.lookup.mode === 'add' &amp;&amp; ctrl.isRecordSelected(r)}" ng-click="ctrl.chooseRecord(r)" ng-keydown="ctrl.onRecordItemKeydown($event, r)" tabindex="0" role="button" aria-pressed="{{ctrl.lookup.mode === 'add' &amp;&amp; ctrl.isRecordSelected(r)}}" aria-disabled="{{ctrl.lookup.selectingPrimary}}">
+                                <span class="we-picker-item-icon" aria-hidden="true"><i ng-class="ctrl.tableIconClass(r.table)" aria-hidden="true"></i></span>
+                                <div class="we-picker-item-content">
+                                    <span class="we-picker-item-name" ng-bind="r.label"></span>
+                                    <span class="we-picker-item-id" ng-bind="r.tableLabel"></span>
+                                </div>
+                                <span class="we-picker-item-status" ng-if="ctrl.lookup.selectingPrimary &amp;&amp; ctrl.primary.table === r.table &amp;&amp; ctrl.primary.sysId === r.sys_id">Adding…</span>
+                                <span class="we-picker-item-status" ng-if="!ctrl.lookup.selectingPrimary &amp;&amp; ctrl.lookup.mode === 'add' &amp;&amp; ctrl.isRecordSelected(r)" title="Click to remove">Added</span>
                             </div>
                         </div>
                     </div>

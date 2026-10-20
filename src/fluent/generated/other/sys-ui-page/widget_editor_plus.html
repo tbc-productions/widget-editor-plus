@@ -525,6 +525,9 @@
             grid-template-rows: 1rem 1.625rem;
             align-items: start;
         }
+        .we-record-field .select2-container .select2-choice { height: 1.5rem; }
+        .we-record-field .select2-container .select2-arrow { height: 100%; }
+        .we-record-field .select2-container .select2-search-choice-close { top: 50%; transform: translateY(-50%); }
         .we-header .we-record-field input[type="checkbox"] {
             margin: 0;
             justify-self: center;
@@ -628,6 +631,7 @@
         }
         .we-desc-textarea { resize: vertical; width: 29.375rem; overflow-y: auto; min-height: 3.375rem; max-height: 65vh; max-width: 80vw; }
         .we-record-more-fields input[type="text"] { width: 29.375rem; max-width: 80vw; }
+        .we-record-more-fields .select2-container { max-width: 80vw; }
         .we-popover .we-field-boolean { flex-direction: row; align-items: center; gap: 0.5rem; }
         .we-popover .input-group-checkbox { display: inline-flex; flex-direction: row-reverse; align-items: center; align-self: flex-start; gap: 0.5rem; }
         .we-popover .input-group-checkbox label { margin: 0; }
@@ -972,12 +976,19 @@
         }
 
         .we-dropdown-item-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
-        .we-dropdown-ext-link {
-            display: none;
+        .we-dropdown-ext-link,
+        button.we-version-revert {
             flex-shrink: 0;
             width: 0.9375rem;
             height: 0.9375rem;
-            background-color: rgba(var(--now-color_text--primary), 0.45);
+            min-width: 0; min-height: 0; margin: 0; padding: 0;
+            border: 0; border-radius: 0; box-shadow: none;
+            cursor: pointer;
+            color: rgba(var(--now-color_text--primary), 0.45);
+        }
+        .we-dropdown-ext-link {
+            display: none;
+            background-color: currentColor;
             -webkit-mask-repeat: no-repeat;
             mask-repeat: no-repeat;
             -webkit-mask-position: center;
@@ -987,12 +998,31 @@
             -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 640 640'%3E%3Cpath d='M384 64C366.3 64 352 78.3 352 96C352 113.7 366.3 128 384 128L466.7 128L265.3 329.4C252.8 341.9 252.8 362.2 265.3 374.7C277.8 387.2 298.1 387.2 310.6 374.7L512 173.3L512 256C512 273.7 526.3 288 544 288C561.7 288 576 273.7 576 256L576 96C576 78.3 561.7 64 544 64L384 64zM144 160C99.8 160 64 195.8 64 240L64 496C64 540.2 99.8 576 144 576L400 576C444.2 576 480 540.2 480 496L480 416C480 398.3 465.7 384 448 384C430.3 384 416 398.3 416 416L416 496C416 504.8 408.8 512 400 512L144 512C135.2 512 128 504.8 128 496L128 240C128 231.2 135.2 224 144 224L224 224C241.7 224 256 209.7 256 192C256 174.3 241.7 160 224 160L144 160z'/%3E%3C/svg%3E");
             mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 640 640'%3E%3Cpath d='M384 64C366.3 64 352 78.3 352 96C352 113.7 366.3 128 384 128L466.7 128L265.3 329.4C252.8 341.9 252.8 362.2 265.3 374.7C277.8 387.2 298.1 387.2 310.6 374.7L512 173.3L512 256C512 273.7 526.3 288 544 288C561.7 288 576 273.7 576 256L576 96C576 78.3 561.7 64 544 64L384 64zM144 160C99.8 160 64 195.8 64 240L64 496C64 540.2 99.8 576 144 576L400 576C444.2 576 480 540.2 480 496L480 416C480 398.3 465.7 384 448 384C430.3 384 416 398.3 416 416L416 496C416 504.8 408.8 512 400 512L144 512C135.2 512 128 504.8 128 496L128 240C128 231.2 135.2 224 144 224L224 224C241.7 224 256 209.7 256 192C256 174.3 241.7 160 224 160L144 160z'/%3E%3C/svg%3E");
         }
-        .we-dropdown-ext-link:hover { background-color: rgb(var(--now-color_text--primary)); }
+        .we-dropdown-ext-link:hover,
+        button.we-version-revert:hover { color: rgb(var(--now-color_text--primary)); }
         .we-dropdown-item:hover .we-dropdown-ext-link { display: block; }
 
         /* Version ext-link: always occupies space so the row columns don't shift on hover */
-        .we-dropdown-ext-link--reserved { display: block !important; visibility: hidden; }
-        .we-dropdown-item:hover .we-dropdown-ext-link--reserved { visibility: visible; }
+        .we-dropdown-ext-link--reserved {
+            display: block !important; visibility: hidden;
+            /* The SVG drawing fills 80% of its view box, matching the 0.625rem revert glyph. */
+            -webkit-mask-size: 0.78125rem 0.78125rem;
+            mask-size: 0.78125rem 0.78125rem;
+        }
+        .we-dropdown-item:hover .we-dropdown-ext-link--reserved,
+        .we-dropdown-item:focus-within .we-dropdown-ext-link--reserved { visibility: visible; }
+        .we-version-revert-slot { display: inline-flex; width: 0.9375rem; margin-right: 0.375rem; flex-shrink: 0; }
+        button.we-version-revert {
+            display: inline-flex; align-items: center; justify-content: center;
+            appearance: none; background: transparent; opacity: 0;
+            font-size: 0.625rem; line-height: 1;
+        }
+        button.we-version-revert:hover { border: 0; background: transparent; box-shadow: none; }
+        .we-version-revert .icon,
+        .we-version-revert .icon::before { font-size: inherit; line-height: inherit; }
+        .we-dropdown-item:hover .we-version-revert,
+        .we-dropdown-item:focus-within .we-version-revert { opacity: 1; }
+        @media (hover: none) { button.we-version-revert { opacity: 1; } }
 
         /* Inline external-link icon — reuses the same FA mask as .we-dropdown-ext-link */
         .we-ext-icon {
@@ -3287,17 +3317,22 @@
                         </div>
                         <input ng-if="field.type === 'boolean'" type="checkbox" class="checkbox" ng-attr-id="record-field-{{field.name}}" ng-model="widget[field.name]" ng-disabled="isVersionView || !canWriteWidget || !field.canWrite" />
                         <select ng-if="field.type === 'choice'" class="form-control" ng-attr-id="record-field-{{field.name}}" ng-model="widget[field.name]" ng-options="choice.value as choice.label for choice in field.choices" ng-disabled="isVersionView || !canWriteWidget || !field.canWrite"><option value="">-- None --</option></select>
-                        <input ng-if="field.type === 'reference'" type="text" class="form-control" ng-attr-id="record-field-{{field.name}}" ng-value="field.displayValue" readonly="readonly" />
+                        <input ng-if="field.type === 'reference' &amp;&amp; !field.readOnly" type="hidden" we-select2-reference="field" ng-attr-id="record-field-{{field.name}}" ng-model="widget[field.name]" ng-disabled="isVersionView || !canWriteWidget || !field.canWrite" style="width:18rem" />
+                        <small class="text-danger" ng-if="field.type === 'reference' &amp;&amp; referenceErrors[field.name]" role="alert" ng-bind="referenceErrors[field.name]"></small>
+                        <input ng-if="field.type === 'reference' &amp;&amp; field.readOnly" type="text" class="form-control" ng-attr-id="record-field-{{field.name}}" ng-value="field.displayValue" readonly="readonly" />
                         <input ng-if="field.type !== 'boolean' &amp;&amp; field.type !== 'choice' &amp;&amp; field.type !== 'reference'" type="text" class="form-control" ng-class="{'we-record-primary': field.name === recordPrimaryField}" ng-attr-id="record-field-{{field.name}}" ng-model="widget[field.name]" ng-readonly="isVersionView || !canWriteWidget || !field.canWrite" />
                         <div id="we-record-more-fields" class="we-popover we-record-more-fields" ng-if="field.name === recordPrimaryField &amp;&amp; openDropdown === 'description'" ng-click="$event.stopPropagation()" we-dropdown-auto-pos="we-dropdown-auto-pos">
                             <div class="we-field" ng-class="{'we-field-boolean': field.type === 'boolean'}" ng-repeat="field in additionalWidgetFields track by field.name" ng-if="field.more">
-                                <div class="we-field-label-row"><label ng-attr-for="record-more-{{field.name}}" title="{{field.label}}">{{field.label}}</label></div>
+                                <div class="we-field-label-row"><label ng-attr-for="record-more-{{field.name}}" title="{{field.label}}">{{field.shortLabel || field.label}}</label></div>
                                 <textarea ng-if="field.multiline" we-auto-resize="we-auto-resize" class="form-control we-desc-textarea" ng-attr-id="record-more-{{field.name}}" ng-model="widget[field.name]" ng-readonly="isVersionView || !canWriteWidget || !field.canWrite" rows="3"></textarea>
                                 <input ng-if="field.type === 'boolean'" type="checkbox" class="checkbox" ng-attr-id="record-more-{{field.name}}" ng-model="widget[field.name]" ng-disabled="isVersionView || !canWriteWidget || !field.canWrite" />
-                                <input ng-if="!field.multiline &amp;&amp; field.readOnly" type="text" class="form-control" ng-attr-id="record-more-{{field.name}}" ng-value="field.displayValue" readonly="readonly" />
-                                <input ng-if="!field.multiline &amp;&amp; !field.readOnly &amp;&amp; field.type !== 'boolean'" type="text" class="form-control" ng-attr-id="record-more-{{field.name}}" ng-model="widget[field.name]" ng-readonly="isVersionView || !canWriteWidget || !field.canWrite" />
+                                <select ng-if="field.type === 'choice' &amp;&amp; !field.readOnly" class="form-control" ng-attr-id="record-more-{{field.name}}" ng-model="widget[field.name]" ng-options="choice.value as choice.label for choice in field.choices" ng-disabled="isVersionView || !canWriteWidget || !field.canWrite"><option value="">-- None --</option></select>
+                                <input ng-if="field.type === 'reference' &amp;&amp; !field.readOnly" type="hidden" we-select2-reference="field" ng-attr-id="record-more-{{field.name}}" ng-model="widget[field.name]" ng-disabled="isVersionView || !canWriteWidget || !field.canWrite" style="width:29.375rem;max-width:80vw" />
+                                <small class="text-danger" ng-if="field.type === 'reference' &amp;&amp; referenceErrors[field.name]" role="alert" ng-bind="referenceErrors[field.name]"></small>
+                                <input ng-if="!field.multiline &amp;&amp; field.readOnly &amp;&amp; field.type !== 'boolean'" type="text" class="form-control" ng-attr-id="record-more-{{field.name}}" ng-value="field.displayValue" readonly="readonly" />
+                                <input ng-if="!field.multiline &amp;&amp; !field.readOnly &amp;&amp; field.type !== 'boolean' &amp;&amp; field.type !== 'choice' &amp;&amp; field.type !== 'reference'" type="text" class="form-control" ng-attr-id="record-more-{{field.name}}" ng-model="widget[field.name]" ng-readonly="isVersionView || !canWriteWidget || !field.canWrite" />
                             </div>
-                            <div class="we-field"><label for="record-application">{{widget.application_label}}</label><input id="record-application" type="text" class="form-control" ng-model="widget.application" readonly="readonly" /></div>
+                            <div class="we-field" ng-if="widget.application_label"><label for="record-application">{{widget.application_label}}</label><input id="record-application" type="text" class="form-control" ng-model="widget.application" readonly="readonly" /></div>
                             <span class="we-widget-origin" ng-if="widgetOrigin" title="{{widgetOrigin.tooltip}}" ng-bind-template="Established {{widgetOrigin.year}} by {{widgetOrigin.founder}}"></span>
                         </div>
                     </div>
@@ -3360,6 +3395,9 @@
                                 <span class="we-version-col-uset" ng-class="{'we-version-col-uset--in-progress': v.update_set_state === 'in progress', 'we-version-col-uset--ignore': v.update_set_state === 'ignore'}" title="{{v.update_set_name}}
 [{{v.update_set_state_label}}]" ng-bind="v.update_set_name || ''"></span>
                                 <span class="we-version-col-user"><span ng-bind="v.sys_created_by" title="{{v.sys_created_by}}"></span> <span ng-if="v.state === 'current'" class="we-version-current-dot" title="Current" style="margin-left: 0.5rem;"></span></span>
+                            </span>
+                            <span class="we-version-revert-slot" ng-if="canWriteWidget &amp;&amp; !widgetSysPolicy">
+                                <button type="button" class="we-version-revert" ng-if="!$first &amp;&amp; v.state !== 'current'" ng-click="revertVersion(v, $event)" title="Revert to this version" aria-label="Revert to this version"><span class="icon icon-undo-action" aria-hidden="true"></span></button>
                             </span>
                             <a class="we-dropdown-ext-link we-dropdown-ext-link--reserved" href="/nav_to.do?uri=sys_update_version.do%3Fsys_id%3D{{v.sys_id}}" target="_blank" ng-click="$event.stopPropagation(); openDropdown = null" title="Open in platform" aria-label="Open version in platform"></a>
                         </div>
@@ -3453,6 +3491,9 @@
                                     <span class="we-version-col-date"><span ng-bind="formatVersionDate(v.sys_created_on)"></span><span ng-if="v.state === 'current'" class="we-version-current-dot" title="Current" style="margin-left: 0.5rem;"></span></span>
                                     <span class="we-version-col-uset" ng-class="{'we-version-col-uset--in-progress': v.update_set_state === 'in progress', 'we-version-col-uset--ignore': v.update_set_state === 'ignore'}" title="{{v.update_set_state_label}}" ng-bind="v.update_set_name || ''"></span>
                                     <span class="we-version-col-user"><span ng-bind="v.sys_created_by"></span></span>
+                                </span>
+                                <span class="we-version-revert-slot" ng-if="canWriteWidget &amp;&amp; !widgetSysPolicy">
+                                    <button type="button" class="we-version-revert" ng-if="!$first &amp;&amp; v.state !== 'current'" ng-click="revertVersion(v, $event)" title="Revert to this version" aria-label="Revert to this version"><span class="icon icon-undo-action" aria-hidden="true"></span></button>
                                 </span>
                                 <a class="we-dropdown-ext-link we-dropdown-ext-link--reserved" href="/nav_to.do?uri=sys_update_version.do%3Fsys_id%3D{{v.sys_id}}" target="_blank" ng-click="$event.stopPropagation(); openDropdown = null" title="Open in platform" aria-label="Open version in platform"></a>
                             </div>
@@ -3571,7 +3612,7 @@
                     <div class="we-dropdown" we-close-on-outside-click="openDropdown" close-key="'burger'">
                         <button class="btn btn-default" ng-click="toggleDropdown('burger')" title="Menu" aria-label="Menu" style="padding:0.125rem 0.625rem;line-height:1.2"><span class="icon-menu"></span></button>
                         <div class="we-dropdown-menu we-dropdown-menu-right" ng-show="openDropdown === 'burger'" we-dropdown-auto-pos="we-dropdown-auto-pos">
-                            <div class="we-dropdown-item" ng-click="newRecord()">New {{recordLabel}}</div>
+                            <div class="we-dropdown-item" ng-if="recordAllowsCreate" ng-click="newRecord()">New {{recordLabel}}</div>
                             <div class="we-dropdown-item" ng-if="isWidgetRecord &amp;&amp; !isNewWidget" ng-class="{'disabled': widget.deleted}" ng-click="cloneWidget()">Clone widget</div>
                             <div class="we-dropdown-divider--group" ng-if="!isNewWidget"></div>
                             <div class="we-dropdown-item" ng-if="isWidgetRecord &amp;&amp; !isNewWidget &amp;&amp; !widget.is_header_footer" ng-class="{'disabled': widget.deleted}" ng-click="openOptionSchemaModal()">Edit option schema <span class="we-status-dot we-status-dot--green" ng-if="widget.option_schema_has_value" title="Has an option schema defined"></span></div>
@@ -3878,7 +3919,7 @@
                                 <div class="we-modal-option">
                                     <span class="input-group-checkbox">
                                         <input type="checkbox" class="checkbox" id="chk-format-tabs" ng-model="userPrefsEdit.formatTabsToSpaces" />
-                                        <label class="checkbox-label" for="chk-format-tabs" we-tooltip-title="The number of spaces can be set in 'Tab size'.">Convert tabs to spaces when formatting</label>
+                                        <label class="checkbox-label" for="chk-format-tabs" we-tooltip-title="Use spaces when typing, pasting and formatting. Set the number of spaces in 'Tab size'.">Use spaces for indentation and formatting</label>
                                     </span>
                                 </div>
                                 <div class="we-modal-option">
@@ -4368,7 +4409,7 @@
                         <button type="button" class="btn btn-default" ng-if="userPrefs.showRecentlyOpenedWidgets !== false &amp;&amp; recentWidgetsResolved.length" ng-click="toggleRecentWidgetsPane()" aria-pressed="{{!!userPrefs.showOpenHistory}}" we-tooltip-title="{{userPrefs.showOpenHistory ? 'Hide recently opened records' : 'Show recently opened records'}}" aria-label="History">
                             <i class="icon-history" aria-hidden="true"></i>
                         </button>
-                        <button type="button" class="btn btn-primary we-picker-btn-new" ng-click="newRecord(picker.table)">
+                        <button type="button" class="btn btn-primary we-picker-btn-new" ng-if="pickerType().allowCreate !== false" ng-click="newRecord(picker.table)">
                             <span>+ New {{pickerType().singular}}</span>
                         </button>
                         <button type="button" class="we-modal-close-btn we-picker-close-btn" ng-if="!showPicker" ng-click="closeWidgetPickerModal()" aria-label="Close"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M5 5L19 19M19 5L5 19" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>

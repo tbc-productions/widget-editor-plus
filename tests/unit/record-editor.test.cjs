@@ -3,6 +3,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const ts = require('typescript');
+const { readFluentField } = require('../helpers/fluent-source.cjs');
+const configFile = 'src/fluent/generated/properties/system-property/sys_properties_widget_editor_table_config.now.ts';
+const configs = Object.fromEntries([...fs.readFileSync(configFile, 'utf8').matchAll(/export const (\w+) = Property/g)].map(([, declaration]) => [
+    readFluentField(configFile, 'name', declaration).replace('monaco.plus.editor.table_config.', ''),
+    JSON.parse(readFluentField(configFile, 'value', declaration)),
+]));
 
 const server = fs.readFileSync(
     'src/fluent/generated/server-development/script-include/sys_script_include_widget_editor_ajax.server.js',
@@ -18,6 +24,8 @@ const supported = [
     'sp_angular_provider',
     'sys_ui_page',
     'sp_ng_template',
+    'sys_script_email',
+    'sys_script_fix',
 ];
 
 function serverHarness(table = 'sys_ui_page', options = {}) {
@@ -26,6 +34,11 @@ function serverHarness(table = 'sys_ui_page', options = {}) {
         name: 'Example',
         id: 'example.html',
         active: '1',
+        new_lines_to_html: '0',
+        record_as_rollback: '0',
+        unloadable: '1',
+        before: '0',
+        turn_off_scss_compilation: '0',
         global: '0',
         client_callable: '0',
         sandbox_callable: '0',
@@ -49,11 +62,53 @@ function serverHarness(table = 'sys_ui_page', options = {}) {
         sys_updated_on: '2026-10-17 00:00:00',
         ...options.row,
     };
+    const warnings = [];
     const calls = [],
         writes = [],
         queries = [];
     function Record(name) {
+        if (name === 'sys_properties') {
+            const properties = Object.entries(options.configs || configs).map(([table, config]) => ({
+                name: 'monaco.plus.editor.table_config.' + table, value: typeof config === 'string' ? config : JSON.stringify(config),
+            }));
+            let cursor = -1;
+            this.addQuery = this.orderBy = this.query = () => {};
+            this.next = () => ++cursor < properties.length;
+            this.getValue = field => properties[cursor][field];
+            return;
+        }
+        if (options.references && Object.hasOwn(options.references, name)) {
+            const records = options.references[name];
+            const conditions = [];
+            let current = {}, result = [], cursor = 0, start = 0, end = records.length;
+            calls.push(name);
+            this.isValid = () => true;
+            this.isValidField = field => ['name', 'sys_id', 'active'].includes(field);
+            this.getDisplayName = () => 'name';
+            this.get = value => { current = records.find(record => record.sys_id === value) || {}; return !!current.sys_id; };
+            this.canRead = () => current.readable !== false;
+            this.getElement = () => ({ canRead: () => current.displayReadable !== false });
+            this.getDisplayValue = () => current.name;
+            this.getUniqueValue = () => current.sys_id;
+            this.getValue = field => current[field];
+            this.addQuery = (field, operator, value) => { conditions.push({ field, operator, value }); queries.push([name, field, operator, value]); };
+            this.addEncodedQuery = query => { assert.equal(query, 'active=true'); conditions.push({field:'active',operator:'=',value:'1'}); };
+            this.orderBy = () => {};
+            this.chooseWindow = (from, to) => { start = from; end = to; };
+            this.query = () => {
+                result = records.filter(record => conditions.every(({field,operator,value}) => operator === 'CONTAINS' ? String(record[field]).includes(value) : record[field] === value)).slice(start,end);
+                cursor = 0;
+            };
+            this.next = () => { current = result[cursor++] || {}; return !!current.sys_id; };
+            return;
+        }
         calls.push(name);
+        this.isValid = () => !(options.invalidTables || []).includes(name);
+        this.getLabel = () => options.tableLabels?.[name] || ({
+            sys_script_include: 'Script Include', sp_css: 'Style Sheet', sys_ui_script: 'UI Script',
+            sp_angular_provider: 'Angular Provider', sys_ui_page: 'UI Page', sp_ng_template: 'Angular HTML Template',
+            sys_script_email: 'Email Script', sys_script_fix: 'Fix Script',
+        }[name] || name);
         const related = { sys_es_latest_script: options.es12, sys_update_version: options.origin, sys_user: options.user };
         const record = Object.hasOwn(related, name) ? (related[name] || {}) : row;
         let current = record,
@@ -72,10 +127,11 @@ function serverHarness(table = 'sys_ui_page', options = {}) {
         };
         this.isValidField = (field) => Object.hasOwn(record, field);
         this.getValue = (field) => current[field] ?? null;
-        this.getDisplayValue = (field) => field === 'sys_policy' && options.policyDisplay !== undefined ? options.policyDisplay : (field === 'sp_widget' ? 'Parent widget' : String(current[field] || ''));
+        this.getDisplayValue = (field) => options.displayValues?.[field] ?? (field === 'sys_policy' && options.policyDisplay !== undefined ? options.policyDisplay : (field === 'sp_widget' ? 'Parent widget' : String(current[field] || '')));
         this.getElement = (field) => ({
             getLabel: () => options.labels?.[field] ?? ({
                 name: 'Name', id: 'ID', active: 'Active', global: 'Global',
+                record_as_rollback: 'Record for rollback', unloadable: 'Unloadable', before: 'Before',
                 client_callable: 'Glide AJAX enabled', sandbox_callable: 'Sandbox enabled',
                 mobile_callable: 'Mobile callable', access: 'Accessible from',
                 description: 'Description', api_name: 'API name', sys_policy: 'Protection policy',
@@ -87,7 +143,17 @@ function serverHarness(table = 'sys_ui_page', options = {}) {
             canRead: () => !(options.noRead || []).includes(field),
             canWrite: () => !(options.noWrite || []).includes(field),
             isMandatory: () => (options.mandatory || []).includes(field),
-            getED: () => ({ getLength: () => options.maxLength || 1000000 }),
+            getED: () => ({
+                getReference: () => options.dictionary?.[field]?.reference || (field === 'sp_widget' ? 'sp_widget' : ''),
+                getReferenceQualifier: () => options.dictionary?.[field]?.qualifier || '',
+                getChoice: () => ['access', 'ui_type', 'category', 'type', 'sys_policy'].includes(field) ? 1 : 0,
+                getLength: () => options.dictionary?.[field]?.maxLength ?? ({ name: 80, id: 100, api_name: 100, description: 4000 }[field] ?? 1000000),
+                getInternalType: () => options.dictionary?.[field]?.type ?? ({
+                    script: 'script', client_script: 'script_plain', processing_script: 'script',
+                    html: 'html', template: 'html_template', css: 'css', sp_widget: 'reference',
+                    ...Object.fromEntries(['active', 'global', 'client_callable', 'sandbox_callable', 'mobile_callable', 'direct', 'new_lines_to_html', 'turn_off_scss_compilation', 'record_as_rollback', 'unloadable', 'before'].map(name => [name, 'boolean'])),
+                }[field] ?? 'string'),
+            }),
         });
         this.addQuery = (field, value) => {
             filters[field] = value;
@@ -130,19 +196,20 @@ function serverHarness(table = 'sys_ui_page', options = {}) {
     const context = vm.createContext({
         Class: { create: () => function () {} },
         AbstractAjaxProcessor: {},
-        gs: { getProperty: (_, fallback) => fallback },
+        gs: { getProperty: (_, fallback) => fallback, warn: message => warnings.push(message) },
         GlideRecordSecure: Record,
         GlideRecord: Record,
+        GlideFilter: { checkRecord: (record, query) => query === 'active=true' && record.getValue('active') === '1' },
     });
     vm.runInContext('Object.extendsObject = function (_, methods) { return methods; };', context);
     vm.runInContext(server, context);
     const api = context.WidgetEditorAjax.prototype;
     api.getParameter = (name) => params[name];
     api._answer = (answer) => JSON.parse(JSON.stringify(answer));
-    return { api, params, row, calls, writes, queries };
+    return { api, params, row, calls, writes, queries, warnings };
 }
 
-test('the editor exposes exactly the seven agreed types and rejects other tables before querying', () => {
+test('the editor exposes configured types and rejects other tables before querying', () => {
     const h = serverHarness();
     assert.deepEqual(
         h.api.getEditorRecordTypes().types.map((type) => type.table),
@@ -152,11 +219,231 @@ test('the editor exposes exactly the seven agreed types and rejects other tables
         const rejected = serverHarness(table);
         for (const action of ['getWidget', 'getWidgetDefaults', 'saveWidget', 'saveField', 'getEditorRecords'])
             assert.equal(rejected.api[action]().success, false);
-        assert.deepEqual(rejected.calls, []);
+        assert.equal(rejected.calls.includes(table), false);
     }
 });
 
-test('all six additional types load their own code fields and preserve field permissions', () => {
+test('property configs resolve dictionary labels, ordered panes, overrides, field types and Retina icons', () => {
+    const config = {
+        primaryField: 'name', icon: 'icon-mail', allowCreate: false,
+        scriptFields: [{ name: 'html', language: 'html' }, { name: 'script', language: 'javascript', scriptKind: 'server' }],
+        headerFields: ['name', { name: 'new_lines_to_html', label: 'HTML', readOnly: true }],
+        additionalFields: ['description', { name: 'category', label: 'Kind' }, 'sp_widget'],
+    };
+    const h = serverHarness('sys_script_email', { configs: { sys_script_email: config }, tableLabels: { sys_script_email: 'Notification Email Script' } });
+    const types = h.api.getEditorRecordTypes().types;
+    assert.deepEqual(types.map(type => type.singular), ['Widget', 'Notification Email Script']);
+    assert.equal(types[1].icon, 'icon-mail');
+    assert.equal(types[1].allowCreate, false);
+    const result = h.api.getWidget();
+    assert.equal(result.record_label, 'Notification Email Script');
+    assert.deepEqual(result.core_editor_defs.map(field => field.field), ['html', 'script']);
+    assert.deepEqual(result.core_editor_defs.map(field => field.label), ['HTML', 'Script']);
+    assert.deepEqual(result.additional_widget_fields.map(field => field.name), ['name', 'new_lines_to_html', 'description', 'category', 'sp_widget']);
+    const checkbox = result.additional_widget_fields[1];
+    assert.equal(checkbox.type, 'boolean');
+    assert.equal(checkbox.shortLabel, 'HTML');
+    assert.equal(checkbox.canWrite, false);
+    assert.equal(result.additional_widget_fields[2].multiline, true);
+    assert.equal(result.additional_widget_fields[3].type, 'choice');
+    assert.equal(result.additional_widget_fields[3].shortLabel, 'Kind');
+    assert.equal(result.additional_widget_fields[3].choices[0].value, 'general');
+    assert.equal(result.additional_widget_fields[4].canWrite, true);
+    assert.equal(result.additional_widget_fields[4].reference, 'sp_widget');
+    assert.equal(result.widget.es12_supported, false);
+    h.params.field = 'new_lines_to_html'; h.params.value = 'true'; h.params.original = '{"new_lines_to_html":false}';
+    assert.equal(h.api.saveField().success, false);
+    h.params.sys_id = ''; h.params.new_record = 'true'; h.params.data = '{"name":"New"}';
+    assert.equal(h.api.getWidgetDefaults().success, false);
+    assert.equal(h.api.saveWidget().success, false);
+    assert.deepEqual(h.writes, []);
+});
+
+const readOnlyReferenceConfig = { ...configs.sp_ng_template, headerFields: ['id', {name:'sp_widget',readOnly:true}] };
+const referenceConfig = { ...configs.sp_ng_template, headerFields: ['id', {name:'sp_widget',multiline:true}] };
+const referenceOptions = {
+    configs: { sp_ng_template: referenceConfig },
+    references: { sp_widget: [
+        { sys_id: 'b'.repeat(32), name: 'Parent widget', active: '1' },
+        { sys_id: 'c'.repeat(32), name: 'Replacement widget', active: '1' },
+        { sys_id: 'd'.repeat(32), name: 'Unreadable', readable: false, active: '1' },
+        { sys_id: 'e'.repeat(32), name: 'Hidden display', displayReadable: false, active: '1' },
+        { sys_id: 'f'.repeat(32), name: 'Inactive widget', active: '0' },
+    ] },
+};
+
+test('reference lookups use the dictionary target, readable labels, qualifiers and bounded pages', () => {
+    const h = serverHarness('sp_ng_template', { ...referenceOptions, dictionary: { sp_widget: { qualifier: 'active=true' } }, params: { field:'sp_widget', table:'sys_user' } });
+    const field = h.api.getWidget().additional_widget_fields.find(field => field.name === 'sp_widget');
+    assert.equal(field.canWrite, true);
+    assert.equal(field.reference, 'sp_widget');
+    assert.equal(field.multiline, false);
+    assert.deepEqual(h.api.getEditorReferenceChoices(), { success:true, results:[
+        {id:'b'.repeat(32),text:'Parent widget'}, {id:'c'.repeat(32),text:'Replacement widget'},
+    ], has_more:false });
+    h.params.search = 'Replacement';
+    assert.equal(h.api.getEditorReferenceChoices().results.length, 1);
+    h.params.value = 'b'.repeat(32);
+    assert.equal(h.api.getEditorReferenceChoices().results[0].text, 'Parent widget');
+    assert.equal(h.calls.includes('sys_user'), false);
+    const paged = serverHarness('sp_ng_template', { ...referenceOptions, references: { sp_widget: Array.from({length:25},(_,i)=>({sys_id:i.toString(16).padStart(32,'0'),name:'Widget '+i})) }, params: { field:'sp_widget' } });
+    assert.equal(paged.api.getEditorReferenceChoices().results.length,20);
+    assert.equal(paged.api.getEditorReferenceChoices().has_more,true);
+    paged.params.offset = '20';
+    assert.equal(paged.api.getEditorReferenceChoices().results.length,5);
+    assert.equal(paged.api.getEditorReferenceChoices().has_more,false);
+    for (const change of [{ noRead:['sp_widget'] }, { canRead:false }, { exists:false }, { params:{field:'template'} }, { params:{sys_id:'bad'} }, { params:{record_table:'sys_user'} }, { canCreate:false, params:{sys_id:''} }]) {
+        const denied = serverHarness('sp_ng_template', { ...referenceOptions,...change,params:{field:'sp_widget',...change.params} });
+        assert.equal(denied.api.getEditorReferenceChoices().success,false,JSON.stringify(change));
+    }
+});
+
+test('reference saves accept sys_ids and clearing but reject unreadable, invalid, stale and disallowed targets before writes', () => {
+    for (const action of ['saveWidget','saveField']) {
+        for (const [value, change, success] of [
+            ['c'.repeat(32), {}, true], ['', {}, true],
+            ['invalid',{},false], ['a'.repeat(32),{},false], ['d'.repeat(32),{},false],
+            ['f'.repeat(32),{dictionary:{sp_widget:{qualifier:'active=true'}}},false],
+            ['c'.repeat(32),{dictionary:{sp_widget:{qualifier:'javascript:current.id'}}},false],
+            ['',{mandatory:['sp_widget']},false], ['c'.repeat(32),{noWrite:['sp_widget']},false],
+            ['c'.repeat(32),{configs:{sp_ng_template:readOnlyReferenceConfig}},false],
+            ['c'.repeat(32),{params:{original:'{"sp_widget":"stale"}'}},false],
+        ]) {
+            const h = serverHarness('sp_ng_template', { ...referenceOptions,...change,params:{
+                field:'sp_widget',value,data:JSON.stringify({id:'changed',sp_widget:value}),
+                original:JSON.stringify({id:'example.html',sp_widget:'b'.repeat(32)}),...change.params,
+            } });
+            const result = h.api[action]();
+            assert.equal(result.success,success,`${action}: ${value} ${JSON.stringify(change)}`);
+            if (success) assert.equal(h.row.sp_widget,value);
+            else { assert.deepEqual(h.writes,[]); assert.equal(h.row.id,'example.html'); }
+        }
+    }
+});
+
+test('table label overrides replace dictionary names in the picker, records and new-record defaults', () => {
+    for (const [table, dictionaryLabel, label] of [
+        ['sp_ng_template', 'angular ng-template', 'Angular Template'],
+        ['sp_angular_provider', 'Widget Angular Provider', 'Angular Provider'],
+    ]) {
+        const h = serverHarness(table, { tableLabels: { [table]: dictionaryLabel } });
+        const type = h.api.getEditorRecordTypes().types.find(type => type.table === table);
+        assert.equal(type.label, label);
+        assert.equal(type.singular, label);
+        assert.equal(h.api.getWidget().record_label, label);
+        assert.equal(h.api.getWidgetDefaults().record_label, label);
+    }
+    const custom = serverHarness('sys_script_email', { configs: { sys_script_email: { ...configs.sys_script_email, label: '  Custom Email Script  ' } } });
+    assert.equal(custom.api.getWidget().record_label, 'Custom Email Script');
+});
+
+test('application scope and founder metadata remain available with no configured additional fields', () => {
+    const config = { ...configs.sys_script_email, additionalFields: [] };
+    const h = serverHarness('sys_script_email', {
+        configs: { sys_script_email: config },
+        origin: { sys_created_on: '2020-01-02 03:04:05', sys_created_by: 'ada' },
+        user: { name: 'Ada Lovelace' },
+    });
+    const result = h.api.getWidget();
+    assert.equal(result.success, true);
+    assert.equal(result.additional_widget_fields.some(field => field.more), false);
+    assert.deepEqual(result.widget.widgetOrigin, { created_on: '2020-01-02 03:04:05', founder: 'Ada Lovelace' });
+    assert.equal(result.widget.application_sys_id, 'global');
+    assert.equal(result.widget.application, 'global');
+    assert.equal(result.widget.application_label, 'Application');
+    assert.equal(config.additionalFields.length, 0);
+});
+
+test('application metadata is omitted for missing or unreadable scope fields, including new records', () => {
+    for (const options of [{}, { noRead: ['sys_scope'] }]) {
+        const h = serverHarness('sp_css', options);
+        if (!options.noRead) delete h.row.sys_scope;
+        for (const action of ['getWidget', 'getWidgetDefaults']) {
+            const result = h.api[action]();
+            assert.equal(result.success, true);
+            assert.equal(result.widget.application_label, undefined);
+            assert.equal(result.widget.sys_scope, undefined);
+            assert.equal(result.widget.application, '');
+        }
+    }
+    const empty = serverHarness('sp_css', { row: { sys_scope: '' } }).api.getWidget();
+    assert.equal(empty.widget.application_label, 'Application');
+});
+
+test('Fix Script fields retain their order, checkbox types, labels and save permissions', () => {
+    const h = serverHarness('sys_script_fix');
+    const result = h.api.getWidget();
+    assert.deepEqual(result.core_editor_defs.map(def => [def.field, def.language, def.scriptKind]), [['script', 'javascript', 'server']]);
+    assert.equal(result.primary_field, 'name');
+    assert.deepEqual(result.additional_widget_fields.filter(def => !def.more).map(def => def.name), ['name', 'record_as_rollback']);
+    assert.deepEqual(result.additional_widget_fields.filter(def => def.more).map(def => def.name), ['description', 'unloadable', 'before']);
+    assert.equal(result.additional_widget_fields.find(def => def.name === 'record_as_rollback').shortLabel, 'Rollback');
+    for (const field of ['record_as_rollback', 'unloadable', 'before']) {
+        assert.equal(result.additional_widget_fields.find(def => def.name === field).type, 'boolean');
+        const value = !result.widget[field];
+        Object.assign(h.params, { field, value: String(value), original: JSON.stringify({ [field]: result.widget[field] }) });
+        assert.equal(h.api.saveField().success, true, field);
+        const denied = serverHarness('sys_script_fix', { noWrite: [field], params: { field, value: 'true' } });
+        assert.equal(denied.api.saveField().success, false);
+        assert.deepEqual(denied.writes, []);
+    }
+});
+
+test('unavailable optional fields do not hide configured tables or prevent code saves', () => {
+    for (const table of ['sys_ui_page', 'sp_css', 'sp_ng_template']) {
+        const h = serverHarness(table);
+        delete h.row.active;
+        if (table === 'sys_ui_page') {
+            delete h.row.description;
+            delete h.row.processing_script;
+        }
+        assert.ok(h.api.getEditorRecordTypes().types.some(type => type.table === table), table);
+        const result = h.api.getWidget();
+        assert.equal(result.success, true, table);
+        assert.equal(result.additional_widget_fields.some(field => field.name === 'active'), false);
+        assert.ok(result.core_editor_defs.length > 0);
+        const field = result.core_editor_defs[0].field;
+        Object.assign(h.params, { field, value: 'edited code', original: JSON.stringify({ [field]: h.row[field] }) });
+        assert.equal(h.api.saveField().success, true, table);
+        assert.deepEqual(h.writes, [[field, 'edited code'], ['update']]);
+        assert.throws(() => h.api._parseEditorConfig(table, configs[table]), /Invalid field:/, 'Properties still rejects unknown fields');
+    }
+});
+
+test('invalid or missing editor configurations fail closed and never write records', () => {
+    const valid = configs.sys_script_email;
+    for (const config of [
+        '{', [], null, { ...valid, moreFields: [] },
+        { ...valid, primaryField: 'missing' }, { ...valid, headerFields: [] },
+        { ...valid, icon: 'icon-mail extra-class' }, { ...valid, allowCreate: 'true' },
+        { ...valid, secondaryField: false }, { ...valid, secondaryField: '' }, { ...valid, secondaryField: 'sp_widget.name' },
+        { ...valid, label: 42 }, { ...valid, label: '' }, { ...valid, label: '   ' },
+        { ...valid, supportsEs12: 'true' }, { ...valid, additionalFields: 'description' },
+        { ...valid, additionalFields: ['name'] },
+        { ...valid, headerFields: [{ name: 'name', label: 1 }] },
+        { ...valid, headerFields: [{ name: 'name', readOnly: 'false' }] },
+        { ...valid, headerFields: [{ name: 'name', type: 'boolean' }] },
+        { ...valid, scriptFields: [] }, { ...valid, scriptFields: ['script'] },
+        { ...valid, scriptFields: [{ name: 'script', language: 'unsupported' }] },
+        { ...valid, scriptFields: [{ name: 'script', language: 'javascript' }] },
+    ]) {
+        const h = serverHarness('sys_script_email', { configs: { sys_script_email: config } });
+        assert.equal(h.api.getWidget().success, false, JSON.stringify(config));
+        assert.equal(h.api.saveWidget().success, false);
+        assert.deepEqual(h.writes, []);
+        assert.ok(h.warnings.length > 0);
+    }
+    const h = serverHarness('sys_script_email', { configs: {} });
+    assert.equal(h.api.getWidget().success, false);
+    assert.equal(h.api.getWidgetDefaults().success, false);
+    const unavailable = serverHarness('sys_script_email', { invalidTables: ['sys_script_email'] });
+    assert.equal(unavailable.api.getWidget().success, false);
+    const absent = serverHarness('sys_script_email');
+    delete absent.row.script;
+    assert.equal(absent.api.getWidget().success, false);
+});
+
+test('all configured additional types load their own code fields and preserve field permissions', () => {
     for (const table of supported.slice(1)) {
         const h = serverHarness(table, { noWrite: ['description'] });
         const result = h.api.getWidget();
@@ -176,7 +463,7 @@ test('all six additional types load their own code fields and preserve field per
                 result.additional_widget_fields.find((def) => def.name === 'sp_widget').displayValue,
                 'Parent widget'
             );
-            assert.equal(result.additional_widget_fields.find((def) => def.name === 'sp_widget').canWrite, false);
+            assert.equal(result.additional_widget_fields.find((def) => def.name === 'sp_widget').canWrite, true);
         }
         const description = result.additional_widget_fields.find((def) => def.name === 'description');
         if (description) assert.equal(description.canWrite, false);
@@ -220,7 +507,7 @@ test('record field and editor labels come from dictionary metadata with only aut
         }
         assert.equal(result.widget.application_label, labels.sys_scope, table);
         const aliases = result.additional_widget_fields.filter(field => field.shortLabel).map(field => [field.name, field.shortLabel]);
-        assert.deepEqual(aliases, table === 'sys_script_include' ? [['client_callable', 'Client'], ['sandbox_callable', 'Sandbox']] : []);
+        assert.deepEqual(aliases, table === 'sys_script_include' ? [['client_callable', 'Client'], ['sandbox_callable', 'Sandbox']] : table === 'sys_script_fix' ? [['record_as_rollback', 'Rollback']] : []);
         assert.equal(profile.fields.some(field => Object.hasOwn(field, 'label')), false, table);
     }
 });
@@ -248,17 +535,16 @@ test('record origins share the widget history lookup and respect readable histor
     assert.equal(defaults.calls.includes('sys_update_version'), false);
 });
 
-test('Active is a header field on every additional type when present and readable', () => {
-    for (const table of supported.slice(1)) {
+test('configured Active header fields respect field permissions', () => {
+    for (const table of supported.slice(1).filter(table => configs[table].headerFields.includes('active'))) {
         const result = serverHarness(table, { noWrite: ['active'] }).api.getWidget();
         const field = result.additional_widget_fields.find(def => def.name === 'active');
         assert.equal(field.type, 'boolean', table);
         assert.equal(field.more, undefined, table);
         assert.equal(field.canWrite, false, table);
         assert.equal(result.widget.active, true, table);
-        for (const options of [{ noRead: ['active'] }, { absent: true }]) {
+        for (const options of [{ noRead: ['active'] }]) {
             const h = serverHarness(table, options);
-            if (options.absent) delete h.row.active;
             const hidden = h.api.getWidget();
             assert.equal(hidden.additional_widget_fields.some(def => def.name === 'active'), false, table);
             assert.equal(hidden.widget.active, undefined, table);
@@ -318,7 +604,7 @@ test('ES12 loads and saves for server-script types and rejects unsupported or in
     }
     const invalid = serverHarness('__proto__', { params: { enabled: 'true' } });
     assert.equal(invalid.api.saveEs12().success, false);
-    assert.deepEqual(invalid.calls, []);
+    assert.equal(invalid.calls.includes('__proto__'), false);
 });
 
 test('saving one code field preserves the other fields for every additional type', () => {
@@ -333,7 +619,76 @@ test('saving one code field preserves the other fields for every additional type
     }
 });
 
-test('all six new record types load defaults without inserting and create only on explicit Save', () => {
+test('code fields save beyond dictionary lengths through full-record and per-field saves', () => {
+    for (const [table, field, type, maxLength = 8000] of [
+        ['sys_script_email', 'script', 'string', 4000],
+        ['sys_script_include', 'script', 'script', 80],
+        ['sys_script_include', 'script', 'script'],
+        ['sys_ui_script', 'script', 'script_plain'],
+        ['sp_angular_provider', 'script', 'script_client'],
+        ['sys_ui_page', 'processing_script', 'script_server'],
+        ['sys_ui_page', 'client_script', 'script_plain'],
+        ['sys_ui_page', 'html', 'html'],
+        ['sp_css', 'css', 'css'],
+        ['sp_ng_template', 'template', 'html_template'],
+    ]) {
+        for (const action of ['saveWidget', 'saveField']) {
+            const h = serverHarness(table, { dictionary: { [field]: { type, maxLength } } });
+            const value = 'x'.repeat(30001);
+            Object.assign(h.params, {
+                field, value, data: JSON.stringify({ [field]: value }),
+                original: JSON.stringify({ [field]: h.row[field] }),
+            });
+            assert.equal(h.api[action]().success, true, `${table}.${field}: ${action}`);
+            assert.equal(h.row[field], value);
+            assert.deepEqual(h.writes, [[field, value], ['update']]);
+        }
+    }
+});
+
+test('bounded strings enforce dictionary lengths, including the 255 boundary and code-rendered strings', () => {
+    for (const action of ['saveWidget', 'saveField']) {
+        for (const field of ['name', 'script']) {
+            for (const type of ['string', 'string_full_utf8', 'translated_field']) {
+                for (const maxLength of [3, 80, 255]) {
+                    for (const length of [maxLength - 1, maxLength, maxLength + 1]) {
+                        const h = serverHarness('sys_script_include', { dictionary: { [field]: { type, maxLength } } });
+                        const previous = { ...h.row }, value = 'x'.repeat(length);
+                        Object.assign(h.params, {
+                            field, value, data: JSON.stringify({ description: 'edited', [field]: value }),
+                            original: JSON.stringify({ description: h.row.description, [field]: h.row[field] }),
+                        });
+                        const result = h.api[action]();
+                        assert.equal(result.success, length <= maxLength, `${action}: ${field} (${type}), ${length}/${maxLength}`);
+                        if (length > maxLength) {
+                            assert.equal(result.error, `${field === 'name' ? 'Name' : 'Script'} exceeds its maximum length.`);
+                            assert.deepEqual(h.writes, []);
+                            assert.deepEqual(h.row, previous);
+                        } else assert.equal(h.row[field], value);
+                    }
+                }
+            }
+        }
+    }
+});
+
+test('large-text strings and strings without a positive dictionary limit can exceed that length', () => {
+    for (const action of ['saveWidget', 'saveField']) {
+        for (const maxLength of [0, 256, 4000]) {
+            const h = serverHarness('sys_script_include', { dictionary: { description: { type: 'string', maxLength } } });
+            const value = 'x'.repeat(30001);
+            Object.assign(h.params, {
+                field: 'description', value, data: JSON.stringify({ description: value }),
+                original: JSON.stringify({ description: h.row.description }),
+            });
+            assert.equal(h.api[action]().success, true, `${action}: ${maxLength}`);
+            assert.equal(h.row.description, value);
+            assert.deepEqual(h.writes, [['description', value], ['update']]);
+        }
+    }
+});
+
+test('all configured new record types load defaults without inserting and create only on explicit Save', () => {
     for (const table of supported.slice(1)) {
         const h = serverHarness(table, { params: { sys_id: '' } });
         const defaults = h.api.getWidgetDefaults();
@@ -440,7 +795,6 @@ test('record saves validate every field before writing, reject stale values and 
         { canRead: false },
         { canWrite: false },
         { row: { sys_policy: 'read' } },
-        { maxLength: 3 },
     ]) {
         const h = serverHarness('sys_ui_page', {
             ...options,
@@ -455,6 +809,7 @@ test('record saves validate every field before writing, reject stale values and 
         assert.equal(h.row.html, 'saved html');
     }
     const h = serverHarness('sp_ng_template', {
+        configs: { sp_ng_template: readOnlyReferenceConfig },
         params: { field: 'sp_widget', value: 'c'.repeat(32), original: JSON.stringify({ sp_widget: 'b'.repeat(32) }) },
     });
     assert.equal(h.api.saveField().success, false);
@@ -496,9 +851,34 @@ test('record picker does not return technical table names as record identifiers'
         const h = serverHarness(table);
         const result = h.api.getEditorRecords();
         assert.equal(result.widgets[0].table, table);
-        assert.equal(result.widgets[0].id, '');
+        assert.equal(result.widgets[0].id, table === 'sp_ng_template' ? 'Parent widget' : table === 'sp_angular_provider' ? 'factory' : '');
         assert.equal(result.widgets[0].name, h.row[h.api._getEditorProfiles()[table].primary]);
     }
+});
+
+test('picker secondary fields use display values, respect field access and remain optional', () => {
+    for (const [table, field, label] of [
+        ['sp_angular_provider', 'type', 'Factory'],
+        ['sp_ng_template', 'sp_widget', 'Parent widget'],
+    ]) {
+        assert.equal(configs[table].secondaryField, field);
+        for (const params of [{}, { sys_ids: id }]) {
+            const h = serverHarness(table, { displayValues: { [field]: label }, params });
+            assert.equal(h.api.getEditorRecords().widgets[0].id, label);
+        }
+        const hidden = serverHarness(table, { noRead: [field] }).api.getEditorRecords();
+        assert.equal(hidden.widgets.length, 1);
+        assert.equal(hidden.widgets[0].id, '');
+        const omitted = { ...configs[table] };
+        delete omitted.secondaryField;
+        assert.equal(serverHarness(table, { configs: { [table]: omitted } }).api.getEditorRecords().widgets[0].id, '');
+    }
+    const custom = { ...configs.sys_script_email, secondaryField: 'description' };
+    assert.equal(serverHarness('sys_script_email', { configs: { sys_script_email: custom } }).api.getEditorRecords().widgets[0].id, 'Description');
+    const missing = serverHarness('sp_ng_template');
+    delete missing.row.sp_widget;
+    assert.equal(missing.api.getEditorRecords().widgets[0].id, '');
+    assert.throws(() => missing.api._parseEditorConfig('sp_ng_template', configs.sp_ng_template), /Invalid secondaryField/);
 });
 
 test('picker paging continues past unreadable display fields and rejects invalid history IDs', () => {
@@ -532,7 +912,7 @@ function clientFunction(name, context) {
 }
 
 test('picker type icons preserve widget, read-only, ServiceNow and deprecated icons', () => {
-    const context = vm.createContext({ $scope: {} });
+    const context = vm.createContext({ $scope: { recordTypes: serverHarness().api.getEditorRecordTypes().types } });
     const start = client.indexOf('                $scope.widgetPickerIconClass =');
     vm.runInContext(client.slice(start, client.indexOf('                function _handleListSearchKeydown', start)), context);
     const icon = context.$scope.widgetPickerIconClass;
@@ -540,7 +920,8 @@ test('picker type icons preserve widget, read-only, ServiceNow and deprecated ic
         ['sys_script_include', 'icon-document-code'], ['sp_css', 'icon-marker'],
         ['sys_ui_script', 'icon-code'], ['sp_angular_provider', 'icon-console'],
         ['sys_ui_page', 'icon-application-generic'], ['sp_ng_template', 'icon-layout'],
-        ['sp_widget', 'icon-script'], [undefined, 'icon-script'], ['__proto__', 'icon-script'],
+        ['sys_script_email', 'icon-envelope-subscribe'], ['sys_script_fix', 'icon-document-code'],
+        ['sp_widget', 'icon-script'], [undefined, 'icon-script'], ['__proto__', 'icon-document-code'],
     ]) {
         assert.equal(icon({ table, canWrite: true }), expected);
         assert.equal(icon({ table, canWrite: false }), 'icon-locked');
@@ -791,7 +1172,112 @@ async function checkDescriptionSizing(page, selector) {
     await textarea.fill(original);
 }
 
-test('the real Angular page preserves widgets and opens and saves the six additional types', async () => {
+async function installReferencePickerFixture(page) {
+        await page.evaluate(() => {
+            window.pickers = {};
+            window.$j = input => {
+                const state = window.pickers[input.id] ||= {input,enabled:true};
+                const api = {
+                    val(value) { if (value !== undefined) input.value = value; return input.value; },
+                    select2(command,value) {
+                        if (typeof command === 'object') { state.options=command; command.initSelection(api,choice=>state.data=choice); }
+                        if (command === 'data') { if(arguments.length===2) state.data=value; else return state.data; }
+                        if (command === 'enable') state.enabled=value;
+                        if (command === 'destroy') state.destroyed=true;
+                        return api;
+                    },
+                    on(event,callback) {state.change=callback;}, off() {state.change=null;},
+                };
+                return api;
+            };
+            window.$j.fn = {select2(){}};
+            window.chooseReference = (id,choice) => { const state=window.pickers[id]; state.data=choice; state.change(); };
+            window.searchReference = (id,term) => window.pickers[id].options.query({term,page:1,callback:result=>window.pickers[id].results=result});
+        });
+}
+
+test('reference Select2 binds sys_ids, restores display labels, rejects stale searches and disposes both field locations', async () => {
+    const { chromium } = require('@playwright/test');
+    const ast = ts.createSourceFile('editor.js', client, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    let factory;
+    function visit(node) {
+        if (ts.isCallExpression(node) && node.expression.name?.text === 'directive' && node.arguments[0]?.text === 'weSelect2Reference')
+            factory = node.arguments[1].elements.find(ts.isFunctionExpression).getText(ast);
+        ts.forEachChild(node,visit);
+    }
+    visit(ast);
+    assert.ok(factory);
+    const markup = readFluentField('src/fluent/generated/other/sys-ui-page/sys_ui_page_8b2e70458373fe1070b8b5dfeeaad35e.now.ts','html');
+    const inputs = [...markup.matchAll(/<input ng-if="field.type === 'reference' &amp;&amp; !field.readOnly"[^>]*>/g)].map(match=>match[0]);
+    assert.equal(inputs.length,2);
+    const browser = await chromium.launch({headless:true});
+    try {
+        const page = await browser.newPage();
+        const errors = [];
+        page.on('pageerror',error=>errors.push(error.message));
+        await page.setContent('<main><div ng-repeat="field in headerFields">'+inputs[0]+'</div><div ng-repeat="field in additionalFields">'+inputs[1]+'</div></main>');
+        await installReferencePickerFixture(page);
+        await page.addScriptTag({path:require.resolve('angular/angular.js')});
+        await page.addScriptTag({content: "angular.module('referenceTest',[]).directive('weSelect2Reference',['$timeout',"+factory+"]);"});
+        await page.evaluate(() => {
+            const injector = angular.bootstrap(document.querySelector('main'),['referenceTest']);
+            const scope = window.referenceScope=injector.get('$rootScope'), q=injector.get('$q');
+            window.pendingReferences=[];
+            scope.$apply(()=>{
+                scope.referenceErrors={}; scope.canWriteWidget=true; scope.isVersionView=false;
+                scope.widget={parent:'b'.repeat(32),owner:''};
+                scope.headerFields=[{name:'parent',type:'reference',label:'Parent',canWrite:true,displayValue:'Original Parent'}];
+                scope.additionalFields=[{name:'owner',type:'reference',label:'Owner',canWrite:true,required:true,more:true}];
+                scope.searchEditorReferences=(field,search,page,value)=>{
+                    const deferred=q.defer(); window.pendingReferences.push({field,search,page,value,resolve:deferred.resolve}); return deferred.promise;
+                };
+                scope.$watch('widget.parent',value=>scope.dirty=value!=='b'.repeat(32));
+            });
+        });
+        await page.waitForFunction(()=>pickers['record-field-parent']?.options && pickers['record-more-owner']?.options);
+        assert.equal(await page.evaluate(()=>pickers['record-field-parent'].data.text),'Original Parent');
+        assert.equal(await page.evaluate(()=>pickers['record-more-owner'].options.allowClear),false);
+        await page.evaluate(()=>searchReference('record-field-parent','old'));
+        await page.waitForFunction(()=>pendingReferences.length===1);
+        await page.evaluate(()=>searchReference('record-field-parent','new'));
+        await page.waitForFunction(()=>pendingReferences.length===2);
+        await page.evaluate(()=>referenceScope.$apply(()=>pendingReferences[1].resolve({success:true,results:[{id:'c'.repeat(32),text:'New Parent'}],has_more:true})));
+        await page.waitForFunction(()=>pickers['record-field-parent'].results?.results[0]?.text==='New Parent');
+        await page.evaluate(()=>referenceScope.$apply(()=>pendingReferences[0].resolve({success:true,results:[{id:'d'.repeat(32),text:'Old Parent'}]})));
+        assert.equal(await page.evaluate(()=>pickers['record-field-parent'].results.results[0].text),'New Parent');
+        await page.evaluate(()=>chooseReference('record-field-parent',{id:'c'.repeat(32),text:'New Parent'}));
+        await page.waitForFunction(()=>referenceScope.widget.parent==='c'.repeat(32));
+        assert.equal(await page.evaluate(()=>referenceScope.dirty),true);
+        await page.evaluate(()=>referenceScope.$apply(()=>referenceScope.widget.parent='b'.repeat(32)));
+        assert.equal(await page.evaluate(()=>pickers['record-field-parent'].data.text),'Original Parent');
+        await page.evaluate(()=>referenceScope.$apply(()=>referenceScope.widget.parent='d'.repeat(32)));
+        await page.waitForFunction(()=>pendingReferences.length===3);
+        await page.evaluate(()=>chooseReference('record-field-parent',{id:'c'.repeat(32),text:'New Parent'}));
+        await page.waitForFunction(()=>referenceScope.widget.parent==='c'.repeat(32));
+        await page.evaluate(()=>referenceScope.$apply(()=>pendingReferences[2].resolve({success:true,results:[{id:'d'.repeat(32),text:'Stale display label'}]})));
+        assert.equal(await page.evaluate(()=>pickers['record-field-parent'].data.id),'c'.repeat(32));
+        await page.evaluate(()=>chooseReference('record-field-parent',null));
+        await page.waitForFunction(()=>referenceScope.widget.parent==='');
+        await page.evaluate(()=>referenceScope.$apply(()=>referenceScope.isVersionView=true));
+        assert.equal(await page.evaluate(()=>pickers['record-field-parent'].enabled),false);
+        await page.evaluate(()=>chooseReference('record-field-parent',{id:'c'.repeat(32),text:'New Parent'}));
+        assert.equal(await page.evaluate(()=>referenceScope.widget.parent),'');
+        await page.evaluate(()=>referenceScope.$apply(()=>referenceScope.isVersionView=false));
+        await page.evaluate(()=>searchReference('record-more-owner','error'));
+        await page.waitForFunction(()=>pendingReferences.length===4);
+        await page.evaluate(()=>referenceScope.$apply(()=>pendingReferences[3].resolve({success:false,error:'Lookup denied'})));
+        await page.waitForFunction(()=>referenceScope.referenceErrors.owner==='Lookup denied');
+        assert.deepEqual(await page.evaluate(()=>pickers['record-more-owner'].results.results),[]);
+        await page.evaluate(()=>chooseReference('record-more-owner',{id:'c'.repeat(32),text:'Owner'}));
+        await page.waitForFunction(()=>referenceScope.widget.owner==='c'.repeat(32));
+        assert.equal(await page.evaluate(()=>referenceScope.referenceErrors.owner),'');
+        await page.evaluate(()=>referenceScope.$apply(()=>{referenceScope.headerFields=[];referenceScope.additionalFields=[];}));
+        assert.equal(await page.evaluate(()=>Object.values(pickers).every(picker=>picker.destroyed&&picker.change===null)),true);
+        assert.deepEqual(errors,[]);
+    } finally {await browser.close();}
+});
+
+test('the real Angular page preserves widgets and opens and saves the configured additional types', async () => {
     const { chromium } = require('@playwright/test');
     const { markup, browserClient } = browserFixture();
     const browser = await chromium.launch({ headless: true });
@@ -804,10 +1290,12 @@ test('the real Angular page preserves widgets and opens and saves the six additi
         for (const table of supported) {
             await page.goto('https://instance.test/editor-fixture');
             await page.setContent(markup);
+            await installReferencePickerFixture(page);
             await page.addStyleTag({ content: ':root { --now-color_chrome--brand-5: 3, 45, 62; --now-color--neutral-0: 255, 255, 255; --now-color_background--secondary: 242, 247, 248; --now-color_text--primary: 29, 49, 56; --now-modal--border-radius: 6px; --now-dropdown-list_search--background-color--hover: 224, 238, 241; } input[type=checkbox].checkbox { display:block; margin:10px 0; } button:not(.btn) { padding:10px !important; border:1px solid #ccc !important; border-radius:4px !important; min-height:32px !important; background:#eee !important; }' });
             const fixture = table === 'sp_widget' ? { success: true, additional_widget_fields: [], widget: {
                 sys_id: id, name: 'Example', id: 'example', description: Array(20).fill('Saved description line').join('\n'), template: 'saved html', css: '', client_script: '', script: '', link: '', canWrite: true, is_header_footer: true, static: false,
-            } } : serverHarness(table, { row: { description: Array(20).fill('Saved description line').join('\n') }, origin: { sys_created_on: '2020-01-02 03:04:05', sys_created_by: 'ada' }, user: { name: 'Ada Lovelace' } }).api.getWidget();
+            } } : serverHarness(table, { configs: table === 'sys_script_email' ? { ...configs, sys_script_email: { ...configs.sys_script_email, additionalFields: [] } } : configs, row: { description: Array(20).fill('Saved description line').join('\n') }, origin: { sys_created_on: '2020-01-02 03:04:05', sys_created_by: 'ada' }, user: { name: 'Ada Lovelace' } }).api.getWidget();
+            if (table === 'sp_css') delete fixture.widget.application_label;
             await page.evaluate(({ table, id, fixture, types }) => {
                 window.WE_CONFIG = { record_table: table, sys_id: id, widgetPageSysId: 'page-id' };
                 window.require = () => {};
@@ -841,8 +1329,10 @@ test('the real Angular page preserves widgets and opens and saves the six additi
                 angular.bootstrap(document.querySelector('main'), ['widgetEditor']);
                 window.editorScope = angular.element(document.querySelector('main')).scope();
             });
-            if (table !== 'sp_widget')
+            if (table !== 'sp_widget') {
+                await page.waitForFunction(label => editorScope.recordLabel === label, fixture.record_label);
                 assert.equal((await page.locator('.we-loading').innerText()).trim(), 'Loading ' + fixture.record_label + '…');
+            }
             assert.equal(await page.locator('.we-alert-pills-row').isVisible(), true, table);
             assert.equal((await page.locator('.we-record-name').innerText()).trim(), 'Widget Editor+');
             const loadingHeader = await page.locator('.we-alert-pills-row').boundingBox();
@@ -936,8 +1426,8 @@ test('the real Angular page preserves widgets and opens and saves the six additi
             }
             assert.equal(await page.locator('button[title="Choose visible editors"]').count(), fixture.core_editor_defs.length > 1 ? 1 : 0, table);
             assert.equal(await page.getByText('Default editors', { exact: true }).count(), 0, table);
-            assert.equal(await page.locator('#record-field-active').isChecked(), true, table);
-            const serverScript = fixture.core_editor_defs.find(def => def.scriptKind === 'server');
+            if (configs[table].headerFields.includes('active')) assert.equal(await page.locator('#record-field-active').isChecked(), true, table);
+            const serverScript = fixture.widget.es12_supported && fixture.core_editor_defs.find(def => def.scriptKind === 'server');
             assert.equal(await page.locator('#chk-es12').count(), serverScript ? 1 : 0, table);
             if (serverScript) {
                 await page.locator('#chk-es12').check();
@@ -988,7 +1478,21 @@ test('the real Angular page preserves widgets and opens and saves the six additi
             assert.equal(await moreFieldsButton.getAttribute('aria-expanded'), 'true');
             assert.equal(await moreFieldsButton.evaluate(element => element.classList.contains('icon-arrow-up-rounded') ? 1 : 0), 1);
             assert.equal(await moreFieldsButton.evaluate(element => element.classList.contains('icon-arrow-down-rounded') ? 1 : 0), 0);
-            assert.equal(await page.locator('#record-application').isVisible(), true);
+            assert.equal(await page.locator('#record-application').count(), fixture.widget.application_label ? 1 : 0);
+            if (fixture.widget.application_label) {
+                assert.equal(await page.locator('#record-application').isVisible(), true);
+                assert.equal(await page.locator('#record-application').inputValue(), fixture.widget.application);
+                assert.equal(await page.locator('#record-application').getAttribute('readonly'), 'readonly');
+            }
+            await page.evaluate(() => editorScope.$apply(() => { delete editorScope.widget.application_label; }));
+            assert.equal(await page.locator('#record-application').count(), 0);
+            if (table === 'sys_script_email') assert.equal(fixture.additional_widget_fields.some(field => field.more), false);
+            if (table === 'sys_script_fix') {
+                assert.equal(await page.getByRole('checkbox', { name: 'Rollback', exact: true }).count(), 1);
+                assert.equal(await page.locator('#record-more-description').isVisible(), true);
+                assert.equal(await page.locator('#record-more-unloadable').getAttribute('type'), 'checkbox');
+                assert.equal(await page.locator('#record-more-before').getAttribute('type'), 'checkbox');
+            }
             const origin = page.locator('#we-record-more-fields .we-widget-origin');
             assert.equal(await origin.innerText(), 'Established 2020 by Ada Lovelace', table);
             assert.ok(await origin.getAttribute('title'), table);
@@ -1009,8 +1513,10 @@ test('the real Angular page preserves widgets and opens and saves the six additi
             assert.equal(await moreFieldsButton.evaluate(element => element.classList.contains('icon-arrow-down-rounded') ? 1 : 0), 1);
             assert.equal(await moreFieldsButton.evaluate(element => element.classList.contains('icon-arrow-up-rounded') ? 1 : 0), 0);
             if (table === 'sp_ng_template') {
-                assert.equal(await page.locator('#record-field-sp_widget').inputValue(), 'Parent widget');
-                assert.equal(await page.locator('#record-field-sp_widget').getAttribute('readonly'), 'readonly');
+                await page.waitForFunction(() => pickers['record-field-sp_widget']?.data?.text === 'Parent widget');
+                assert.equal(await page.locator('#record-field-sp_widget').inputValue(), 'b'.repeat(32));
+                assert.equal(await page.locator('#record-field-sp_widget').getAttribute('readonly'), null);
+                assert.equal(await page.evaluate(() => pickers['record-field-sp_widget'].enabled), true);
             }
             await page.locator('#record-field-' + primary).fill('Renamed');
             assert.equal(await page.locator('.we-record-name').innerText(), 'Renamed', table);
@@ -1102,9 +1608,21 @@ test('the real Angular page preserves widgets and opens and saves the six additi
             await page.evaluate(() => editorScope.$apply(() => editorScope.openWidgetPickerModal()));
             const expectedIcon = {
                 sys_script_include: 'icon-document-code', sp_css: 'icon-marker', sys_ui_script: 'icon-code',
-                sp_angular_provider: 'icon-console', sys_ui_page: 'icon-application-generic', sp_ng_template: 'icon-layout',
+                sp_angular_provider: 'icon-console', sys_ui_page: 'icon-application-generic', sp_ng_template: 'icon-layout', sys_script_email: 'icon-envelope-subscribe', sys_script_fix: 'icon-document-code',
             }[table];
             assert.equal(await page.locator('.we-picker-col-main .we-picker-item-icon i').first().getAttribute('class'), expectedIcon);
+            if (table === 'sp_angular_provider' || table === 'sp_ng_template') {
+                const records = serverHarness(table, { displayValues: { type: 'Factory' } }).api.getEditorRecords().widgets;
+                await page.evaluate(records => editorScope.$apply(() => {
+                    editorScope.pickerWidgets = records;
+                    editorScope.userPrefs.showRecentlyOpenedWidgets = true;
+                    editorScope.userPrefs.showOpenHistory = true;
+                    editorScope.recentWidgetsResolved = records;
+                }), records);
+                const secondary = table === 'sp_angular_provider' ? 'Factory' : 'Parent widget';
+                assert.equal(await page.locator('.we-picker-col-main .we-picker-item-id').innerText(), secondary);
+                assert.deepEqual(await page.locator('.we-picker-col-recent .we-picker-item-id').allTextContents(), [secondary, fixture.record_label]);
+            }
             const trigger = page.getByRole('button', { name: /^Record type:/ });
             assert.equal(await page.locator('.we-picker-type').evaluate(element => getComputedStyle(element).marginLeft), '8px');
             const triggerStyle = await trigger.evaluate(element => {
@@ -1152,9 +1670,9 @@ test('the real Angular page preserves widgets and opens and saves the six additi
             assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
             await page.waitForFunction(() => document.activeElement.id === 'we-picker-search');
             await trigger.press('ArrowDown');
-            await page.waitForFunction(() => document.activeElement.textContent === 'Angular HTML Template');
+            await page.waitForFunction(() => document.activeElement.textContent === 'Angular Provider');
             await page.keyboard.press('ArrowDown');
-            assert.equal(await page.evaluate(() => document.activeElement.textContent), 'Angular Provider');
+            assert.equal(await page.evaluate(() => document.activeElement.textContent), 'Angular Template');
             await page.keyboard.press('Escape');
             assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
             assert.equal(await page.evaluate(() => editorScope.showWidgetPickerModal), true);
@@ -1206,6 +1724,7 @@ test('new records open directly in Editor+, create on Save and retain newer typi
         for (const table of supported.slice(1)) {
             await page.goto('about:blank');
             await page.setContent(markup);
+            await installReferencePickerFixture(page);
             const defaults = serverHarness(table).api.getWidgetDefaults();
             const types = serverHarness().api.getEditorRecordTypes().types;
             await page.evaluate(({ table, defaults, types, id }) => {
@@ -1398,6 +1917,7 @@ test('the real editor keeps its drawer clickable in the initial Open modal and g
             page.on('pageerror', error => errors.push(error.message));
             await page.goto('https://instance.test/ui_page.do?sys_id=8b2e70458373fe1070b8b5dfeeaad35e' + (mode === 'initial' ? '' : '&record_table=sys_script_include&record_sys_id=' + id));
             await page.setContent(markup);
+            await installReferencePickerFixture(page);
             await page.addStyleTag({ content: ':root { --now-color_chrome--brand-5: 3,45,62; --now-color--neutral-0: 255,255,255; --now-color_background--secondary: 242,247,248; --now-color_text--primary: 29,49,56; }' });
             await page.evaluate(({ id, fixture, types, mode }) => {
                 window.WE_CONFIG = { record_table: 'sys_script_include', sys_id: mode === 'initial' ? '' : id, widgetPageSysId: '8b2e70458373fe1070b8b5dfeeaad35e' };

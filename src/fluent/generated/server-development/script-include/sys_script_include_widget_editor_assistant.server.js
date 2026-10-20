@@ -1615,6 +1615,58 @@ WidgetEditorAssistantAjax.prototype = Object.extendsObject(AbstractAjaxProcessor
         return this._answer({ success: true, favourites: favourites });
     },
 
+    // Read the editor's history without changing its preferences or ordering.
+    getRecentRecords: function () {
+        var pref = new GlideRecordSecure('sys_user_preference');
+        pref.addQuery('user', gs.getUserID());
+        pref.addQuery('name', 'IN', this.USER_PREF_NAME + ',widget_editor.visible_editors');
+        pref.orderBy('name'); // Prefer the shared preference over the legacy key.
+        pref.setLimit(1);
+        pref.query();
+        var prefs = {};
+        try {
+            if (pref.next()) prefs = JSON.parse(pref.getValue('value') || '{}') || {};
+        } catch (e) {
+            return this._answer({ success: false, records: [] });
+        }
+        var entries = Array.isArray(prefs.recentRecords) ? prefs.recentRecords.slice(0, 10) : [];
+        if (Array.isArray(prefs.recentWidgets)) {
+            prefs.recentWidgets.slice(0, 10).forEach(function (id) {
+                if (
+                    !entries.some(function (entry) {
+                        return entry && entry.table === 'sp_widget' && entry.sys_id === id;
+                    })
+                )
+                    entries.push({ table: 'sp_widget', sys_id: id });
+            });
+        }
+        var records = [];
+        var seen = {};
+        entries.slice(0, 10).forEach(function (entry) {
+            if (
+                !entry ||
+                typeof entry.table !== 'string' ||
+                typeof entry.sys_id !== 'string' ||
+                !/^[a-zA-Z0-9_]+$/.test(entry.table) ||
+                !/^[0-9a-f]{32}$/i.test(entry.sys_id)
+            )
+                return;
+            var key = entry.table + ':' + entry.sys_id;
+            if (seen[key] || this._isTableExportBlocked(entry.table)) return;
+            seen[key] = true;
+            var gr = new GlideRecordSecure(entry.table);
+            if (!gr.isValid() || !gr.get(entry.sys_id) || !gr.canRead()) return;
+            records.push({
+                table: entry.table,
+                sys_id: entry.sys_id,
+                label: gr.getDisplayValue() || entry.sys_id,
+                tableLabel: this._getTableLabel(entry.table),
+                updatedOn: gr.getDisplayValue('sys_updated_on'),
+            });
+        }, this);
+        return this._answer({ success: true, records: records });
+    },
+
     /**
      * Upserts the current user's favourited tables.
      * Accepts `favourites` (JSON-encoded array of {name, label}).

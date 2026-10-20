@@ -1001,7 +1001,10 @@
                         'data',
                         tableName ? { id: tableName, text: ctrl.tableLabel || tableName } : null
                     );
-                    recordPicker.select2('data', recordId ? { id: recordId, text: ctrl.recordName || recordId } : null);
+                    recordPicker.select2(
+                        'data',
+                        recordId && ctrl.recordName ? { id: recordId, text: ctrl.recordName } : null
+                    );
                     recordPicker.select2('enable', !!tableName);
                 }
 

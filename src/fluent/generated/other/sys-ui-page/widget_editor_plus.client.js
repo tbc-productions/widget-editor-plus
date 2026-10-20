@@ -339,6 +339,102 @@
             },
         ])
 
+        .directive('weSelect2Reference', [
+            '$timeout',
+            function ($timeout) {
+                return {
+                    restrict: 'A',
+                    require: 'ngModel',
+                    link: function (scope, element, attrs, model) {
+                        var field = scope.$eval(attrs.weSelect2Reference),
+                            picker,
+                            timer,
+                            destroyed = false;
+                        var sequence = 0,
+                            renderSequence = 0,
+                            choices = Object.create(null);
+                        var init = $timeout(function () {
+                            var jq = window.$j || window.jQuery;
+                            if (!jq || !jq.fn || !jq.fn.select2) {
+                                scope.referenceErrors[field.name] = 'Reference picker is unavailable. Reload the page.';
+                                return;
+                            }
+                            picker = jq(element[0]);
+                            var initial = model.$viewValue || '';
+                            if (initial) choices[initial] = { id: initial, text: field.displayValue || initial };
+                            picker.val(initial);
+                            picker.select2({
+                                width: field.more ? '29.375rem' : '18rem',
+                                placeholder: 'Select ' + field.label,
+                                allowClear: !field.required,
+                                minimumInputLength: 0,
+                                initSelection: function (_, callback) {
+                                    callback(choices[model.$viewValue] || null);
+                                },
+                                query: function (query) {
+                                    var request = ++sequence;
+                                    $timeout.cancel(timer);
+                                    timer = $timeout(function () {
+                                        scope.referenceErrors[field.name] = '';
+                                        scope
+                                            .searchEditorReferences(field.name, query.term || '', query.page || 1)
+                                            .then(function (data) {
+                                                if (destroyed || request !== sequence) return;
+                                                if (!data.success)
+                                                    scope.referenceErrors[field.name] =
+                                                        data.error || 'Reference lookup failed.';
+                                                (data.results || []).forEach(function (choice) {
+                                                    choices[choice.id] = choice;
+                                                });
+                                                query.callback({ results: data.results || [], more: !!data.has_more });
+                                            });
+                                    }, 250);
+                                },
+                            });
+                            model.$render = function () {
+                                var value = model.$viewValue || '',
+                                    request = ++renderSequence;
+                                picker.select2('data', value ? choices[value] || { id: value, text: value } : null);
+                                if (value && !choices[value]) {
+                                    scope.searchEditorReferences(field.name, '', 1, value).then(function (data) {
+                                        if (destroyed || request !== renderSequence || model.$viewValue !== value)
+                                            return;
+                                        if (data.success && data.results && data.results[0]) {
+                                            choices[value] = data.results[0];
+                                            picker.select2('data', choices[value]);
+                                        }
+                                    });
+                                }
+                            };
+                            model.$render();
+                            picker.on('change.weReference', function () {
+                                if (scope.$eval(attrs.ngDisabled)) return;
+                                var selected = picker.select2('data');
+                                scope.$evalAsync(function () {
+                                    if (selected) choices[selected.id] = selected;
+                                    scope.referenceErrors[field.name] = '';
+                                    model.$setViewValue(selected ? selected.id : '');
+                                    field.displayValue = selected ? selected.text : '';
+                                });
+                            });
+                            scope.$watch(attrs.ngDisabled, function (disabled) {
+                                picker.select2('enable', !disabled);
+                            });
+                        }, 0);
+                        scope.$on('$destroy', function () {
+                            destroyed = true;
+                            $timeout.cancel(init);
+                            $timeout.cancel(timer);
+                            if (picker) {
+                                picker.off('.weReference');
+                                picker.select2('destroy');
+                            }
+                        });
+                    },
+                };
+            },
+        ])
+
         // Directive: we-modal-draggable — Enables dragging a modal dialog by its header. Apply to .we-modal-header.
         .directive('weModalDraggable', [
             function () {
@@ -862,18 +958,10 @@
                 var SYS_ID = _weConfig.sys_id || _params.get('record_sys_id') || _params.get('widget_id') || '';
                 $scope.recordTable = RECORD_TABLE;
                 $scope.isWidgetRecord = RECORD_TABLE === 'sp_widget';
-                $scope.recordLabel =
-                    {
-                        sp_widget: 'Widget',
-                        sys_script_include: 'Script Include',
-                        sp_css: 'Style Sheet',
-                        sys_ui_script: 'UI Script',
-                        sp_angular_provider: 'Angular Provider',
-                        sys_ui_page: 'UI Page',
-                        sp_ng_template: 'Angular HTML Template',
-                    }[RECORD_TABLE] || 'Record';
+                $scope.recordAllowsCreate = $scope.isWidgetRecord;
+                $scope.recordLabel = $scope.isWidgetRecord ? 'Widget' : 'Record';
                 $scope.recordPrimaryField = 'name';
-                $scope.recordTypes = [{ table: 'sp_widget', label: 'Widgets', singular: 'Widget' }];
+                $scope.recordTypes = [{ table: 'sp_widget', label: 'Widgets', singular: 'Widget', allowCreate: true }];
                 var VERSION_ID = _weConfig.version_id || _params.get('version_id') || '';
                 var IS_NEW = _weConfig.is_new !== undefined ? !!_weConfig.is_new : _params.get('new') === '1';
                 var APP_TITLE = 'Widget Editor+';
@@ -1224,6 +1312,16 @@
                 // Roles
                 $scope.rolesList = [];
                 $scope.additionalWidgetFields = [];
+                $scope.referenceErrors = {};
+                $scope.searchEditorReferences = function (field, search, page, value) {
+                    return ajax('getEditorReferenceChoices', {
+                        sys_id: SYS_ID,
+                        field: field,
+                        search: search,
+                        offset: (page - 1) * 20,
+                        value: value || '',
+                    });
+                };
 
                 // Reverted notification
                 $scope.widgetReverted = false;
@@ -1755,22 +1853,11 @@
                     if (w.canWrite === false) {
                         return 'icon-locked';
                     }
-                    switch (w.table) {
-                        case 'sys_script_include':
-                            return 'icon-document-code';
-                        case 'sp_css':
-                            return 'icon-marker';
-                        case 'sys_ui_script':
-                            return 'icon-code';
-                        case 'sp_angular_provider':
-                            return 'icon-console';
-                        case 'sys_ui_page':
-                            return 'icon-application-generic';
-                        case 'sp_ng_template':
-                            return 'icon-layout';
-                        default:
-                            return 'icon-script';
-                    }
+                    if (!w.table || w.table === 'sp_widget') return 'icon-script';
+                    var type = $scope.recordTypes.find(function (entry) {
+                        return entry.table === w.table;
+                    });
+                    return type && type.icon ? type.icon : 'icon-document-code';
                 };
 
                 function _handleListSearchKeydown(event, itemSelector, onEnterFirst) {
@@ -2092,7 +2179,7 @@
                     table = table || RECORD_TABLE;
                     if (
                         !$scope.recordTypes.some(function (type) {
-                            return type.table === table;
+                            return type.table === table && type.allowCreate !== false;
                         })
                     )
                         return;
@@ -2356,7 +2443,14 @@
 
                 function init() {
                     ajax('getEditorRecordTypes', {}).then(function (data) {
-                        if (data.success) $scope.recordTypes = data.types;
+                        if (data.success) {
+                            $scope.recordTypes = data.types;
+                            var type = data.types.find(function (item) {
+                                return item.table === RECORD_TABLE;
+                            });
+                            $scope.recordAllowsCreate = !!type && type.allowCreate !== false;
+                            if (type) $scope.recordLabel = type.singular;
+                        }
                     });
                     if (!SYS_ID) {
                         if (IS_NEW && $scope.isWidgetRecord) {
@@ -3510,16 +3604,6 @@
                                         }
                                         return false;
                                     }
-                                    function width(indent) {
-                                        var result = 0;
-                                        for (var k = 0; k < indent.length; k++) {
-                                            result +=
-                                                indent.charAt(k) === '\t'
-                                                    ? options.tabSize - (result % options.tabSize)
-                                                    : 1;
-                                        }
-                                        return result;
-                                    }
                                     for (var i = firstLine; i <= lastLine; i++) {
                                         var opening = /^([ \t]*)\/\*\*?[ \t]*\r?$/.exec(lines[i]);
                                         if (!opening || !isComment(i, opening[1].length)) continue;
@@ -3530,23 +3614,13 @@
                                             if (!marker || !isComment(j, marker[1].length)) break;
                                             body.push({
                                                 line: j,
-                                                indent: marker[1],
                                                 rest: '*' + marker[2],
                                             });
                                             if (/^\/[ \t]*\r?$/.test(marker[2])) break;
                                         }
-                                        if (!body.length || !/^\*\/[ \t]*\r?$/.test(body[body.length - 1].rest))
-                                            continue;
-                                        var base = width(opening[1]);
-                                        // Retain the usual aligned or one-space-offset style; remove excess padding.
-                                        var offset = body.some(function (item) {
-                                            return width(item.indent) === base + 1;
-                                        })
-                                            ? ' '
-                                            : '';
+                                        if (!body.length) continue;
                                         body.forEach(function (item) {
-                                            if (width(item.indent) > base + 1)
-                                                lines[item.line] = opening[1] + offset + item.rest;
+                                            lines[item.line] = opening[1] + ' ' + item.rest;
                                         });
                                         i = j;
                                     }
@@ -3617,7 +3691,8 @@
                         !$scope.canWriteWidget ||
                         (pane.hasIdInput && !pane.editorUnlocked) ||
                         !!pane.readOnly;
-                    var lang = pane.language || 'javascript';
+                    var lang =
+                        pane.language === 'css' || pane.language === 'sass' ? 'scss' : pane.language || 'javascript';
 
                     function _create() {
                         if (monacoEditors[pane.key]) {
@@ -3655,7 +3730,8 @@
                                 fontFamily: _buildFontFamily($scope.userPrefs.fontFamily),
                                 fontSize: $scope.userPrefs.fontSize,
                                 glyphMargin: isJs,
-                                insertSpaces: false,
+                                insertSpaces: !!$scope.userPrefs.formatTabsToSpaces,
+                                detectIndentation: false,
                                 language: lang,
                                 lightbulb: { enabled: true },
                                 lineNumbers: 'on',
@@ -3769,6 +3845,12 @@
                                 },
                                 updateOptions: function (opts) {
                                     ed.updateOptions(opts);
+                                    var model = ed.getModel();
+                                    if (model)
+                                        model.updateOptions({
+                                            insertSpaces: !!$scope.userPrefs.formatTabsToSpaces,
+                                            tabSize: $scope.userPrefs.tabSize,
+                                        });
                                 },
                                 dispose: function () {
                                     try {
@@ -3803,11 +3885,11 @@
                                     }
                                     function _resetIndent() {
                                         ed.updateOptions({
-                                            insertSpaces: false,
+                                            insertSpaces: !!$scope.userPrefs.formatTabsToSpaces,
                                         });
                                         if (_fmtModel && !_fmtModel.isDisposed()) {
                                             _fmtModel.updateOptions({
-                                                insertSpaces: false,
+                                                insertSpaces: !!$scope.userPrefs.formatTabsToSpaces,
                                             });
                                         }
                                     }
@@ -7076,6 +7158,33 @@
                     }
                 };
 
+                $scope.revertVersion = function (version, event) {
+                    if (event) event.stopPropagation();
+                    var widgetSysId = $scope.widget && $scope.widget.sys_id;
+                    if (
+                        !widgetSysId ||
+                        !version ||
+                        !version.sys_id ||
+                        !$scope.canWriteWidget ||
+                        $scope.widgetSysPolicy ||
+                        $scope.isNewWidget ||
+                        version.state === 'current' ||
+                        !$scope.versions.length ||
+                        version.sys_id === $scope.versions[0].sys_id
+                    )
+                        return;
+                    $scope.openDropdown = null;
+                    $scope.openCompactSubmenu = null;
+                    try {
+                        localStorage.setItem('_weRevertPending_' + widgetSysId, Date.now().toString());
+                    } catch (e) {}
+                    var dialog = new GlideModal('revert_update_version_confirm', true, 300);
+                    dialog.setTitle('Revert');
+                    dialog.setPreference('sysparm_sys_id', version.sys_id);
+                    dialog.setPreference('focusTrap', true);
+                    dialog.render();
+                };
+
                 $scope.openVersionDiff = function (version) {
                     $scope.openDropdown = null;
                     var widgetSysId = $scope.widget && $scope.widget.sys_id;
@@ -7104,6 +7213,15 @@
                 };
 
                 $scope.closeVersionDiffModal = function () {
+                    var iframe = document.querySelector && document.querySelector('.we-diff-iframe');
+                    var compare = iframe && iframe.contentWindow;
+                    if (
+                        compare &&
+                        compare.WE_HAS_UNSAVED_MERGE &&
+                        compare.WE_HAS_UNSAVED_MERGE() &&
+                        !window.confirm('Discard the unsaved merged fields in Compare+?')
+                    )
+                        return;
                     _closeModal(function () {
                         $scope.versionDiffModal.open = false;
                         $scope.versionDiffModal.url = null;
@@ -7114,7 +7232,9 @@
                 };
 
                 $scope.openVersionDiffInNewTab = function () {
-                    $window.open($scope.versionDiffModal.rawUrl, '_blank');
+                    var iframe = document.querySelector('.we-diff-iframe');
+                    var url = (iframe && iframe.contentWindow.WE_COMPARE_URL) || $scope.versionDiffModal.rawUrl;
+                    $window.open(url, '_blank');
                     $scope.closeVersionDiffModal();
                 };
 
@@ -7125,8 +7245,79 @@
                     }
                 };
 
-                // Listen for expand/collapse notifications from the diff iframe
+                function _acceptCompareSave(data) {
+                    Object.keys(data.values).forEach(function (field) {
+                        var value = data.values[field];
+                        $scope.widget[field] = value;
+                        var def = $scope.coreEditorDefs.find(function (item) {
+                            return item.field === field;
+                        });
+                        if (def) {
+                            originalValues[field] = lastServerValues[field] = value;
+                            var editor = monacoEditors[def.key];
+                            if (editor && editor.getValue() !== value) editor.setValue(value);
+                            var pane = paneMap[def.key];
+                            if (pane) {
+                                pane.dirty = false;
+                                pane.savedAt = null;
+                                pane.saveError = null;
+                                pane.externalChange = null;
+                            }
+                            _selfSavingFields[field] = value;
+                            $timeout(function () {
+                                if (_selfSavingFields[field] === value) delete _selfSavingFields[field];
+                            }, 5000);
+                        } else if (Object.prototype.hasOwnProperty.call(originalHeader, field)) {
+                            originalHeader[field] = field === 'controller_as' ? value || 'c' : value;
+                            $scope.headerDirty[field] = false;
+                        }
+                        if (field === 'option_schema' || field === 'demo_data') {
+                            if (_draftJson[field]) _draftJson[field] = { base: value, value: value };
+                            var jsonEditor = field === 'option_schema' ? _optionSchemaEditor : _demoDataEditor;
+                            if (jsonEditor && jsonEditor.getValue() !== value) jsonEditor.setValue(value);
+                            $scope.widget[field + '_has_value'] = _hasProperJsonObjectValue(value);
+                        }
+                    });
+                    if (
+                        $scope.isWidgetRecord === false &&
+                        $scope.recordPrimaryField === 'id' &&
+                        Object.prototype.hasOwnProperty.call(data.values, 'id')
+                    ) {
+                        $scope.widget.name = originalHeader.name = data.values.id;
+                        $scope.headerDirty.name = false;
+                    }
+                    $scope.widget.sys_updated_on = data.sys_updated_on;
+                    $scope.widget.sys_updated_by = data.sys_updated_by;
+                    _writeLocalDraft(true);
+                    $scope.$applyAsync();
+                    ajax('getVersions', { sys_id: $scope.widget.sys_id }).then(function (result) {
+                        if (result.success) $scope.versions = result.versions;
+                    });
+                }
+
+                // Listen for notifications from the diff iframe.
                 window.addEventListener('message', function (e) {
+                    if (e.data && e.data.type === 'we-diff-saved') {
+                        var iframe = document.querySelector('.we-diff-iframe');
+                        if (
+                            e.origin !== window.location.origin ||
+                            !iframe ||
+                            e.source !== iframe.contentWindow ||
+                            !$scope.versionDiffModal.open ||
+                            $scope.isVersionView ||
+                            e.data.table !== $scope.recordTable ||
+                            e.data.recordId !== $scope.widget.sys_id ||
+                            !e.data.values ||
+                            typeof e.data.values !== 'object' ||
+                            Array.isArray(e.data.values) ||
+                            !Object.keys(e.data.values).every(function (field) {
+                                return typeof e.data.values[field] === 'string';
+                            })
+                        )
+                            return;
+                        _acceptCompareSave(e.data);
+                        return;
+                    }
                     if (!e.data || e.data.type !== 'we-diff-expand') {
                         return;
                     }
@@ -9139,6 +9330,7 @@
                             parameterHints: { enabled: langHelpersEnabled },
                             stickyScroll: stickyScrollVal,
                             tabSize: tabSizeVal,
+                            insertSpaces: !!$scope.userPrefs.formatTabsToSpaces,
                         });
                     });
                     if (window.monaco) {

@@ -2,6 +2,12 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
+const { readFluentField } = require('../helpers/fluent-source.cjs');
+const configFile = 'src/fluent/generated/properties/system-property/sys_properties_widget_editor_table_config.now.ts';
+const properties = [...fs.readFileSync(configFile, 'utf8').matchAll(/export const (\w+) = Property/g)].map(([, declaration]) => ({
+    name: readFluentField(configFile, 'name', declaration),
+    value: readFluentField(configFile, 'value', declaration),
+}));
 
 const source = fs.readFileSync('src/fluent/generated/server-development/script-include/sys_script_include_widget_editor_ajax.server.js', 'utf8');
 const id = 'a'.repeat(32);
@@ -13,6 +19,13 @@ function harness(table, options = {}) {
         global: { WidgetEditorCreditAjax: function () { this._fields = table => { creditChecks.push(table); return options.code === false ? [] : [{ name: 'script' }]; }; } },
         GlideRecord: function (name) {
             queries.push(name);
+            if (name === 'sys_properties') {
+                let cursor = -1;
+                this.addQuery = this.orderBy = this.query = () => {};
+                this.next = () => ++cursor < properties.length;
+                this.getValue = field => properties[cursor][field];
+                return;
+            }
             this.get = () => options.valid !== false;
             this.initialize = () => {};
             this.addQuery = this.orderBy = this.addNotNullQuery = this.query = () => {};
@@ -22,6 +35,8 @@ function harness(table, options = {}) {
         GlideRecordSecure: function (name) {
             queries.push(name);
             this.isValid = () => options.valid !== false;
+            this.isValidField = () => true;
+            this.getLabel = () => name;
             this.get = () => options.exists !== false;
             this.canRead = () => options.readable !== false;
             this.initialize = () => {};
@@ -45,7 +60,7 @@ function harness(table, options = {}) {
 }
 
 test('drawer compatibility reuses editor profiles, Compare layouts and Credit code fields', () => {
-    for (const table of ['sp_widget', 'sys_script_include', 'sp_css', 'sys_ui_script', 'sp_angular_provider', 'sys_ui_page', 'sp_ng_template']) {
+    for (const table of ['sp_widget', 'sys_script_include', 'sp_css', 'sys_ui_script', 'sp_angular_provider', 'sys_ui_page', 'sp_ng_template', 'sys_script_email', 'sys_script_fix']) {
         const { result } = harness(table);
         assert.deepEqual(result, { success: true, apps: { assistant: true, 'widget-editor': true, compare: true, credit: true } });
     }

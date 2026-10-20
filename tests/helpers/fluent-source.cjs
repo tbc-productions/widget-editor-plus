@@ -3,7 +3,7 @@ const path = require('node:path');
 const ts = require('typescript');
 
 // Read the field's build-time value, whether it is inline or in an adjacent file.
-function readFluentField(file, property) {
+function readFluentField(file, property, declaration) {
     const source = ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
     let value;
     function visit(node) {
@@ -30,7 +30,14 @@ function readFluentField(file, property) {
         }
         ts.forEachChild(node, visit);
     }
-    visit(source);
+    if (declaration) {
+        for (const statement of source.statements) {
+            if (ts.isVariableStatement(statement)) {
+                for (const item of statement.declarationList.declarations)
+                    if (item.name.getText(source) === declaration) visit(item);
+            }
+        }
+    } else visit(source);
     if (value === undefined) throw new Error('Missing Fluent field: ' + file + ':' + property);
     return value;
 }

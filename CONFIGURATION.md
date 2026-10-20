@@ -28,13 +28,17 @@ Use **Open…** and click the dotted record type in the title to choose a type:
 | UI Scripts | `sys_ui_script` | Script |
 | Angular Providers | `sp_angular_provider` | Script |
 | UI Pages | `sys_ui_page` | HTML/Jelly, client script and processing script |
-| Angular HTML templates | `sp_ng_template` | HTML template |
+| Angular Templates | `sp_ng_template` | HTML template |
+| Email Scripts | `sys_script_email` | Script |
+| Fix Scripts | `sys_script_fix` | Script |
 
-**New** opens an unsaved record of the selected type, using dictionary defaults and create permissions. Use the toolbar **Save** to create it; per-pane saves and local draft recovery become available after the first save. The parent widget of an Angular HTML template is read-only.
+**New** opens an unsaved record of the selected type, using dictionary defaults and create permissions. Use the toolbar **Save** to create it; per-pane saves and local draft recovery become available after the first save. The parent widget of an Angular HTML template can be selected using Select2.
 
 Save individual code panes or use the toolbar **Save** for all changed fields. **Revert** in the Unsaved changes popover discards this tab’s edits after confirmation. Saves respect record and field permissions, protection policies and validation. If a changed field also changed in ServiceNow, saving stops and retains your edits for comparison.
 
 The header shows Active where available. **More fields** includes descriptions, API name and application, plus Mobile callable and the read-only Protection policy for Script Includes. It also shows the established year and founder from the earliest readable update version. Related Script Includes, Angular HTML templates and Angular Providers offer **Open in Editor+** in a new tab.
+
+Fix Scripts show **Name** and **Rollback** in the header, with **Description**, **Unloadable** and **Before** in **More fields**.
 
 Editor visibility and order preferences apply only to widgets; other types start with all code panes visible. ES12 controls are available for widget server scripts, Script Includes and UI Page processing scripts. Widget-specific actions, related lists, live presence, real-time updates and SN Utils integration are limited to widgets. Other types retain version comparison, Assistant, XML and native-form access. History and drafts distinguish record types.
 
@@ -45,6 +49,45 @@ ui_page.do?sys_id=8b2e70458373fe1070b8b5dfeeaad35e&record_table=sys_ui_page&reco
 ```
 
 These links edit the record; they do not execute the target UI Page or script.
+
+### Table configuration
+
+In **Properties → Widget Editor+**, edit `monaco.plus.editor.table_config.*` to configure non-widget record types. Each row saves one `sys_properties` record, with up to 4,000 characters of JSON; its table-name suffix selects the table. The supplied properties cover the non-widget types above and preserve local changes on upgrades. Removing a row removes that type from the editor.
+
+For example, `monaco.plus.editor.table_config.sys_script_email`:
+
+```json
+{
+  "primaryField": "name",
+  "icon": "icon-envelope-subscribe",
+  "allowCreate": true,
+  "scriptFields": [
+    { "name": "script", "language": "javascript", "scriptKind": "server" }
+  ],
+  "headerFields": ["name", "new_lines_to_html"],
+  "additionalFields": [{ "name": "sys_policy", "readOnly": true }]
+}
+```
+
+Arrays set field order. `scriptFields` defines the Monaco panes; JavaScript fields require `scriptKind: "client"` or `"server"`. `headerFields` and `additionalFields` accept field-name strings or objects with `name` and optional `label`, `readOnly` and `multiline` options. Additional fields appear in **More fields**. Readable application scope (where the table has `sys_scope`) and available founder details appear there automatically, even when `additionalFields` is empty; neither needs a config entry. Labels, boolean/choice controls, mandatory status and bounded-string lengths come from the dictionary; label overrides retain the dictionary label in the tooltip. Reference fields use Select2 to search readable records and save their sys_ids; field permissions and explicit `readOnly` settings still apply. Static dictionary reference qualifiers are honoured. Scripted qualifiers require the native form.
+
+`primaryField` must appear in `headerFields` and supplies the record title and picker search/sort field. Optional `secondaryField` displays a readable field’s display value beneath the primary field in the picker and recent records; it does not need to appear in the header or additional fields. Angular Provider defaults to `"secondaryField": "type"`; Angular Template defaults to `"secondaryField": "sp_widget"`, showing the widget’s name. Add these options to existing properties to enable them on an installed instance.
+
+Table names use their singular dictionary label unless the optional top-level `label` overrides it, for example `"label": "Angular Template"`. `icon` accepts a Retina class and defaults to `icon-document-code`. `allowCreate` defaults to `false`; include the required fields before enabling creation. `supportsEs12` also defaults to `false` and should only be enabled for tables that support per-record ES12 settings.
+
+Only administrators can save configuration. Properties rejects invalid tables, fields, duplicate placements and unsupported options. At runtime, fields unavailable on the instance are skipped; the primary field and at least one code field must exist. Invalid properties disable their table and log a warning. Record and field permissions, protection policies and save-conflict checks still apply. Reload the editor after configuration changes.
+
+## Editor formatting
+
+**Use spaces for indentation and formatting** applies to typing, paste formatting and **Format document**. Set the indentation width with **Tab size**. Existing tabs in indentation are converted when formatting; tabs inside JavaScript strings and template text are preserved.
+
+JavaScript block comments starting with `/*` and `/**` align their leading `*` characters one space after the opening `/`, including unfinished comment blocks.
+
+## Compare and merge
+
+In Merge+, hover over or focus a block arrow to highlight the middle-editor code it would replace in amber, including its position beside the scrollbar. Moving away clears the preview. With text selected in the middle editor, clicking a block arrow replaces only that selection. Otherwise, it replaces the entire matching block, which can cover the whole script even when its source is a single line. To copy only part of a source block, select the source text and use its selection arrow.
+
+When a field diff is expanded, clicking **Merge+** opens its three editors immediately. The URL includes `merge_field` and the selected version IDs while the field is being merged, so opening that link restores the same field in Merge+. From the editor's comparison modal, use **Open in new tab** to get the shareable URL. Links use saved versions or the current record; unsaved comparison snapshots and merge edits are not included. The recipient still needs permission to edit the field.
 
 ## Debug Menu
 
@@ -87,6 +130,7 @@ Admins can edit settings in **Widget Editor+ → Properties**.
 | `monaco.plus.update_sets.markdown_max_list_levels` | `9` | Maximum bullet indentation levels, counting the top level as 1. Records at the limit and deeper share the final level, formatted as name, additional display values, emoji and bold record type. Invalid or non-positive values fall back to 9. |
 | `monaco.plus.scss.variables` | `{ "$breakpoint-xs": "480px", ... }` | JSON string of SCSS variable name-value pairs for autocomplete suggestions. |
 | `monaco.plus.widget.deprecated` | `descriptionLIKEdeprecated` | Encoded query string evaluated against `sp_widget` to flag widgets as deprecated. |
+| `monaco.plus.editor.table_config.<table_name>` | *(JSON editor profiles)* | Ordered code panes, header and additional fields, Retina icon and creation options for non-widget types. |
 | `monaco.plus.widget.fields` | *(empty)* | Comma-separated list of additional fields on `sp_widget` to display inside Widget Editor+. |
 | `monaco.plus.widget.related_list_exclusions` | *(empty)* | Comma-separated list of `sys_ui_related_list_entry.related_list` values to exclude from related lists. |
 
