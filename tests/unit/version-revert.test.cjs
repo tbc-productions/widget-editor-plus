@@ -70,8 +70,9 @@ test('wide and compact version menus show the Revert hover icon before the new-t
                 return Object.fromEntries(['width', 'height', 'border', 'borderRadius', 'padding', 'boxShadow', 'color', 'cursor'].map(key => [key, css[key]]));
             };
             assert.deepEqual(await button.evaluate(style), await external.evaluate(style), 'both actions share size, border and colour');
-            assert.equal(await button.locator('.icon').evaluate(el => getComputedStyle(el).fontSize), '11px');
-            assert.equal(await button.locator('.icon').evaluate(el => getComputedStyle(el, '::before').fontSize), '11px', 'the retina glyph overrides the platform 16px rule');
+            assert.equal(await button.locator('.icon').evaluate(el => getComputedStyle(el).fontSize), '10px');
+            assert.equal(await button.locator('.icon').evaluate(el => getComputedStyle(el, '::before').fontSize), '10px', 'the retina glyph overrides the platform 16px rule');
+            assert.equal(await external.evaluate(el => getComputedStyle(el).maskSize), '12.5px 12.5px', 'the padded SVG renders its visible drawing at 10px');
             await button.hover(); const revertHover = await button.evaluate(style);
             await external.hover(); assert.deepEqual(await external.evaluate(style), revertHover, 'both icons use the same hover colour');
             assert.equal(revertHover.color, 'rgb(30, 45, 50)');

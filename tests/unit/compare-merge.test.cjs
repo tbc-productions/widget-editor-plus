@@ -334,6 +334,7 @@ test('merge mode is opt-in, requires write access and turns off only after confi
     assert.equal(h.ctrl.canEditMerges(), false); h.ctrl.startMerge(); assert.equal(h.editors.length, 0);
     h.ctrl.canWrite = false; h.ctrl.toggleMergeMode(); assert.equal(h.ctrl.mergeMode, false);
     h.ctrl.canWrite = true; h.ctrl.toggleMergeMode(); assert.equal(h.ctrl.mergeMode, true);
+    assert.equal(h.editors.length, 1, 'enabling Merge+ immediately opens the expanded field');
     h.ctrl.startMerge(); h.editors[0].changed('merged text');
     h.ctx.window.confirm = () => false; h.ctrl.toggleMergeMode(); assert.equal(h.ctrl.mergeMode, true); assert.notEqual(h.ctrl.merge, null);
     h.ctx.window.confirm = () => true; h.ctrl.toggleMergeMode();
@@ -430,6 +431,74 @@ test('field merge controls open layout and extra fields directly while preservin
     h.ctrl.openMergeField(0, true);
     assert.equal(h.editors[1].initial, 'later extra');
     assert.equal(h.ctrl.hasMergedField('css'), true);
+});
+
+test('merge URLs preserve selected versions and the active field without including draft text', () => {
+    const h = controller(), urls = [], parentUrls = [];
+    Object.assign(h.ctx, { diffPageSysId: '51ec3d258363b61070b8b5dfeeaad36b', isEmbedded: false });
+    h.ctx.window.location = { origin: 'https://instance.test', protocol: 'https:' };
+    h.ctx.window.history = { state: { existing: true }, replaceState: (state, _, url) => { assert.equal(state.existing, true); urls.push(url); } };
+    h.ctx.window.parent = { history: { replaceState: (_, __, url) => parentUrls.push(url) } };
+    vm.runInContext(client.slice(client.indexOf('function _queryString('), client.indexOf('//////// Pure helpers')), h.ctx);
+    h.ctrl.leftVersionId = 'b'.repeat(32); h.ctrl.rightVersionId = 'c'.repeat(32);
+    h.ctrl.startMerge();
+    const direct = new URL(urls.at(-1), 'https://instance.test');
+    assert.equal(direct.pathname, '/ui_page.do');
+    assert.equal(direct.searchParams.get('sys_id'), h.ctx.diffPageSysId);
+    assert.equal(direct.searchParams.get('record_id'), 'a'.repeat(32));
+    assert.equal(direct.searchParams.get('table'), 'sp_widget');
+    assert.equal(direct.searchParams.get('version_1'), 'b'.repeat(32));
+    assert.equal(direct.searchParams.get('version_2'), 'c'.repeat(32));
+    assert.equal(direct.searchParams.get('merge_field'), 'script');
+    assert.equal(parentUrls.at(-1), h.ctx.window.WE_COMPARE_URL);
+    const shared = new URL(new URL(parentUrls.at(-1), 'https://instance.test').searchParams.get('uri'), 'https://instance.test');
+    assert.equal(shared.search, direct.search);
+    h.editors[0].changed('private unsaved code');
+    assert.equal(h.ctx.window.WE_COMPARE_URL.includes('private'), false);
+    h.ctrl.endMerge();
+    assert.equal(new URL(urls.at(-1), 'https://instance.test').searchParams.has('merge_field'), false);
+    h.ctx.isEmbedded = true; h.ctrl.rightVersionId = 'current'; h.ctrl.startMerge();
+    const embedded = new URL(urls.at(-1), 'https://instance.test');
+    assert.equal(embedded.searchParams.get('da_iframe'), 'true');
+    assert.equal(embedded.searchParams.has('version_2'), false, 'Current stays the current record rather than a version lookup');
+    assert.equal(new URL(h.ctx.window.WE_COMPARE_URL, 'https://instance.test').searchParams.get('uri').includes('da_iframe'), false);
+    assert.equal(parentUrls.length, 2, 'an embedded modal preserves its parent editor URL');
+});
+
+test('merge links restore layout, extra and string fields once, and retain permission checks', () => {
+    for (const kind of ['layout', 'extra', 'string', 'unknown', 'read-only', 'protected', 'unchanged']) {
+        const h = controller();
+        h.ctrl.mergeMode = false;
+        const field = { ...h.ctrl.scriptFields[0], scriptIndex: 0, isExtra: kind === 'extra' };
+        h.ctrl.fields = kind === 'extra' ? [] : [field]; h.ctrl.extraFields = kind === 'extra' ? [field] : [];
+        h.ctrl.extraChangedScriptFields = [field]; h.ctrl.extraLeftFields = h.ctrl.leftFields; h.ctrl.extraRightFields = h.ctrl.rightFields;
+        h.ctrl.toggleExpand = index => { h.ctrl.expandedIndex = index; };
+        h.ctrl.toggleExtraExpand = index => { h.ctrl.expandedExtraIndex = index; };
+        h.ctrl.toggleStringExpand = field => { h.ctrl.expandedString = field; };
+        h.ctx.mergeField = kind === 'unknown' ? 'missing' : 'script';
+        if (kind === 'string') { field.isScript = false; field.mergeable = true; }
+        if (kind === 'read-only') h.ctx._recordData.writable_fields.script = false;
+        if (kind === 'protected') h.ctrl.recordSysPolicy = 'protected';
+        if (kind === 'unchanged') h.ctrl.leftFields.script = h.ctrl.rightFields.script;
+        h.ctx._openLinkedMerge();
+        assert.equal(h.ctrl.merge?.key, ['layout', 'extra', 'string'].includes(kind) ? 'script' : undefined, kind);
+        const count = h.editors.length;
+        h.ctx._openLinkedMerge();
+        assert.equal(h.editors.length, count, 'the link opens only once');
+    }
+});
+
+test('the modal opens the active merge link in a new tab and falls back to its original URL', () => {
+    const source = fs.readFileSync(root + 'other/sys-ui-page/widget_editor_plus.client.js', 'utf8');
+    for (const mergeUrl of ['/nav_to.do?uri=active-merge', undefined]) {
+        let opened, closed = false;
+        const ctx = { $scope: { versionDiffModal: { rawUrl: '/original' }, closeVersionDiffModal() { closed = true; } },
+            document: { querySelector: () => ({ contentWindow: { WE_COMPARE_URL: mergeUrl } }) }, $window: { open: url => { opened = url; } } };
+        vm.runInNewContext(source.slice(source.indexOf('$scope.openVersionDiffInNewTab ='), source.indexOf('$scope.collapseDiffEditor =')), ctx);
+        ctx.$scope.openVersionDiffInNewTab();
+        assert.equal(opened, mergeUrl || '/original');
+        assert.equal(closed, true);
+    }
 });
 
 test('merge view exposes the middle editor above the full-screen diff and saves only after finishing fields', async () => {
@@ -632,7 +701,7 @@ test('merge view exposes the middle editor above the full-screen diff and saves 
     } finally { await browser.close(); }
 });
 
-test('merge origins distinguish source and custom lines and block arrows fit ServiceNow buttons while scrolling', async () => {
+test('merge origins and overview markers distinguish source and custom lines while block arrows scroll', async () => {
     const { chromium } = require('@playwright/test');
     const html = fs.readFileSync(root + 'other/sys-ui-page/widget_editor_compare.html', 'utf8');
     const css = html.match(/<style>([\s\S]*?)<\/style>/)[1];
@@ -650,16 +719,19 @@ test('merge origins distinguish source and custom lines and block arrows fit Ser
             }, Range: function (startLineNumber, startColumn, endLineNumber, endColumn) {
                 Object.assign(this, { startLineNumber, startColumn, endLineNumber, endColumn });
             }, editor: {
+                OverviewRulerLane: { Full: 7 },
                 createModel(value) {
                     const handlers = [];
                     const model = { value, version: 1, getValue() { return this.value; }, getVersionId() { return this.version; },
                         getValueInRange(range) { return this.value.slice(offset(this.value, range.startLineNumber, range.startColumn), offset(this.value, range.endLineNumber, range.endColumn)); },
-                        getEOL: () => '\n', getLineCount() { return this.value.split('\n').length; }, getFullModelRange() { return {}; },
+                        getEOL() { return this.value.includes('\r\n') ? '\r\n' : '\n'; }, getLineCount() { return this.value.split('\n').length; }, getFullModelRange() { return {}; },
                         onDidChangeContent(fn) { handlers.push(fn); return disposable(); },
                         setValue(value) { this.value = value; this.version++; handlers.forEach(fn => fn()); }, dispose() {} };
                     models.push(model); return model;
                 },
                 create(element, options) {
+                    const decorations = new Map();
+                    let nextDecoration = 0;
                     const editor = { decorations: [], scroll: 0, selection: new monaco.Selection(1, 1, 1, 1),
                         focus() {}, pushUndoStop() {}, revealLineInCenter() {}, revealPositionInCenter() {},
                         getSelection() { return this.selection; },
@@ -674,7 +746,12 @@ test('merge origins distinguish source and custom lines and block arrows fit Ser
                             const lines = (before + edit.text).split('\n');
                             this.selection = cursorState([{ range: { getEndPosition: () => ({ lineNumber: lines.length, column: lines.at(-1).length + 1 }) } }])[0];
                         },
-                        deltaDecorations(_old, values) { this.decorations = values; return []; },
+                        deltaDecorations(old, values) {
+                            old.forEach(id => decorations.delete(id));
+                            const ids = values.map(value => { const id = String(++nextDecoration); decorations.set(id, value); return id; });
+                            this.decorations = [...decorations.values()];
+                            return ids;
+                        },
                         getTopForLineNumber: line => (line - 1) * 20, getBottomForLineNumber: line => line * 20,
                         getScrollTop() { return this.scroll; }, onDidScrollChange(fn) { this.scrolled = fn; return disposable(); },
                         onDidChangeCursorSelection(fn) { this.selectionChanged = fn; return disposable(); },
@@ -697,15 +774,23 @@ test('merge origins distinguish source and custom lines and block arrows fit Ser
             diffs[index].changes = changes; diffs[index].update();
         }, { index, changes });
         const origins = index => page.evaluate(index => editors[index].decorations.map(d => [d.range.startLineNumber, d.range.endLineNumber, d.options.className]), index);
+        const markers = index => page.evaluate(index => editors[index].decorations.map(d => [d.range.startLineNumber, d.range.endLineNumber, d.options.overviewRuler]), index);
         await fire(0, [change(2, 2, 2, 2)]);
         assert.deepEqual(await origins(0), [[2, 2, 'dc-merge-previous']]);
         assert.deepEqual(await origins(2), [[2, 2, 'dc-merge-later']]);
+        assert.deepEqual(await markers(0), [[2, 2, { color: 'rgba(94, 171, 223, 0.85)', position: 7 }]]);
+        assert.deepEqual(await markers(2), [[2, 2, { color: 'rgba(126, 177, 101, 0.85)', position: 7 }]]);
         assert.equal(await page.evaluate(() => editors[0].decorations[0].options.hoverMessage.value), 'Older version');
         assert.equal(await page.evaluate(() => editors[2].decorations[0].options.hoverMessage.value), 'Newer version');
         await fire(1, [change(2, 0, 3, 4)]);
         assert.deepEqual(await origins(1), [], 'wait for both comparisons before assigning origins');
         await fire(2, [change(1, 0, 2, 2), change(2, 0, 4, 4)]);
         assert.deepEqual(await origins(1), [[2, 2, 'dc-merge-previous'], [3, 3, 'dc-merge-later'], [4, 4, 'dc-merge-custom']]);
+        assert.deepEqual(await markers(1), [
+            [2, 2, { color: 'rgba(94, 171, 223, 0.85)', position: 7 }],
+            [3, 3, { color: 'rgba(126, 177, 101, 0.85)', position: 7 }],
+            [4, 4, { color: 'rgba(172, 152, 246, 0.85)', position: 7 }],
+        ]);
         await page.evaluate(() => models[1].setValue('common\ncustom\nend'));
         const oldOrigins = [[2, 2, 'dc-merge-previous'], [3, 3, 'dc-merge-later'], [4, 4, 'dc-merge-custom']];
         assert.deepEqual(await origins(1), oldOrigins, 'typing retains backgrounds while the comparisons run');
@@ -754,7 +839,86 @@ test('merge origins distinguish source and custom lines and block arrows fit Ser
         assert.deepEqual(await page.evaluate(() => [models[0].getValue(), models[2].getValue()]), ['common\nold\nshared\nbase\nend', 'common\nnew\nshared\nbase\nend']);
         await page.evaluate(() => editors[0].setSelection(new monaco.Selection(3, 1, 3, 1)));
         assert.equal(await previousSelection.isVisible(), false);
+        await page.evaluate(() => models.forEach(model => model.setValue(Array.from({ length: 3000 }, (_, i) => 'line ' + i).join('\n'))));
+        await fire(0, [change(2500, 2510, 2500, 2505)]);
+        await fire(1, [change(2500, 2510, 2500, 2505)]);
+        await fire(2, []);
+        assert.deepEqual((await markers(0))[0].slice(0, 2), [2500, 2510]);
+        assert.deepEqual((await markers(2))[0].slice(0, 2), [2500, 2505]);
+        assert.deepEqual(await markers(1), [[2500, 2505, { color: 'rgba(126, 177, 101, 0.85)', position: 7 }]]);
+        await fire(0, []);
+        await fire(1, []);
+        await fire(2, []);
+        for (const index of [0, 1, 2]) assert.deepEqual(await markers(index), [], 'identical panes clear their overview markers');
+        const longScript = Array.from({ length: 3000 }, (_, i) => 'line ' + (i + 1)).join('\n');
+        await page.evaluate(value => { models[0].setValue('/* Older comment */'); models[1].setValue(value); }, longScript);
+        await fire(1, [change(1, 1, 1, 3000)]);
+        const wholeScriptArrow = page.getByRole('button', { name: 'Use older block at line 1', exact: true });
+        const previews = () => page.evaluate(() => editors[1].decorations.filter(d => d.options.className === 'dc-merge-preview' || d.options.inlineClassName === 'dc-merge-preview').map(d => [d.range.startLineNumber, d.range.endLineNumber]));
+        await wholeScriptArrow.hover();
+        assert.deepEqual(await previews(), [[1, 3000]], 'preview shows the entire target block, even for a one-line source');
+        assert.equal(await page.evaluate(() => merge.getValue()), longScript, 'hover does not edit the result');
+        assert.equal(await page.evaluate(() => editors[1].decorations.find(d => d.options.className === 'dc-merge-preview').options.overviewRuler.color), '#e9a331');
+        await wholeScriptArrow.dispatchEvent('mouseleave');
+        assert.deepEqual(await previews(), []);
+        await wholeScriptArrow.focus();
+        assert.deepEqual(await previews(), [[1, 3000]], 'keyboard focus previews the same replacement');
+        await wholeScriptArrow.evaluate(button => button.blur());
+        assert.deepEqual(await previews(), []);
+        for (const eol of ['\n', '\r\n']) {
+            for (const [endLine, endColumn] of [[2, 7], [3, 1]]) {
+                const original = longScript.replace(/\n/g, eol);
+                await page.evaluate(({ value, endLine, endColumn }) => {
+                    models[1].setValue(value);
+                    editors[1].setSelection(new monaco.Selection(2, 1, endLine, endColumn));
+                }, { value: original, endLine, endColumn });
+                await fire(1, [change(1, 1, 1, 3000)]);
+                await wholeScriptArrow.hover();
+                assert.deepEqual(await previews(), [[2, endLine]], 'a middle selection overrides the full diff-block preview');
+                assert.equal(await page.evaluate(() => editors[1].decorations.find(d => d.options.inlineClassName === 'dc-merge-preview')?.options.isWholeLine), false);
+                await wholeScriptArrow.click();
+                assert.equal(await page.evaluate(() => merge.getValue()), original.replace('line 2' + eol, '/* Older comment */' + eol), 'copying a block replaces only the selected middle line and retains its line ending');
+                assert.equal(await page.evaluate(() => editors[1].getSelection().isEmpty()), true);
+                assert.deepEqual(await previews(), []);
+            }
+        }
+        await page.evaluate(() => {
+            models[2].setValue('newer block');
+            models[1].setValue('prefix keep\nreplace me\nsuffix keep');
+            editors[2].setSelection(new monaco.Selection(1, 1, 1, 1));
+            editors[1].setSelection(new monaco.Selection(2, 1, 2, 8));
+        });
+        await fire(2, [change(1, 1, 1, 3)]);
+        const selectedNewerBlock = page.getByRole('button', { name: 'Use newer block at line 1', exact: true });
+        await selectedNewerBlock.click();
+        assert.equal(await page.evaluate(() => merge.getValue()), 'prefix keep\nnewer block me\nsuffix keep', 'newer blocks respect partial middle selections');
+        await page.evaluate(() => editors[1].setSelection(new monaco.Selection(1, 1, 1, 7)));
+        await fire(2, [change(1, 0, 1, 3)]);
+        await selectedNewerBlock.click();
+        assert.equal(await page.evaluate(() => merge.getValue()), ' keep\nnewer block me\nsuffix keep', 'a deletion removes only the selected text');
+        await page.evaluate(value => models[1].setValue(value), longScript);
+        await fire(1, [change(1, 1, 1, 3000)]);
+        await wholeScriptArrow.dispatchEvent('mouseenter');
+        await page.evaluate(() => models[1].setValue('new typing'));
+        assert.deepEqual(await previews(), [], 'editing invalidates the preview and removes the stale arrow');
+        assert.equal(await wholeScriptArrow.count(), 0);
+        await fire(1, [change(1, 1, 1, 0)]);
+        const insertArrow = page.getByRole('button', { name: 'Use older block at line 1', exact: true });
+        await insertArrow.dispatchEvent('mouseenter');
+        assert.deepEqual(await previews(), [], 'insertion does not highlight existing code as a replacement');
+        await fire(2, [change(1, 0, 1, 1)]);
+        await page.evaluate(() => editors[2].setSelection(new monaco.Selection(1, 1, 1, 1)));
+        const deleteArrow = page.getByRole('button', { name: 'Use newer block at line 1', exact: true });
+        await deleteArrow.focus();
+        assert.deepEqual(await previews(), [[1, 1]], 'a deletion previews the middle-editor lines being removed');
+        await deleteArrow.click();
+        assert.equal(await page.evaluate(() => merge.getValue()), '');
+        assert.deepEqual(await previews(), [], 'applying the block clears its preview');
+        await fire(1, [change(1, 1, 1, 1)]);
+        await page.getByRole('button', { name: 'Use older block at line 1', exact: true }).dispatchEvent('mouseenter');
+        assert.deepEqual(await previews(), [[1, 1]]);
         await page.evaluate(() => merge.dispose());
+        assert.deepEqual(await previews(), [], 'disposing a merge removes preview decorations');
         assert.equal(await page.locator('.dc-merge-pane').count(), 0);
     } finally { await browser.close(); }
 });

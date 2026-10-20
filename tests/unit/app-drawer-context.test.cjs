@@ -60,7 +60,7 @@ function harness(table, options = {}) {
 }
 
 test('drawer compatibility reuses editor profiles, Compare layouts and Credit code fields', () => {
-    for (const table of ['sp_widget', 'sys_script_include', 'sp_css', 'sys_ui_script', 'sp_angular_provider', 'sys_ui_page', 'sp_ng_template', 'sys_script_email']) {
+    for (const table of ['sp_widget', 'sys_script_include', 'sp_css', 'sys_ui_script', 'sp_angular_provider', 'sys_ui_page', 'sp_ng_template', 'sys_script_email', 'sys_script_fix']) {
         const { result } = harness(table);
         assert.deepEqual(result, { success: true, apps: { assistant: true, 'widget-editor': true, compare: true, credit: true } });
     }

@@ -19,6 +19,19 @@
 
     function create(container, previous, later, language, wordWrap, onChange, initial) {
         var monaco = window.monaco;
+        var style = window.getComputedStyle(container);
+        var colours = {
+            previous:
+                'rgba(' + (style.getPropertyValue('--now-color_alert--info-1').trim() || '94, 171, 223') + ', 0.85)',
+            later:
+                'rgba(' +
+                (style.getPropertyValue('--now-color_alert--positive-1').trim() || '126, 177, 101') +
+                ', 0.85)',
+            custom:
+                'rgba(' +
+                (style.getPropertyValue('--now-color_alert--moderate-1').trim() || '172, 152, 246') +
+                ', 0.85)',
+        };
         var models = [previous, initial === undefined ? later : initial, later].map(function (value) {
             return monaco.editor.createModel(value, language);
         });
@@ -26,6 +39,7 @@
             comparisons = [],
             disposables = [],
             decorations = [[], [], []],
+            previewDecorations = [],
             resultChanges = [null, null],
             resultVersions = [0, 0],
             buttons = [[], []];
@@ -57,7 +71,26 @@
             });
         });
 
+        function clearPreview() {
+            if (previewDecorations.length) previewDecorations = editors[1].deltaDecorations(previewDecorations, []);
+        }
+        function replaceSelection(text) {
+            clearPreview();
+            editors[1].pushUndoStop();
+            editors[1].executeEdits(
+                'merge-selection',
+                [{ range: editors[1].getSelection(), text: text, forceMoveMarkers: true }],
+                function (edits) {
+                    var end = edits[0].range.getEndPosition();
+                    return [new monaco.Selection(end.lineNumber, end.column, end.lineNumber, end.column)];
+                }
+            );
+            editors[1].pushUndoStop();
+            editors[1].focus();
+            editors[1].revealPositionInCenter(editors[1].getPosition());
+        }
         function clearButtons(side) {
+            clearPreview();
             buttons[side].forEach(function (button) {
                 button.remove();
             });
@@ -69,6 +102,10 @@
                 options: {
                     isWholeLine: true,
                     className: 'dc-merge-' + origin,
+                    overviewRuler: {
+                        color: colours[origin],
+                        position: monaco.editor.OverviewRulerLane.Full,
+                    },
                     hoverMessage: {
                         value: { previous: 'Older version', later: 'Newer version', custom: 'Custom edit' }[origin],
                     },
@@ -161,20 +198,7 @@
             selectionButton.addEventListener('click', function () {
                 var selection = editors[index].getSelection();
                 if (!selection || selection.isEmpty()) return;
-                var target = editors[1].getSelection();
-                var text = models[index].getValueInRange(selection);
-                editors[1].pushUndoStop();
-                editors[1].executeEdits(
-                    'merge-selection',
-                    [{ range: target, text: text, forceMoveMarkers: true }],
-                    function (edits) {
-                        var end = edits[0].range.getEndPosition();
-                        return [new monaco.Selection(end.lineNumber, end.column, end.lineNumber, end.column)];
-                    }
-                );
-                editors[1].pushUndoStop();
-                editors[1].focus();
-                editors[1].revealPositionInCenter(editors[1].getPosition());
+                replaceSelection(models[index].getValueInRange(selection));
             });
             function positionButtons() {
                 var selection = editors[index].getSelection();
@@ -220,8 +244,67 @@
                         Math.min(models[index].getLineCount(), change.originalStartLineNumber)
                     );
                     button.mergeEndLine = Math.max(button.mergeLine, change.originalEndLineNumber);
+                    function previewBlock() {
+                        clearPreview();
+                        var target = editors[1].getSelection();
+                        var selected = target && !target.isEmpty();
+                        if (models[1].getVersionId() !== version || (!selected && change.modifiedEndLineNumber === 0))
+                            return;
+                        previewDecorations = editors[1].deltaDecorations(
+                            [],
+                            [
+                                {
+                                    range: selected
+                                        ? target
+                                        : new monaco.Range(
+                                              change.modifiedStartLineNumber,
+                                              1,
+                                              change.modifiedEndLineNumber,
+                                              1
+                                          ),
+                                    options: {
+                                        isWholeLine: !selected,
+                                        className: selected ? undefined : 'dc-merge-preview',
+                                        inlineClassName: selected ? 'dc-merge-preview' : undefined,
+                                        zIndex: 10,
+                                        overviewRuler: {
+                                            color: '#e9a331',
+                                            position: monaco.editor.OverviewRulerLane.Full,
+                                        },
+                                    },
+                                },
+                            ]
+                        );
+                    }
+                    button.addEventListener('mouseenter', previewBlock);
+                    button.addEventListener('focus', previewBlock);
+                    button.addEventListener('mouseleave', clearPreview);
+                    button.addEventListener('blur', clearPreview);
                     button.addEventListener('click', function () {
+                        clearPreview();
                         if (models[1].getVersionId() !== version) return;
+                        var target = editors[1].getSelection();
+                        if (target && !target.isEmpty()) {
+                            var eol = models[1].getEOL();
+                            var text =
+                                change.originalEndLineNumber === 0
+                                    ? ''
+                                    : models[index]
+                                          .getValue()
+                                          .replace(/\r\n/g, '\n')
+                                          .split('\n')
+                                          .slice(change.originalStartLineNumber - 1, change.originalEndLineNumber)
+                                          .join(eol);
+                            if (
+                                change.originalEndLineNumber !== 0 &&
+                                target.startColumn === 1 &&
+                                target.endColumn === 1 &&
+                                target.endLineNumber > target.startLineNumber
+                            )
+                                text += eol;
+                            replaceSelection(text);
+                            return;
+                        }
                         var value = mergeBlock(
                             models[index].getValue(),
                             models[1].getValue(),
@@ -268,6 +351,7 @@
                 editors[1].trigger('merge', 'redo', null);
             },
             dispose: function () {
+                clearPreview();
                 disposables.forEach(function (disposable) {
                     disposable.dispose();
                 });

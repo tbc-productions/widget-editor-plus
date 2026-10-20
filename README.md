@@ -43,7 +43,7 @@ The installed application uses libraries and APIs already available in ServiceNo
 A Monaco-based editor for Service Portal widgets.
 
 - Edit widget templates, styles, scripts and JSON, with per-field saving.
-- Open Script Includes, CSS, UI Scripts, Angular Providers, UI Pages, Angular HTML templates and Email Scripts in the same editor.
+- Open Script Includes, CSS, UI Scripts, Angular Providers, UI Pages, Angular HTML templates, Email Scripts and Fix Scripts in the same editor.
 - Recover unsaved changes from automatic local drafts.
 - ServiceNow and AngularJS IntelliSense, including table fields, Script Includes and providers.
 - AngularJS expression validation and syntax highlighting.
@@ -57,7 +57,8 @@ A Monaco-based editor for Service Portal widgets.
 Compare record versions from the editor, Debug Context Menu or version lists.
 
 - Side-by-side code and condition-builder diffs.
-- Merge text and code from both versions in an editable middle pane, then review and save the edited fields together.
+- Locate changed blocks with coloured scrollbar markers, merge text and code in the middle pane, then review and save the edited fields together.
+- Preview affected code before applying a merge block and share links to specific Merge+ fields.
 - Readable reference and list values.
 - Export both versions as XML, including unsaved changes where applicable.
 

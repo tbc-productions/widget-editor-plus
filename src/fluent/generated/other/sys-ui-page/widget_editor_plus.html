@@ -1003,14 +1003,19 @@
         .we-dropdown-item:hover .we-dropdown-ext-link { display: block; }
 
         /* Version ext-link: always occupies space so the row columns don't shift on hover */
-        .we-dropdown-ext-link--reserved { display: block !important; visibility: hidden; }
+        .we-dropdown-ext-link--reserved {
+            display: block !important; visibility: hidden;
+            /* The SVG drawing fills 80% of its view box, matching the 0.625rem revert glyph. */
+            -webkit-mask-size: 0.78125rem 0.78125rem;
+            mask-size: 0.78125rem 0.78125rem;
+        }
         .we-dropdown-item:hover .we-dropdown-ext-link--reserved,
         .we-dropdown-item:focus-within .we-dropdown-ext-link--reserved { visibility: visible; }
         .we-version-revert-slot { display: inline-flex; width: 0.9375rem; margin-right: 0.375rem; flex-shrink: 0; }
         button.we-version-revert {
             display: inline-flex; align-items: center; justify-content: center;
             appearance: none; background: transparent; opacity: 0;
-            font-size: 0.6875rem; line-height: 1;
+            font-size: 0.625rem; line-height: 1;
         }
         button.we-version-revert:hover { border: 0; background: transparent; box-shadow: none; }
         .we-version-revert .icon,
@@ -3327,7 +3332,7 @@
                                 <input ng-if="!field.multiline &amp;&amp; field.readOnly &amp;&amp; field.type !== 'boolean'" type="text" class="form-control" ng-attr-id="record-more-{{field.name}}" ng-value="field.displayValue" readonly="readonly" />
                                 <input ng-if="!field.multiline &amp;&amp; !field.readOnly &amp;&amp; field.type !== 'boolean' &amp;&amp; field.type !== 'choice' &amp;&amp; field.type !== 'reference'" type="text" class="form-control" ng-attr-id="record-more-{{field.name}}" ng-model="widget[field.name]" ng-readonly="isVersionView || !canWriteWidget || !field.canWrite" />
                             </div>
-                            <div class="we-field"><label for="record-application">{{widget.application_label}}</label><input id="record-application" type="text" class="form-control" ng-model="widget.application" readonly="readonly" /></div>
+                            <div class="we-field" ng-if="widget.application_label"><label for="record-application">{{widget.application_label}}</label><input id="record-application" type="text" class="form-control" ng-model="widget.application" readonly="readonly" /></div>
                             <span class="we-widget-origin" ng-if="widgetOrigin" title="{{widgetOrigin.tooltip}}" ng-bind-template="Established {{widgetOrigin.year}} by {{widgetOrigin.founder}}"></span>
                         </div>
                     </div>

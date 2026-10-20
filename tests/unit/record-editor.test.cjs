@@ -25,6 +25,7 @@ const supported = [
     'sys_ui_page',
     'sp_ng_template',
     'sys_script_email',
+    'sys_script_fix',
 ];
 
 function serverHarness(table = 'sys_ui_page', options = {}) {
@@ -34,6 +35,9 @@ function serverHarness(table = 'sys_ui_page', options = {}) {
         id: 'example.html',
         active: '1',
         new_lines_to_html: '0',
+        record_as_rollback: '0',
+        unloadable: '1',
+        before: '0',
         turn_off_scss_compilation: '0',
         global: '0',
         client_callable: '0',
@@ -103,7 +107,7 @@ function serverHarness(table = 'sys_ui_page', options = {}) {
         this.getLabel = () => options.tableLabels?.[name] || ({
             sys_script_include: 'Script Include', sp_css: 'Style Sheet', sys_ui_script: 'UI Script',
             sp_angular_provider: 'Angular Provider', sys_ui_page: 'UI Page', sp_ng_template: 'Angular HTML Template',
-            sys_script_email: 'Email Script',
+            sys_script_email: 'Email Script', sys_script_fix: 'Fix Script',
         }[name] || name);
         const related = { sys_es_latest_script: options.es12, sys_update_version: options.origin, sys_user: options.user };
         const record = Object.hasOwn(related, name) ? (related[name] || {}) : row;
@@ -127,6 +131,7 @@ function serverHarness(table = 'sys_ui_page', options = {}) {
         this.getElement = (field) => ({
             getLabel: () => options.labels?.[field] ?? ({
                 name: 'Name', id: 'ID', active: 'Active', global: 'Global',
+                record_as_rollback: 'Record for rollback', unloadable: 'Unloadable', before: 'Before',
                 client_callable: 'Glide AJAX enabled', sandbox_callable: 'Sandbox enabled',
                 mobile_callable: 'Mobile callable', access: 'Accessible from',
                 description: 'Description', api_name: 'API name', sys_policy: 'Protection policy',
@@ -146,7 +151,7 @@ function serverHarness(table = 'sys_ui_page', options = {}) {
                 getInternalType: () => options.dictionary?.[field]?.type ?? ({
                     script: 'script', client_script: 'script_plain', processing_script: 'script',
                     html: 'html', template: 'html_template', css: 'css', sp_widget: 'reference',
-                    ...Object.fromEntries(['active', 'global', 'client_callable', 'sandbox_callable', 'mobile_callable', 'direct', 'new_lines_to_html', 'turn_off_scss_compilation'].map(name => [name, 'boolean'])),
+                    ...Object.fromEntries(['active', 'global', 'client_callable', 'sandbox_callable', 'mobile_callable', 'direct', 'new_lines_to_html', 'turn_off_scss_compilation', 'record_as_rollback', 'unloadable', 'before'].map(name => [name, 'boolean'])),
                 }[field] ?? 'string'),
             }),
         });
@@ -349,6 +354,41 @@ test('application scope and founder metadata remain available with no configured
     assert.equal(config.additionalFields.length, 0);
 });
 
+test('application metadata is omitted for missing or unreadable scope fields, including new records', () => {
+    for (const options of [{}, { noRead: ['sys_scope'] }]) {
+        const h = serverHarness('sp_css', options);
+        if (!options.noRead) delete h.row.sys_scope;
+        for (const action of ['getWidget', 'getWidgetDefaults']) {
+            const result = h.api[action]();
+            assert.equal(result.success, true);
+            assert.equal(result.widget.application_label, undefined);
+            assert.equal(result.widget.sys_scope, undefined);
+            assert.equal(result.widget.application, '');
+        }
+    }
+    const empty = serverHarness('sp_css', { row: { sys_scope: '' } }).api.getWidget();
+    assert.equal(empty.widget.application_label, 'Application');
+});
+
+test('Fix Script fields retain their order, checkbox types, labels and save permissions', () => {
+    const h = serverHarness('sys_script_fix');
+    const result = h.api.getWidget();
+    assert.deepEqual(result.core_editor_defs.map(def => [def.field, def.language, def.scriptKind]), [['script', 'javascript', 'server']]);
+    assert.equal(result.primary_field, 'name');
+    assert.deepEqual(result.additional_widget_fields.filter(def => !def.more).map(def => def.name), ['name', 'record_as_rollback']);
+    assert.deepEqual(result.additional_widget_fields.filter(def => def.more).map(def => def.name), ['description', 'unloadable', 'before']);
+    assert.equal(result.additional_widget_fields.find(def => def.name === 'record_as_rollback').shortLabel, 'Rollback');
+    for (const field of ['record_as_rollback', 'unloadable', 'before']) {
+        assert.equal(result.additional_widget_fields.find(def => def.name === field).type, 'boolean');
+        const value = !result.widget[field];
+        Object.assign(h.params, { field, value: String(value), original: JSON.stringify({ [field]: result.widget[field] }) });
+        assert.equal(h.api.saveField().success, true, field);
+        const denied = serverHarness('sys_script_fix', { noWrite: [field], params: { field, value: 'true' } });
+        assert.equal(denied.api.saveField().success, false);
+        assert.deepEqual(denied.writes, []);
+    }
+});
+
 test('unavailable optional fields do not hide configured tables or prevent code saves', () => {
     for (const table of ['sys_ui_page', 'sp_css', 'sp_ng_template']) {
         const h = serverHarness(table);
@@ -403,7 +443,7 @@ test('invalid or missing editor configurations fail closed and never write recor
     assert.equal(absent.api.getWidget().success, false);
 });
 
-test('all seven additional types load their own code fields and preserve field permissions', () => {
+test('all configured additional types load their own code fields and preserve field permissions', () => {
     for (const table of supported.slice(1)) {
         const h = serverHarness(table, { noWrite: ['description'] });
         const result = h.api.getWidget();
@@ -467,7 +507,7 @@ test('record field and editor labels come from dictionary metadata with only aut
         }
         assert.equal(result.widget.application_label, labels.sys_scope, table);
         const aliases = result.additional_widget_fields.filter(field => field.shortLabel).map(field => [field.name, field.shortLabel]);
-        assert.deepEqual(aliases, table === 'sys_script_include' ? [['client_callable', 'Client'], ['sandbox_callable', 'Sandbox']] : []);
+        assert.deepEqual(aliases, table === 'sys_script_include' ? [['client_callable', 'Client'], ['sandbox_callable', 'Sandbox']] : table === 'sys_script_fix' ? [['record_as_rollback', 'Rollback']] : []);
         assert.equal(profile.fields.some(field => Object.hasOwn(field, 'label')), false, table);
     }
 });
@@ -648,7 +688,7 @@ test('large-text strings and strings without a positive dictionary limit can exc
     }
 });
 
-test('all seven new record types load defaults without inserting and create only on explicit Save', () => {
+test('all configured new record types load defaults without inserting and create only on explicit Save', () => {
     for (const table of supported.slice(1)) {
         const h = serverHarness(table, { params: { sys_id: '' } });
         const defaults = h.api.getWidgetDefaults();
@@ -880,7 +920,7 @@ test('picker type icons preserve widget, read-only, ServiceNow and deprecated ic
         ['sys_script_include', 'icon-document-code'], ['sp_css', 'icon-marker'],
         ['sys_ui_script', 'icon-code'], ['sp_angular_provider', 'icon-console'],
         ['sys_ui_page', 'icon-application-generic'], ['sp_ng_template', 'icon-layout'],
-        ['sys_script_email', 'icon-envelope-subscribe'],
+        ['sys_script_email', 'icon-envelope-subscribe'], ['sys_script_fix', 'icon-document-code'],
         ['sp_widget', 'icon-script'], [undefined, 'icon-script'], ['__proto__', 'icon-document-code'],
     ]) {
         assert.equal(icon({ table, canWrite: true }), expected);
@@ -1237,7 +1277,7 @@ test('reference Select2 binds sys_ids, restores display labels, rejects stale se
     } finally {await browser.close();}
 });
 
-test('the real Angular page preserves widgets and opens and saves the seven additional types', async () => {
+test('the real Angular page preserves widgets and opens and saves the configured additional types', async () => {
     const { chromium } = require('@playwright/test');
     const { markup, browserClient } = browserFixture();
     const browser = await chromium.launch({ headless: true });
@@ -1255,6 +1295,7 @@ test('the real Angular page preserves widgets and opens and saves the seven addi
             const fixture = table === 'sp_widget' ? { success: true, additional_widget_fields: [], widget: {
                 sys_id: id, name: 'Example', id: 'example', description: Array(20).fill('Saved description line').join('\n'), template: 'saved html', css: '', client_script: '', script: '', link: '', canWrite: true, is_header_footer: true, static: false,
             } } : serverHarness(table, { configs: table === 'sys_script_email' ? { ...configs, sys_script_email: { ...configs.sys_script_email, additionalFields: [] } } : configs, row: { description: Array(20).fill('Saved description line').join('\n') }, origin: { sys_created_on: '2020-01-02 03:04:05', sys_created_by: 'ada' }, user: { name: 'Ada Lovelace' } }).api.getWidget();
+            if (table === 'sp_css') delete fixture.widget.application_label;
             await page.evaluate(({ table, id, fixture, types }) => {
                 window.WE_CONFIG = { record_table: table, sys_id: id, widgetPageSysId: 'page-id' };
                 window.require = () => {};
@@ -1437,10 +1478,21 @@ test('the real Angular page preserves widgets and opens and saves the seven addi
             assert.equal(await moreFieldsButton.getAttribute('aria-expanded'), 'true');
             assert.equal(await moreFieldsButton.evaluate(element => element.classList.contains('icon-arrow-up-rounded') ? 1 : 0), 1);
             assert.equal(await moreFieldsButton.evaluate(element => element.classList.contains('icon-arrow-down-rounded') ? 1 : 0), 0);
-            assert.equal(await page.locator('#record-application').isVisible(), true);
-            assert.equal(await page.locator('#record-application').inputValue(), fixture.widget.application);
-            assert.equal(await page.locator('#record-application').getAttribute('readonly'), 'readonly');
+            assert.equal(await page.locator('#record-application').count(), fixture.widget.application_label ? 1 : 0);
+            if (fixture.widget.application_label) {
+                assert.equal(await page.locator('#record-application').isVisible(), true);
+                assert.equal(await page.locator('#record-application').inputValue(), fixture.widget.application);
+                assert.equal(await page.locator('#record-application').getAttribute('readonly'), 'readonly');
+            }
+            await page.evaluate(() => editorScope.$apply(() => { delete editorScope.widget.application_label; }));
+            assert.equal(await page.locator('#record-application').count(), 0);
             if (table === 'sys_script_email') assert.equal(fixture.additional_widget_fields.some(field => field.more), false);
+            if (table === 'sys_script_fix') {
+                assert.equal(await page.getByRole('checkbox', { name: 'Rollback', exact: true }).count(), 1);
+                assert.equal(await page.locator('#record-more-description').isVisible(), true);
+                assert.equal(await page.locator('#record-more-unloadable').getAttribute('type'), 'checkbox');
+                assert.equal(await page.locator('#record-more-before').getAttribute('type'), 'checkbox');
+            }
             const origin = page.locator('#we-record-more-fields .we-widget-origin');
             assert.equal(await origin.innerText(), 'Established 2020 by Ada Lovelace', table);
             assert.ok(await origin.getAttribute('title'), table);
@@ -1556,7 +1608,7 @@ test('the real Angular page preserves widgets and opens and saves the seven addi
             await page.evaluate(() => editorScope.$apply(() => editorScope.openWidgetPickerModal()));
             const expectedIcon = {
                 sys_script_include: 'icon-document-code', sp_css: 'icon-marker', sys_ui_script: 'icon-code',
-                sp_angular_provider: 'icon-console', sys_ui_page: 'icon-application-generic', sp_ng_template: 'icon-layout', sys_script_email: 'icon-envelope-subscribe',
+                sp_angular_provider: 'icon-console', sys_ui_page: 'icon-application-generic', sp_ng_template: 'icon-layout', sys_script_email: 'icon-envelope-subscribe', sys_script_fix: 'icon-document-code',
             }[table];
             assert.equal(await page.locator('.we-picker-col-main .we-picker-item-icon i').first().getAttribute('class'), expectedIcon);
             if (table === 'sp_angular_provider' || table === 'sp_ng_template') {

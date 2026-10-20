@@ -311,3 +311,49 @@ Record({
         order: 6600,
     },
 })
+
+export const editorTableConfigSysScriptFixProperty = Property({
+    $id: Now.ID['widget-editor-editor-table-config-sys-script-fix'],
+    $meta: { installMethod: 'first install' },
+    name: 'monaco.plus.editor.table_config.sys_script_fix',
+    value: `{
+  "primaryField": "name",
+  "icon": "icon-document-code",
+  "allowCreate": true,
+  "scriptFields": [
+    {
+      "name": "script",
+      "language": "javascript",
+      "scriptKind": "server"
+    }
+  ],
+  "headerFields": [
+    "name",
+    {
+      "name": "record_as_rollback",
+      "label": "Rollback"
+    }
+  ],
+  "additionalFields": [
+    {
+      "name": "description",
+      "multiline": true
+    },
+    "unloadable",
+    "before"
+  ]
+}`,
+    description: 'Widget Editor+ table configuration for sys_script_fix.',
+    ignoreCache: true,
+    roles: { read: ['sp_admin'], write: ['admin'] },
+})
+
+Record({
+    $id: Now.ID['widget-editor-editor-table-config-sys-script-fix-category'],
+    table: 'sys_properties_category_m2m',
+    data: {
+        property: editorTableConfigSysScriptFixProperty,
+        category: widgetEditorPlusPropertiesCategory,
+        order: 6700,
+    },
+})

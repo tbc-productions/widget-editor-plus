@@ -496,6 +496,14 @@ declare global {
                         table: 'sys_properties_category_m2m'
                         id: 'ca79856803ee48369b03d2279f854a43'
                     }
+                    'widget-editor-editor-table-config-sys-script-fix': {
+                        table: 'sys_properties'
+                        id: '83cd864fc095463a9a148894dd18686e'
+                    }
+                    'widget-editor-editor-table-config-sys-script-fix-category': {
+                        table: 'sys_properties_category_m2m'
+                        id: '79ffcb872e9a4e4ea6e1974e33ae64d5'
+                    }
                     'widget-editor-editor-table-config-sys-script-include': {
                         table: 'sys_properties'
                         id: 'acdeab7ffc2248008de4000c36204fc4'

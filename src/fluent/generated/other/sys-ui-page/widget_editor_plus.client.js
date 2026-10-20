@@ -7245,7 +7245,9 @@
                 };
 
                 $scope.openVersionDiffInNewTab = function () {
-                    $window.open($scope.versionDiffModal.rawUrl, '_blank');
+                    var iframe = document.querySelector('.we-diff-iframe');
+                    var url = (iframe && iframe.contentWindow.WE_COMPARE_URL) || $scope.versionDiffModal.rawUrl;
+                    $window.open(url, '_blank');
                     $scope.closeVersionDiffModal();
                 };
 

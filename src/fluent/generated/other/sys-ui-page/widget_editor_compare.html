@@ -26,6 +26,7 @@
             table: _weDiffConfigParams.get('table') || 'sp_widget',
             version_1: _weDiffConfigParams.get('version_1') || '',
             version_2: _weDiffConfigParams.get('version_2') || '',
+            merge_field: _weDiffConfigParams.get('merge_field') || '',
             da_token: _weDiffConfigParams.get('da_token') || '',
             da_iframe: _weDiffConfigParams.get('da_iframe') || '',
             da_source: _weDiffConfigParams.get('da_source') || '',
@@ -1557,6 +1558,7 @@
         .dc-merge-previous { background: rgba(var(--now-color_alert--info-1, 94, 171, 223), 0.24); }
         .dc-merge-later { background: rgba(var(--now-color_alert--positive-1, 126, 177, 101), 0.24); }
         .dc-merge-custom { background: rgba(var(--now-color_alert--moderate-1, 172, 152, 246), 0.24); }
+        .dc-merge-preview { background: rgba(233, 163, 49, 0.3); box-shadow: inset 3px 0 #e9a331; }
         .dc-merge-diff-worker { position: absolute; left: -10000px; width: 1px; height: 1px; visibility: hidden; }
         .sft-row--edited td { background-color: rgba(var(--now-color_alert--info-1, 94, 171, 223), 0.16); }
     </style>

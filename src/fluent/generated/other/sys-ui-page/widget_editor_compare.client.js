@@ -212,6 +212,7 @@
     var tableParam = pageConfig.table || 'sp_widget';
     var version1Id = pageConfig.version_1 || '';
     var version2Id = pageConfig.version_2 || '';
+    var mergeField = pageConfig.merge_field || '';
     var daToken = pageConfig.da_token || '';
     var creditUpdateId = pageConfig.credit_update || '';
     var isEmbedded = pageConfig.da_iframe === 'true';
@@ -1260,6 +1261,7 @@
                                 }
                             }
                             _syncScope();
+                            _openLinkedMerge();
                         });
                     }
 
@@ -1322,6 +1324,49 @@
                         var field = _mergedFields[key];
                         return !!field && field.value !== field.original;
                     };
+                    function _syncMergeUrl() {
+                        if (!window.history || !window.location || !/^https?:$/.test(window.location.protocol)) return;
+                        var params = {
+                            table: tableParam,
+                            record_id: recordId,
+                            version_1:
+                                ctrl.leftVersionId === 'current_saved'
+                                    ? _resolveVersionId('current')
+                                    : ctrl.leftVersionId,
+                            version_2: ctrl.rightVersionId === 'current' ? undefined : ctrl.rightVersionId,
+                            merge_field: ctrl.merge ? ctrl.merge.key : undefined,
+                        };
+                        window.WE_COMPARE_URL = _navUrl(diffPageSysId, 'widget_editor_diff', params);
+                        window.history.replaceState(
+                            window.history.state,
+                            '',
+                            _iframeUrl(
+                                diffPageSysId,
+                                'widget_editor_diff',
+                                Object.assign({}, params, { da_iframe: isEmbedded ? 'true' : undefined })
+                            )
+                        );
+                        try {
+                            if (!isEmbedded && window.parent !== window)
+                                window.parent.history.replaceState(
+                                    window.parent.history.state,
+                                    '',
+                                    window.WE_COMPARE_URL
+                                );
+                        } catch (error) {}
+                    }
+                    function _openLinkedMerge() {
+                        if (!mergeField) return;
+                        var key = mergeField;
+                        mergeField = '';
+                        var field = (ctrl.fields || []).concat(ctrl.extraFields || []).filter(function (field) {
+                            return field.key === key;
+                        })[0];
+                        if (!ctrl.canWrite || ctrl.recordSysPolicy || !ctrl.canMergeField(field)) return;
+                        ctrl.mergeMode = true;
+                        if (field.isScript) ctrl.openMergeField(field.scriptIndex, field.isExtra);
+                        else ctrl.openStringMerge(field);
+                    }
                     function _mergePreview(fields) {
                         Object.keys(_mergedFields).forEach(function (key) {
                             if (ctrl.hasMergedField(key) && Object.prototype.hasOwnProperty.call(fields, key))
@@ -1360,6 +1405,7 @@
                             ctrl.collapseAnyExpanded();
                         }
                         ctrl.mergeMode = !ctrl.mergeMode;
+                        if (ctrl.mergeMode) ctrl.startMerge();
                     };
                     ctrl.canStartMerge = function () {
                         var field =
@@ -1430,6 +1476,7 @@
                         var draft = existing || { original: String(current || ''), value: later, later: later };
                         _mergedFields[field.key] = draft;
                         ctrl.merge = { key: field.key, label: field.label };
+                        _syncMergeUrl();
                         var session = ctrl.merge;
                         ctrl.mergeMessage = '';
                         ctrl.openVersionCol = null;
@@ -1467,7 +1514,10 @@
                             _mergeEditor = null;
                         }
                         ctrl.merge = null;
-                        if (editing) _syncScope();
+                        if (editing) {
+                            _syncMergeUrl();
+                            _syncScope();
+                        }
                         $timeout(function () {
                             if (ctrl.expandedIndex !== null) _setWrapTop(ctrl.expandedIndex, false);
                             if (ctrl.expandedExtraIndex !== null) _setWrapTop(ctrl.expandedExtraIndex, true);
