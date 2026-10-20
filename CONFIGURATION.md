@@ -77,6 +77,12 @@ Table names use their singular dictionary label unless the optional top-level `l
 
 Only administrators can save configuration. Properties rejects invalid tables, fields, duplicate placements and unsupported options. At runtime, fields unavailable on the instance are skipped; the primary field and at least one code field must exist. Invalid properties disable their table and log a warning. Record and field permissions, protection policies and save-conflict checks still apply. Reload the editor after configuration changes.
 
+## Editor formatting
+
+**Use spaces for indentation and formatting** applies to typing, paste formatting and **Format document**. Set the indentation width with **Tab size**. Existing tabs in indentation are converted when formatting; tabs inside JavaScript strings and template text are preserved.
+
+JavaScript block comments starting with `/*` and `/**` align their leading `*` characters one space after the opening `/`, including unfinished comment blocks.
+
 ## Compare and merge
 
 In Merge+, hover over or focus a block arrow to highlight the middle-editor code it would replace in amber, including its position beside the scrollbar. Moving away clears the preview. With text selected in the middle editor, clicking a block arrow replaces only that selection. Otherwise, it replaces the entire matching block, which can cover the whole script even when its source is a single line. To copy only part of a source block, select the source text and use its selection arrow.

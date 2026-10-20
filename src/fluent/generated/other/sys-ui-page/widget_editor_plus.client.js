@@ -3604,16 +3604,6 @@
                                         }
                                         return false;
                                     }
-                                    function width(indent) {
-                                        var result = 0;
-                                        for (var k = 0; k < indent.length; k++) {
-                                            result +=
-                                                indent.charAt(k) === '\t'
-                                                    ? options.tabSize - (result % options.tabSize)
-                                                    : 1;
-                                        }
-                                        return result;
-                                    }
                                     for (var i = firstLine; i <= lastLine; i++) {
                                         var opening = /^([ \t]*)\/\*\*?[ \t]*\r?$/.exec(lines[i]);
                                         if (!opening || !isComment(i, opening[1].length)) continue;
@@ -3624,23 +3614,13 @@
                                             if (!marker || !isComment(j, marker[1].length)) break;
                                             body.push({
                                                 line: j,
-                                                indent: marker[1],
                                                 rest: '*' + marker[2],
                                             });
                                             if (/^\/[ \t]*\r?$/.test(marker[2])) break;
                                         }
-                                        if (!body.length || !/^\*\/[ \t]*\r?$/.test(body[body.length - 1].rest))
-                                            continue;
-                                        var base = width(opening[1]);
-                                        // Retain the usual aligned or one-space-offset style; remove excess padding.
-                                        var offset = body.some(function (item) {
-                                            return width(item.indent) === base + 1;
-                                        })
-                                            ? ' '
-                                            : '';
+                                        if (!body.length) continue;
                                         body.forEach(function (item) {
-                                            if (width(item.indent) > base + 1)
-                                                lines[item.line] = opening[1] + offset + item.rest;
+                                            lines[item.line] = opening[1] + ' ' + item.rest;
                                         });
                                         i = j;
                                     }
@@ -3750,7 +3730,8 @@
                                 fontFamily: _buildFontFamily($scope.userPrefs.fontFamily),
                                 fontSize: $scope.userPrefs.fontSize,
                                 glyphMargin: isJs,
-                                insertSpaces: false,
+                                insertSpaces: !!$scope.userPrefs.formatTabsToSpaces,
+                                detectIndentation: false,
                                 language: lang,
                                 lightbulb: { enabled: true },
                                 lineNumbers: 'on',
@@ -3864,6 +3845,12 @@
                                 },
                                 updateOptions: function (opts) {
                                     ed.updateOptions(opts);
+                                    var model = ed.getModel();
+                                    if (model)
+                                        model.updateOptions({
+                                            insertSpaces: !!$scope.userPrefs.formatTabsToSpaces,
+                                            tabSize: $scope.userPrefs.tabSize,
+                                        });
                                 },
                                 dispose: function () {
                                     try {
@@ -3898,11 +3885,11 @@
                                     }
                                     function _resetIndent() {
                                         ed.updateOptions({
-                                            insertSpaces: false,
+                                            insertSpaces: !!$scope.userPrefs.formatTabsToSpaces,
                                         });
                                         if (_fmtModel && !_fmtModel.isDisposed()) {
                                             _fmtModel.updateOptions({
-                                                insertSpaces: false,
+                                                insertSpaces: !!$scope.userPrefs.formatTabsToSpaces,
                                             });
                                         }
                                     }
@@ -9343,6 +9330,7 @@
                             parameterHints: { enabled: langHelpersEnabled },
                             stickyScroll: stickyScrollVal,
                             tabSize: tabSizeVal,
+                            insertSpaces: !!$scope.userPrefs.formatTabsToSpaces,
                         });
                     });
                     if (window.monaco) {

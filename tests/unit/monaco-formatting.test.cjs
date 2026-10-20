@@ -362,10 +362,10 @@ test('JavaScript document and paste formatting align block comments without chan
             getPositionAt: offset => { const lines = value.slice(0, offset).split('\n'); return { lineNumber: lines.length, column: lines.at(-1).length + 1 }; }
         };
     }
-    async function format(range) {
+    async function format(range, insertSpaces = true) {
         service = ts.createLanguageService(host);
         const m = model();
-        const edits = range ? await providers.range.provideDocumentRangeFormattingEdits(m, range, { insertSpaces: true }) : await providers.document.provideDocumentFormattingEdits(m, { insertSpaces: true });
+        const edits = range ? await providers.range.provideDocumentRangeFormattingEdits(m, range, { insertSpaces }) : await providers.document.provideDocumentFormattingEdits(m, { insertSpaces });
         for (const edit of edits) value = value.slice(0, m.getOffsetAt({ lineNumber: edit.range.startLineNumber, column: edit.range.startColumn })) + edit.text + value.slice(m.getOffsetAt({ lineNumber: edit.range.endLineNumber, column: edit.range.endColumn }));
         service.dispose();
         return edits;
@@ -374,7 +374,7 @@ test('JavaScript document and paste formatting align block comments without chan
         value = "(function() {\n    /*\n    * original\n    */\n    function original() {}\n\n    /*\n        *\n        * test\n        */\n    function goHello() {\n        console.log('hi');\n    }\n})();";
         const range = { startLineNumber: 7, startColumn: 5, endLineNumber: 14, endColumn: 6 };
         await format(paste ? range : undefined);
-        assert.match(value, /    \/\*\n    \*\n    \* test\n    \*\//);
+        assert.match(value, /    \/\*\n     \*\n     \* test\n     \*\//);
         const stable = value;
         assert.equal((await format(paste ? range : undefined)).length, 0);
         assert.equal(value, stable);
@@ -386,4 +386,79 @@ test('JavaScript document and paste formatting align block comments without chan
     value = '(function() {\n    /*\n        * outside selection\n        */\n    const x=1;\n})();';
     await format({ startLineNumber: 5, startColumn: 1, endLineNumber: 5, endColumn: 15 });
     assert.match(value, /        \* outside selection/);
+    for (const opening of ['/*', '/**']) {
+        for (const closing of ['', '\n*/']) {
+            value = opening + '\n* description' + closing;
+            await format();
+            assert.equal(value, opening + '\n * description' + (closing ? '\n */' : ''));
+            assert.equal((await format()).length, 0, 'block comment alignment is stable');
+        }
+    }
+    value = 'function example() {\n\t/*\n\t* description\n\t*/\n\treturn "a\tb";\n}';
+    await format();
+    assert.equal(value, 'function example() {\n    /*\n     * description\n     */\n    return "a\tb";\n}');
+    value = 'function example() {\n\tconst text = `first\n\tliteral tab\n`;\n\treturn text;\n}';
+    await format();
+    assert.match(value, /\n    const text/);
+    assert.match(value, /`first\n\tliteral tab\n`/);
+    value = 'function example() {\n    return 1;\n}';
+    await format(undefined, false);
+    assert.match(value, /\n\treturn 1;/, 'tab indentation remains available when spaces are disabled');
+});
+
+test('editor creation, preference updates and formatting keep editor and model indentation consistent', async () => {
+    const ast = ts.createSourceFile('editor.js', page, ts.ScriptTarget.Latest, true);
+    let wrapper, editorOptions;
+    function find(node) {
+        if (ts.isBinaryExpression(node) && node.left.getText(ast) === 'monacoEditors[pane.key]' && ts.isObjectLiteralExpression(node.right)) wrapper = node.right.getText(ast);
+        if (ts.isFunctionDeclaration(node) && node.name?.text === 'initEditorForPane') {
+            function findOptions(child) {
+                if (ts.isCallExpression(child) && child.expression.getText(ast) === 'monaco.editor.create') editorOptions = child.arguments[1].getText(ast);
+                ts.forEachChild(child, findOptions);
+            }
+            findOptions(node);
+        }
+        ts.forEachChild(node, find);
+    }
+    find(ast);
+    assert.ok(wrapper); assert.ok(editorOptions);
+    const bootstrap = fs.readFileSync('src/fluent/generated/client-development/ui-script/monaco_plus_bootstrap.js', 'utf8');
+    const bootstrapAst = ts.createSourceFile('bootstrap.js', bootstrap, ts.ScriptTarget.Latest, true);
+    let mergePrefs;
+    function findMerge(node) {
+        if (ts.isFunctionDeclaration(node) && node.name?.text === '_mergePrefsIntoOptions') mergePrefs = node.getText(bootstrapAst);
+        ts.forEachChild(node, findMerge);
+    }
+    findMerge(bootstrapAst);
+    for (const spaces of [false, true]) {
+        for (const fail of [false, true]) {
+            const editor = {}, model = {};
+            let optionsAtFormat;
+            const context = vm.createContext({
+                $scope: { userPrefs: { formatTabsToSpaces: spaces, tabSize: 4 } },
+                isJs: true, lang: 'javascript', value: '\tcode', readOnly: false,
+                _buildFontFamily: () => '', _resolveMonacoTheme: () => 'vs',
+                ed: { updateOptions: opts => Object.assign(editor, opts), getModel: () => ({
+                    updateOptions: opts => Object.assign(model, opts), isDisposed: () => false, getLanguageId: () => 'javascript',
+                }), getAction: () => ({ run: () => {
+                    optionsAtFormat = { editor: editor.insertSpaces, model: model.insertSpaces };
+                    return fail ? Promise.reject(new Error('Worker failed')) : Promise.resolve();
+                } }) },
+            });
+            vm.runInContext('wrapper = ' + wrapper + '; options = ' + editorOptions + ';' + mergePrefs, context);
+            assert.equal(context.options.insertSpaces, spaces);
+            assert.equal(context.options.detectIndentation, false);
+            const shared = context._mergePrefsIntoOptions(context.$scope.userPrefs, { detectIndentation: true });
+            assert.equal(shared.insertSpaces, spaces); assert.equal(shared.detectIndentation, false);
+            context.wrapper.format(spaces);
+            await new Promise(resolve => setImmediate(resolve));
+            assert.deepEqual(optionsAtFormat, { editor: spaces, model: spaces });
+            assert.equal(editor.insertSpaces, spaces); assert.equal(model.insertSpaces, spaces);
+            context.$scope.userPrefs.formatTabsToSpaces = !spaces;
+            context.$scope.userPrefs.tabSize = 2;
+            context.wrapper.updateOptions({ insertSpaces: !spaces, tabSize: 2 });
+            assert.equal(editor.insertSpaces, !spaces); assert.equal(model.insertSpaces, !spaces);
+            assert.equal(model.tabSize, 2);
+        }
+    }
 });

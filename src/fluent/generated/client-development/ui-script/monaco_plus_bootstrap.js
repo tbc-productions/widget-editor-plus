@@ -234,6 +234,7 @@
         }
         if (prefs.hasOwnProperty('formatTabsToSpaces')) {
             out.insertSpaces = !!prefs.formatTabsToSpaces;
+            out.detectIndentation = false;
         }
         if (prefs.hasOwnProperty('autoIndent')) {
             out.autoIndent = prefs.autoIndent ? 'advanced' : 'none';
