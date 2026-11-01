@@ -33,13 +33,14 @@
 
     var _initialized = false;
     var _globalSetupDone = false;
+    var _jsSetupDone = false;
     var _initializedLangs = {};
     var _codeActionsGetRemBase = function () {
         return 16;
     };
     var _pollIntervalMs = 200;
     var _maxWaitMs = 10000;
-    var _v = '2026-11-01T18:00';
+    var _v = '2026-11-01T20:00';
     var _definitionUrl = 'monaco_language_server.jsdbx?sysparm_substitute=false&v=' + _v;
     var _clientDefinitionUrl = 'monaco_language_client.jsdbx?sysparm_substitute=false&v=' + _v;
     var _codeActionsUrl = 'monaco_code_actions.jsdbx?sysparm_substitute=false&v=' + _v;
@@ -82,6 +83,8 @@
         loadScssVariables: function () {},
         loadHtmlClassIndex: function () {},
         loadCssEditorSupport: function () {},
+        refreshScriptInclude: function () {},
+        refreshProvider: function () {},
         setUnusedVarsEnabled: function (enabled) {
             _showUnusedVars = !!enabled;
             if (!window.monaco || !monaco.editor) return;
@@ -109,6 +112,8 @@
 
     /* { ClassName: true } — classes with a full d.ts, filtered from SN's untyped overloads to prevent type merging. */
     var _siProtectedClasses = {};
+    /* { ClassName: true } — classes whose DTS is live, so TypeScript supplies their completions and hover. */
+    var _siDtsRegistered = {};
     var _addExtraLibFilterInstalled = false;
 
     /* Matches SN's Number/String/Boolean/Any-extends-GlideElement augmentations. */
@@ -270,12 +275,32 @@
             return 'any';
         }
         var t = jsType.trim();
-        if (t.indexOf('|') !== -1) {
-            return t.split('|').map(jsDocTypeToTs).join(' | ');
+        var union = _splitTopLevel(t, '|');
+        if (union.length > 1) {
+            return union.map(jsDocTypeToTs).join(' | ');
         }
-        var arr = t.match(/^Array<(.+)>$/i);
-        if (arr) {
-            return jsDocTypeToTs(arr[1]) + '[]';
+        if (t.charAt(0) === '(' && t.charAt(t.length - 1) === ')') {
+            return '(' + jsDocTypeToTs(t.slice(1, -1)) + ')';
+        }
+        if (t.charAt(0) === '?' && t.length > 1) {
+            return jsDocTypeToTs(t.slice(1)) + ' | null';
+        }
+        if (t.charAt(0) === '!' || t.slice(0, 3) === '...') {
+            return jsDocTypeToTs(t.replace(/^(?:!|\.\.\.)/, ''));
+        }
+        if (t.length > 1 && t.charAt(t.length - 1) === '=') {
+            return jsDocTypeToTs(t.slice(0, -1));
+        }
+        var generic = t.match(/^([\w$.]+?)\.?<([\s\S]+)>$/);
+        if (generic) {
+            var args = _splitTopLevel(generic[2], ',').map(jsDocTypeToTs);
+            if (/^array$/i.test(generic[1])) {
+                return /^[\w$.]+$/.test(args[0]) ? args[0] + '[]' : 'Array<' + args[0] + '>';
+            }
+            if (/^object$/i.test(generic[1])) {
+                return args.length > 1 ? 'Record<' + args[0] + ', ' + args[1] + '>' : 'Record<string, ' + args[0] + '>';
+            }
+            return generic[1] + '<' + args.join(', ') + '>';
         }
         if (/\[\]$/.test(t)) {
             return jsDocTypeToTs(t.slice(0, -2)) + '[]';
@@ -294,44 +319,132 @@
             bool: 'boolean',
             object: 'object',
             Object: 'object',
+            Array: 'any[]',
+            array: 'any[]',
+            function: 'Function',
+            Function: 'Function',
+            Promise: 'Promise<any>',
+            Map: 'Map<any, any>',
+            Set: 'Set<any>',
             void: 'void',
             null: 'null',
             undefined: 'undefined',
             '*': 'any',
+            '?': 'any',
             any: 'any',
         };
         return map[t] !== undefined ? map[t] : t;
     }
 
     /**
+     * Splits text on a separator that is not nested in brackets or strings.
+     *
+     * @param {string} text - Text to split.
+     * @param {string} sep - Single-character separator.
+     * @returns {string[]} Trimmed, non-empty parts.
+     */
+    function _splitTopLevel(text, sep) {
+        var parts = [];
+        var depth = 0;
+        var quote = null;
+        var cur = '';
+        for (var i = 0; i < text.length; i++) {
+            var ch = text.charAt(i);
+            if (quote) {
+                cur += ch;
+                if (ch === '\\') {
+                    cur += text.charAt(++i);
+                } else if (ch === quote) {
+                    quote = null;
+                }
+                continue;
+            }
+            if (ch === "'" || ch === '"' || ch === '`') {
+                quote = ch;
+            } else if ('([{<'.indexOf(ch) !== -1) {
+                depth++;
+            } else if (')]}>'.indexOf(ch) !== -1 && !(ch === '>' && text.charAt(i - 1) === '=')) {
+                depth--;
+            } else if (ch === sep && depth <= 0) {
+                if (cur.trim()) {
+                    parts.push(cur.trim());
+                }
+                cur = '';
+                continue;
+            }
+            cur += ch;
+        }
+        if (cur.trim()) {
+            parts.push(cur.trim());
+        }
+        return parts;
+    }
+
+    /**
      * Parses @param and @returns JSDoc tags from a block comment string.
+     * Dotted names (options.name) become members of their parent parameter's type.
      *
      * @param {string} comment - Raw block comment text including delimiters.
-     * @returns {{ params: Object, returns: string }}
+     * @returns {{ params: Object, returns: string, returnsDescription: string|null }}
      */
     function parseSiDocComment(comment) {
         var result = {
             params: {},
             returns: 'any',
+            returnsDescription: null,
         };
         if (!comment) {
             return result;
         }
-        var paramRe = /@param\s+\{([^}]+)\}\s+(\[?)(\w+)\]?[ \t]*(?:-[ \t]*)?([^\r\n]*)/g;
+        var members = {};
+        var paramRe =
+            /@param\s+\{([^}]+)\}\s+(\[?)([\w$]+(?:\.[\w$]+)*)(?:\s*=[^\]\r\n]*)?\]?[ \t]*(?:-[ \t]*)?([^\r\n]*)/g;
         var pm;
         while ((pm = paramRe.exec(comment)) !== null) {
-            var desc = pm[4] ? pm[4].trim() : null;
-            result.params[pm[3]] = {
-                type: jsDocTypeToTs(pm[1]),
-                optional: pm[2] === '[',
+            var desc = pm[4] ? pm[4].replace(/\s*\*+\/?\s*$/, '').trim() : null;
+            var rawType = pm[1].trim();
+            var entry = {
+                type: jsDocTypeToTs(rawType),
+                optional: pm[2] === '[' || (rawType.length > 1 && rawType.charAt(rawType.length - 1) === '='),
+                rest: rawType.slice(0, 3) === '...',
                 description: desc || null,
             };
+            var dot = pm[3].indexOf('.');
+            if (dot === -1) {
+                result.params[pm[3]] = entry;
+                continue;
+            }
+            var parent = pm[3].slice(0, dot);
+            (members[parent] = members[parent] || []).push({ name: pm[3].slice(dot + 1), info: entry });
         }
-        var retMatch = comment.match(/@returns?\s+\{([^}]+)\}/);
+        Object.keys(members).forEach(function (parent) {
+            var info = result.params[parent];
+            if (!info || (info.type !== 'object' && info.type !== 'any')) {
+                return;
+            }
+            var fields = members[parent]
+                .filter(function (m) {
+                    return m.name.indexOf('.') === -1;
+                })
+                .map(function (m) {
+                    var doc = m.info.description ? '/** ' + _escapeDocComment(m.info.description) + ' */ ' : '';
+                    return doc + m.name + (m.info.optional ? '?' : '') + ': ' + m.info.type;
+                });
+            if (fields.length) {
+                info.type = '{ ' + fields.join('; ') + ' }';
+            }
+        });
+        var retMatch = comment.match(/@returns?\s+\{([^}]+)\}[ \t]*(?:-[ \t]*)?([^\r\n]*)/);
         if (retMatch) {
             result.returns = jsDocTypeToTs(retMatch[1]);
+            result.returnsDescription = retMatch[2].replace(/\s*\*+\/?\s*$/, '').trim() || null;
         }
         return result;
+    }
+
+    /** Keeps generated text from closing a JSDoc block early. */
+    function _escapeDocComment(text) {
+        return String(text || '').replace(/\*\//g, '*\\/');
     }
 
     /**
@@ -398,7 +511,7 @@
      * @returns {string}
      */
     function inferConstantType(rawValue) {
-        var v = rawValue.trim().replace(/\s*;.*$/, '');
+        var v = rawValue.trim().replace(/;\s*$/, '');
         if (/^-?(?:\d+(?:\.\d+)?|\.\d+)$/.test(v)) {
             return v;
         }
@@ -409,7 +522,7 @@
         if ((q === "'" || q === '"') && v.charAt(v.length - 1) === q) {
             return '"' + v.slice(1, -1).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
         }
-        if (/^(?:async\s+)?function\b/.test(v)) {
+        if (_functionValueParams(v) !== null) {
             return '(...args: any[]) => any';
         }
         if (v.charAt(0) === '{' && v.charAt(v.length - 1) === '}') {
@@ -430,13 +543,11 @@
      * @returns {string}
      */
     function _inferObjectLiteralType(objLiteral) {
-        var inner = objLiteral.slice(1, -1);
-        var pairRe = /([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:\s*(\{[\s\S]*?\}|\[[\s\S]*?\]|[^,}]+)/g;
-        var fields = [];
-        var m;
-        while ((m = pairRe.exec(inner)) !== null) {
-            fields.push(m[1] + ': ' + inferConstantType(m[2].trim()));
-        }
+        var fields = _parseMemberList(objLiteral.slice(1, -1), false, null).map(function (member) {
+            var key = /^[A-Za-z_$][\w$]*$/.test(member.key) ? member.key : JSON.stringify(member.key);
+            var type = member.kind === 'method' ? '(...args: any[]) => any' : inferConstantType(member.value || '');
+            return key + ': ' + type;
+        });
         return fields.length ? '{ ' + fields.join('; ') + ' }' : 'Record<string, any>';
     }
 
@@ -453,20 +564,32 @@
      */
     function parseSiConstants(script, className) {
         var constants = [];
-        var properties = [];
+        var seen = {};
         var escaped = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         var re = new RegExp(
-            '(\\/\\*\\*(?:(?!\\*\\/)[\\s\\S])*\\*\\/)?\\s*' +
-                escaped +
-                '\\.(\\w+)\\s*=\\s*(\\{[\\s\\S]*?\\}|\\[[\\s\\S]*?\\]|[^\\n;]+)',
-            'g'
+            '(\\/\\*\\*(?:(?!\\*\\/)[\\s\\S])*\\*\\/)?\\s*(?:^|[^\\w$.])' + escaped + '\\.(\\w+)\\s*=(?!=)\\s*',
+            'gm'
         );
         var m;
         while ((m = re.exec(script)) !== null) {
-            if (m[2] === 'prototype') {
+            if (m[2] === 'prototype' || seen[m[2]]) {
                 continue;
             }
-            var tsType = inferConstantType(m[3]);
+            var valueStart = m.index + m[0].length;
+            var first = script.charAt(valueStart);
+            var valueEnd;
+            if (first === '{' || first === '[') {
+                valueEnd = _skipBalanced(script, valueStart);
+            } else {
+                for (valueEnd = valueStart; valueEnd < script.length; valueEnd++) {
+                    var skip = _skipStringOrComment(script, valueEnd);
+                    if (skip !== valueEnd) {
+                        valueEnd = skip - 1;
+                    } else if (/[\n;]/.test(script.charAt(valueEnd))) {
+                        break;
+                    }
+                }
+            }
             var doc = '';
             if (m[1]) {
                 doc = m[1]
@@ -475,8 +598,31 @@
                     .replace(/^\s*\*\s?/gm, '')
                     .trim();
             }
-            constants.push({ name: m[2], tsType: tsType, documentation: doc });
+            seen[m[2]] = true;
+            constants.push({
+                name: m[2],
+                tsType: inferConstantType(script.slice(valueStart, valueEnd)),
+                documentation: doc,
+            });
         }
+        /* ES6 class static fields. */
+        _parseTopLevelMembers(script).forEach(function (member) {
+            if (!member.isClass || !member.isStatic || member.kind !== 'property' || member.owner !== className) {
+                return;
+            }
+            if (seen[member.key]) {
+                return;
+            }
+            seen[member.key] = true;
+            var doc = member.comment
+                ? member.comment
+                      .replace(/^\/\*+\s*/, '')
+                      .replace(/\s*\*+\/$/, '')
+                      .replace(/^\s*\*\s?/gm, '')
+                      .trim()
+                : '';
+            constants.push({ name: member.key, tsType: inferConstantType(member.value || ''), documentation: doc });
+        });
         return constants;
     }
 
@@ -490,11 +636,7 @@
         if (!rawValue) {
             return 'any';
         }
-        var v = rawValue
-            .trim()
-            .replace(/\s*;.*$/, '')
-            .replace(/,$/, '')
-            .trim();
+        var v = rawValue.trim().replace(/;\s*$/, '').replace(/,$/, '').trim();
         if (
             (v.charAt(0) === "'" || v.charAt(0) === '"' || v.charAt(0) === '`') &&
             v.charAt(v.length - 1) === v.charAt(0)
@@ -524,71 +666,398 @@
     }
 
     /**
-     * Replaces every function body with an empty block so prototype-property
-     * scanning only sees top-level members. Brace-balanced (skipping strings
-     * and comments) because a non-greedy regex stops at the first \`}\` and
-     * leaks the keys of any object literal returned from a method.
+     * Returns the index just past a string, template or comment starting at i,
+     * or i itself when none starts there.
      *
-     * @param {string} script - Full content of a Script Include script field.
-     * @returns {string} Script with all function bodies collapsed to \`{}\`.
+     * @param {string} text - Source text.
+     * @param {number} i - Index to inspect.
+     * @returns {number}
      */
-    function _stripFunctionBodies(script) {
+    function _skipStringOrComment(text, i) {
+        var ch = text.charAt(i);
+        var next = text.charAt(i + 1);
+        if (ch === '/' && next === '*') {
+            var blockEnd = text.indexOf('*/', i + 2);
+            return blockEnd === -1 ? text.length : blockEnd + 2;
+        }
+        if (ch === '/' && next === '/') {
+            var lineEnd = text.indexOf('\n', i);
+            return lineEnd === -1 ? text.length : lineEnd;
+        }
+        if (ch !== "'" && ch !== '"' && ch !== '`') {
+            return i;
+        }
+        for (var j = i + 1; j < text.length; j++) {
+            var c = text.charAt(j);
+            if (c === '\\') {
+                j++;
+            } else if (c === ch || (c === '\n' && ch !== '`')) {
+                return j + 1;
+            }
+        }
+        return text.length;
+    }
+
+    /**
+     * Returns the index just past the bracket matching the one at openIdx,
+     * skipping strings and comments; text.length when unbalanced.
+     *
+     * @param {string} text - Source text.
+     * @param {number} openIdx - Index of '(', '[' or '{'.
+     * @returns {number}
+     */
+    function _skipBalanced(text, openIdx) {
+        var open = text.charAt(openIdx);
+        var close = { '(': ')', '[': ']', '{': '}' }[open];
+        var depth = 0;
+        for (var i = openIdx; i < text.length; i++) {
+            var skip = _skipStringOrComment(text, i);
+            if (skip !== i) {
+                i = skip - 1;
+                continue;
+            }
+            var ch = text.charAt(i);
+            if (ch === open) {
+                depth++;
+            } else if (ch === close && --depth === 0) {
+                return i + 1;
+            }
+        }
+        return text.length;
+    }
+
+    /**
+     * Collapses every top-level brace block to \`{}\`, keeping comments and
+     * strings, so regex scans only see top-level statements.
+     *
+     * @param {string} script - Source text.
+     * @returns {string}
+     */
+    function _blankNestedBraces(script) {
         var out = '';
         var i = 0;
-        var n = script.length;
-        while (i < n) {
-            var idx = script.indexOf('function', i);
-            if (idx === -1) {
-                out += script.slice(i);
-                break;
+        while (i < script.length) {
+            var skip = _skipStringOrComment(script, i);
+            if (skip !== i) {
+                out += script.slice(i, skip);
+                i = skip;
+                continue;
             }
-            var open = script.indexOf('{', idx);
-            if (open === -1) {
-                out += script.slice(i);
-                break;
+            if (script.charAt(i) === '{') {
+                out += '{}';
+                i = _skipBalanced(script, i);
+                continue;
             }
-            out += script.slice(i, open) + '{}';
-
-            var depth = 0;
-            var inStr = null;
-            var j = open;
-            for (; j < n; j++) {
-                var ch = script.charAt(j);
-                if (inStr) {
-                    if (ch === '\\') {
-                        j++;
-                    } else if (ch === inStr) {
-                        inStr = null;
-                    }
-                    continue;
-                }
-                if (ch === '"' || ch === "'") {
-                    inStr = ch;
-                    continue;
-                }
-                if (ch === '/' && script.charAt(j + 1) === '*') {
-                    var blockEnd = script.indexOf('*/', j + 2);
-                    j = blockEnd === -1 ? n : blockEnd + 1;
-                    continue;
-                }
-                if (ch === '/' && script.charAt(j + 1) === '/') {
-                    var lineEnd = script.indexOf('\n', j);
-                    j = lineEnd === -1 ? n : lineEnd;
-                    continue;
-                }
-                if (ch === '{') {
-                    depth++;
-                } else if (ch === '}') {
-                    depth--;
-                    if (depth === 0) {
-                        j++;
-                        break;
-                    }
-                }
-            }
-            i = j;
+            out += script.charAt(i);
+            i++;
         }
         return out;
+    }
+
+    /**
+     * Finds the first \`function\` keyword outside strings and comments.
+     *
+     * @param {string} script - Source text.
+     * @returns {number} Index of the keyword, or -1.
+     */
+    function _findFunctionKeyword(script) {
+        for (var i = 0; i < script.length; i++) {
+            var skip = _skipStringOrComment(script, i);
+            if (skip !== i) {
+                i = skip - 1;
+                continue;
+            }
+            if (
+                script.substr(i, 8) === 'function' &&
+                !/[\w$]/.test(script.charAt(i - 1)) &&
+                !/[\w$]/.test(script.charAt(i + 8))
+            ) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Classifies the '{' at idx as an object literal, a class body or a block.
+     *
+     * @param {string} script - Source text.
+     * @param {number} idx - Index of the '{'.
+     * @returns {{kind: string, owner: string|null}}
+     */
+    function _braceKind(script, idx) {
+        var before = script.slice(Math.max(0, idx - 300), idx);
+        var cls = before.match(/\bclass\s+([\w$]*)(?:\s+extends\s+[\w$.]+(?:\s*\([^)]*\))?)?\s*$/);
+        if (cls) {
+            return { kind: 'class', owner: cls[1] || null };
+        }
+        /* Static values such as ClassName.MAP = {...} are constants, not instance members. */
+        if (/[\w$]\.(?!prototype\s*=)[\w$]+\s*=\s*$/.test(before)) {
+            return { kind: 'block', owner: null };
+        }
+        if (/(?:[=(,:[?&|]|\breturn)\s*$/.test(before) && !/=>\s*$/.test(before)) {
+            return { kind: 'object', owner: null };
+        }
+        return { kind: 'block', owner: null };
+    }
+
+    /**
+     * Returns the end index of one object-literal entry or class member.
+     *
+     * @param {string} body - Object or class body text.
+     * @param {number} i - Start index of the entry.
+     * @param {boolean} isClass - True for class bodies.
+     * @returns {number}
+     */
+    function _memberEnd(body, i, isClass) {
+        var hasInitialiser = false;
+        for (; i < body.length; i++) {
+            var skip = _skipStringOrComment(body, i);
+            if (skip !== i) {
+                i = skip - 1;
+                continue;
+            }
+            var ch = body.charAt(i);
+            if (ch === '(' || ch === '[' || (ch === '{' && (!isClass || hasInitialiser))) {
+                i = _skipBalanced(body, i) - 1;
+            } else if (ch === '{') {
+                return _skipBalanced(body, i);
+            } else if (!isClass && ch === ',') {
+                return i;
+            } else if (isClass && ch === ';') {
+                return i + 1;
+            } else if (isClass && ch === '=' && body.charAt(i + 1) !== '>') {
+                hasInitialiser = true;
+            } else if (isClass && ch === '\n' && hasInitialiser && !/[=+\-*/%&|^?:,.(\[]\s*$/.test(body.slice(0, i))) {
+                return i;
+            }
+        }
+        return body.length;
+    }
+
+    /**
+     * Returns the parameter text of a function or arrow-function value, or null.
+     *
+     * @param {string} value - Member value text.
+     * @returns {string|null}
+     */
+    function _functionValueParams(value) {
+        var fn = value.match(/^(?:async\s+)?function\b\s*\*?\s*[\w$]*\s*\(/);
+        if (fn) {
+            var open = fn[0].length - 1;
+            return value.slice(open + 1, _skipBalanced(value, open) - 1);
+        }
+        var single = value.match(/^(?:async\s+)?([A-Za-z_$][\w$]*)\s*=>/);
+        if (single) {
+            return single[1];
+        }
+        var paren = value.match(/^(?:async\s*)?\(/);
+        if (paren) {
+            var end = _skipBalanced(value, paren[0].length - 1);
+            if (/^\s*=>/.test(value.slice(end))) {
+                return value.slice(paren[0].length, end - 1);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Parses one object-literal entry or class member.
+     *
+     * @param {string} text - Member source text.
+     * @param {string|null} comment - Comment directly above the member.
+     * @param {boolean} isClass - True for class members.
+     * @param {string|null} owner - Class name for class members.
+     * @returns {Object|null}
+     */
+    function _parseMemberText(text, comment, isClass, owner) {
+        var t = text.trim();
+        var member = { comment: comment, isClass: isClass, isStatic: false, owner: owner };
+        if (isClass && /^static\s+(?![=(;])/.test(t)) {
+            member.isStatic = true;
+            t = t.replace(/^static\s+/, '');
+        }
+        t = t.replace(/^async\s+(?=[\w$'"*[])/, '').replace(/^\*\s*/, '');
+        var accessor = t.match(/^(get|set)\s+(?=[\w$'"])/);
+        if (accessor) {
+            t = t.slice(accessor[0].length);
+        }
+        var km = t.match(/^(?:([A-Za-z_$#][\w$]*)|'([^']*)'|"([^"]*)"|(\d+))/);
+        if (!km) {
+            return null;
+        }
+        member.key = km[1] || km[2] || km[3] || km[4];
+        if (member.key.charAt(0) === '#') {
+            return null;
+        }
+        var rest = t.slice(km[0].length).replace(/^\s+/, '');
+        if (rest.charAt(0) === '(') {
+            member.kind = accessor && accessor[1] === 'get' ? 'property' : 'method';
+            member.params = rest.slice(1, _skipBalanced(rest, 0) - 1);
+            member.value = null;
+            return member;
+        }
+        var sep = isClass ? '=' : ':';
+        if (rest.charAt(0) !== sep) {
+            if (rest && rest !== ';') {
+                return null;
+            }
+            member.kind = 'property';
+            member.value = isClass ? '' : member.key;
+            return member;
+        }
+        var value = rest.slice(1).trim().replace(/;\s*$/, '');
+        var params = _functionValueParams(value);
+        member.kind = params === null ? 'property' : 'method';
+        member.params = params;
+        member.value = value;
+        return member;
+    }
+
+    /**
+     * Lists the members of every object literal and class body at the top
+     * nesting level of a script. Nested objects and function bodies are skipped.
+     *
+     * @param {string} script - Source text.
+     * @returns {Array<Object>} Member records with key, kind, params and value.
+     */
+    function _parseTopLevelMembers(script) {
+        var members = [];
+        var i = 0;
+        while (i < script.length) {
+            var skip = _skipStringOrComment(script, i);
+            if (skip !== i) {
+                i = skip;
+                continue;
+            }
+            if (script.charAt(i) !== '{') {
+                i++;
+                continue;
+            }
+            var end = _skipBalanced(script, i);
+            var info = _braceKind(script, i);
+            if (info.kind !== 'block') {
+                members = members.concat(
+                    _parseMemberList(script.slice(i + 1, end - 1), info.kind === 'class', info.owner)
+                );
+            }
+            i = end;
+        }
+        return members;
+    }
+
+    function _parseMemberList(body, isClass, owner) {
+        var out = [];
+        var comment = null;
+        var i = 0;
+        while (i < body.length) {
+            var ch = body.charAt(i);
+            if (/[\s,;]/.test(ch)) {
+                i++;
+                continue;
+            }
+            if (ch === '/' && body.charAt(i + 1) === '*') {
+                var commentEnd = _skipStringOrComment(body, i);
+                comment = body.slice(i, commentEnd);
+                i = commentEnd;
+                continue;
+            }
+            if (ch === '/' && body.charAt(i + 1) === '/') {
+                i = _skipStringOrComment(body, i);
+                continue;
+            }
+            var end = Math.max(i + 1, _memberEnd(body, i, isClass));
+            var member = _parseMemberText(body.slice(i, end), comment, isClass, owner);
+            if (member) {
+                out.push(member);
+            }
+            comment = null;
+            i = end;
+        }
+        return out;
+    }
+
+    /**
+     * Converts a raw parameter list into clean names and a typed TypeScript list.
+     * Default values make a parameter optional and supply its type when JSDoc
+     * has none; destructured parameters are named param0, param1, ...
+     *
+     * @param {string} rawParams - Text between the parentheses.
+     * @param {Object} docInfo - Result of parseSiDocComment.
+     * @returns {{names: string[], typed: string}}
+     */
+    function _buildParamList(rawParams, docInfo) {
+        var names = [];
+        var typed = _splitTopLevel(rawParams || '', ',').map(function (p, idx) {
+            var rest = p.slice(0, 3) === '...';
+            if (rest) {
+                p = p.slice(3).trim();
+            }
+            var eq = _splitTopLevel(p.replace(/=>/g, '→'), '=');
+            var namePart = eq[0] || '';
+            var def = eq.length > 1 ? eq.slice(1).join('=').replace(/→/g, '=>') : null;
+            var name = /^[A-Za-z_$][\w$]*$/.test(namePart) ? namePart : 'param' + idx;
+            names.push(name);
+            var info = docInfo.params[name];
+            var type = info ? info.type : def !== null ? inferPropertyValueType(def) : 'any';
+            if (rest) {
+                type = info ? (/^[\w$.]+$/.test(type) ? type + '[]' : 'Array<' + type + '>') : 'any[]';
+            }
+            var optional = !rest && ((info && info.optional) || def !== null);
+            return (rest ? '...' : '') + name + (optional ? '?' : '') + ': ' + type;
+        });
+        return { names: names, typed: typed.join(', ') };
+    }
+
+    /**
+     * Builds a method descriptor (signature, markdown docs, DTS JSDoc) from a
+     * name, raw parameter text and the comment above it.
+     *
+     * @param {string} name - Method name.
+     * @param {string} rawParams - Text between the parentheses.
+     * @param {string|null} comment - Raw block comment, if any.
+     * @returns {Object}
+     */
+    function _buildMethodDescriptor(name, rawParams, comment) {
+        var docInfo = parseSiDocComment(comment);
+        var params = _buildParamList(rawParams, docInfo);
+        var description = '';
+        if (comment) {
+            var descText = comment
+                .replace(/^\/\*+\s*/, '')
+                .replace(/\s*\*+\/$/, '')
+                .replace(/^\s*\*\s?/gm, '');
+            var descMatch = descText.match(/^([\s\S]*?)(?=\s*@|\s*$)/);
+            description = descMatch ? descMatch[1].trim() : '';
+        }
+        var docLines = description ? [description] : [];
+        var jsDocLines = description ? description.split(/\r?\n/) : [];
+        var paramDocs = {};
+        params.names.forEach(function (p) {
+            var info = docInfo.params[p];
+            if (info && info.description) {
+                paramDocs[p] = info.description;
+                docLines.push('*@param* `' + p + '` — ' + info.description);
+                jsDocLines.push('@param ' + p + ' ' + info.description);
+            }
+        });
+        if (docInfo.returns !== 'any') {
+            docLines.push('*@returns* `' + docInfo.returns + '`');
+        }
+        if (docInfo.returnsDescription) {
+            jsDocLines.push('@returns ' + docInfo.returnsDescription);
+        }
+        return {
+            name: name,
+            signature: name + '(' + params.typed + '): ' + docInfo.returns,
+            typedParams: params.typed,
+            documentation: docLines.join('\n\n'),
+            jsDoc: jsDocLines.length ? '/**\n * ' + jsDocLines.map(_escapeDocComment).join('\n * ') + '\n */' : '',
+            params: params.names,
+            paramDocs: paramDocs,
+            isConstructor: false,
+            isStatic: false,
+        };
     }
 
     /**
@@ -607,7 +1076,7 @@
         var seen = {};
 
         function addProp(name, rawValue, comment) {
-            if (!name || name === 'initialize' || seen[name]) {
+            if (!name || name === 'initialize' || name === 'constructor' || seen[name]) {
                 return;
             }
             /* Skip only PrototypeJS's auto-generated type: 'ClassName' marker, not a
@@ -623,7 +1092,7 @@
                     return;
                 }
             }
-            if (rawValue && /^\s*(?:async\s+)?function\b/.test(rawValue.trim())) {
+            if (rawValue && _functionValueParams(rawValue.trim()) !== null) {
                 return;
             }
 
@@ -665,25 +1134,24 @@
             });
         }
 
-        /* Pattern 1: Object literal properties: key: value (not starting with function) */
-        var prototypeScript = _stripFunctionBodies(script);
-        var propRe =
-            /(\/\*\*[\s\S]*?\*\/|\/\*[\s\S]*?\*\/)?\s*([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:\s*(?!function\b)([^,\}\n]+|\[[\s\S]*?\]|\{[\s\S]*?\})/g;
-        var m;
-        while ((m = propRe.exec(prototypeScript)) !== null) {
-            addProp(m[2], m[3], m[1] || null);
-        }
+        /* Pattern 1: top-level object-literal entries and class fields */
+        _parseTopLevelMembers(script).forEach(function (m) {
+            if (m.kind === 'property' && !m.isStatic) {
+                addProp(m.key, m.value, m.comment);
+            }
+        });
 
         /* Pattern 2: Direct prototype assignments: ClassName.prototype.key = value; */
         var directRe =
             /(\/\*\*[\s\S]*?\*\/|\/\*[\s\S]*?\*\/)?\s*(?:[A-Z]\w*|this)\.prototype\.([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*(?!function\b)([^;\n]+)/g;
+        var m;
         while ((m = directRe.exec(script)) !== null) {
             addProp(m[2], m[3], m[1] || null);
         }
 
         /* Pattern 3: Property assignments to this inside methods/constructor: this.key = value; */
         var thisPropRe =
-            /(\/\*\*[\s\S]*?\*\/|\/\*[\s\S]*?\*\/)?\s*\bthis\.([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*(?!function\b)([^;\n]+)/g;
+            /(\/\*\*[\s\S]*?\*\/|\/\*[\s\S]*?\*\/)?\s*\bthis\.([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=(?!=)\s*(?!function\b)([^;\n]+)/g;
         while ((m = thisPropRe.exec(script)) !== null) {
             addProp(m[2], m[3], m[1] || null);
         }
@@ -692,87 +1160,40 @@
     }
 
     /**
-     * Parses all PrototypeJS prototype methods from a Script Include script string.
-     * Extracts method names, typed parameter signatures built from JSDoc @param
-     * annotations, return types from @returns, and markdown documentation strings
-     * for use in completions, hover tooltips, and signature help.
+     * Parses the top-level methods of a Script Include: PrototypeJS prototype
+     * entries (\`name: function () {}\`, arrows and shorthand) and ES6 class
+     * methods. \`initialize\` and class constructors become the constructor entry.
      *
      * @param {string} script - Full content of a Script Include script field.
      * @returns {Array<Object>} Parsed method descriptors.
      */
     function parseSiMethods(script) {
         var methods = [];
-        var re = /(\/\*\*(?:(?!\*\/)[\s\S])*\*\/|\/\*(?:(?!\*\/)[\s\S])*\*\/)?\s*(\w+)\s*:\s*function\s*\(([^)]*)\)/g;
-        var m;
-        while ((m = re.exec(script)) !== null) {
-            var methodName = m[2];
-
-            var comment = m[1] || null;
-            var docInfo = parseSiDocComment(comment);
-            var rawParams = m[3]
-                .split(',')
-                .map(function (p) {
-                    return p.trim();
-                })
-                .filter(Boolean);
-
-            var typedParams = rawParams
-                .map(function (p) {
-                    var info = docInfo.params[p];
-                    return info ? p + (info.optional ? '?' : '') + ': ' + info.type : p + ': any';
-                })
-                .join(', ');
-
-            var docLines = [];
-            if (comment) {
-                var descText = comment
-                    .replace(/^\/\*+\s*/, '')
-                    .replace(/\s*\*+\/$/, '')
-                    .replace(/^\s*\*\s?/gm, '');
-                var descMatch = descText.match(/^([\s\S]*?)(?=\s*@|\s*$)/);
-                if (descMatch && descMatch[1].trim()) {
-                    docLines.push(descMatch[1].trim());
-                }
+        var seen = {};
+        _parseTopLevelMembers(script).forEach(function (m) {
+            if (m.kind !== 'method') {
+                return;
             }
-
-            rawParams.forEach(function (p) {
-                var info = docInfo.params[p];
-                if (info && info.description) {
-                    docLines.push('*@param* `' + p + '` \u2014 ' + info.description);
+            var d = _buildMethodDescriptor(m.key, m.params, m.comment);
+            if ((!m.isClass && m.key === 'initialize') || (m.isClass && m.key === 'constructor' && !m.isStatic)) {
+                if (seen[':ctor']) {
+                    return;
                 }
-            });
-
-            if (docInfo.returns !== 'any') {
-                docLines.push('*@returns* `' + docInfo.returns + '`');
+                seen[':ctor'] = true;
+                d.name = 'initialize';
+                d.signature = 'constructor(' + d.typedParams + ')';
+                d.isConstructor = true;
+                methods.unshift(d);
+                return;
             }
-
-            if (methodName === 'initialize') {
-                methods.unshift({
-                    name: 'initialize',
-                    signature: 'constructor(' + typedParams + ')',
-                    documentation: docLines.join('\n\n'),
-                    isConstructor: true,
-                });
-                continue;
+            var key = (m.isStatic ? 'static:' : '') + m.key;
+            if (seen[key]) {
+                return;
             }
-
-            var paramDocs = {};
-            rawParams.forEach(function (p) {
-                var info = docInfo.params[p];
-                if (info && info.description) {
-                    paramDocs[p] = info.description;
-                }
-            });
-
-            methods.push({
-                name: methodName,
-                signature: methodName + '(' + typedParams + '): ' + docInfo.returns,
-                documentation: docLines.join('\n\n'),
-                params: rawParams,
-                paramDocs: paramDocs,
-                isConstructor: false,
-            });
-        }
+            seen[key] = true;
+            d.isStatic = m.isStatic;
+            methods.push(d);
+        });
         return methods;
     }
 
@@ -844,6 +1265,32 @@
         }
 
         return _siPendingCache[className];
+    }
+
+    /**
+     * Drops a Script Include's cached members and DTS, then refetches them if it
+     * was already in use, so other panes see a saved change.
+     *
+     * @param {string} className - Script Include name.
+     */
+    function refreshScriptInclude(className) {
+        if (!className) {
+            return;
+        }
+        var wasLoaded = !!(_siMethodCache[className] || _siDtsRegistered[className]);
+        delete _siMethodCache[className];
+        delete _siInterfaceCache[className];
+        delete _siConstantCache[className];
+        delete _siPropertyCache[className];
+        delete _siDtsRegistered[className];
+        if (window.monaco && monaco.languages && monaco.languages.typescript) {
+            ['javascriptDefaults', 'typescriptDefaults'].forEach(function (target) {
+                monaco.languages.typescript[target].addExtraLib('', 'ts:snlib-si-plus-' + className + '.d.ts');
+            });
+        }
+        if (wasLoaded) {
+            fetchSiMethods(className);
+        }
     }
 
     /**
@@ -1025,18 +1472,47 @@
 
     /**
      * Fetches up to TABLE_PREFIX_LIMIT table names from sys_db_object whose name starts
-     * with the given prefix, excluding internal tables (nameNOT LIKE00). Always fires a
-     * fresh XHR so results stay accurate as the user types. An empty prefix returns the
-     * first TABLE_PREFIX_LIMIT matching tables alphabetically.
+     * with the given prefix, excluding rotation shards such as syslog0001.
+     * Requests are debounced and each prefix's result is reused for TABLE_PREFIX_TTL_MS.
      *
      * @param {string} prefix - The typed prefix to match against table names.
      * @returns {Promise<Array<{name: string, label: string}>>}
      */
     var TABLE_PREFIX_LIMIT = 500;
+    var TABLE_PREFIX_TTL_MS = 60000;
+    var _tablePrefixCache = {};
+    var _tableDebounceTimer = null;
+    var _tableDebouncePending = [];
     function fetchTablesMatching(prefix) {
+        var cached = _tablePrefixCache[prefix];
+        if (cached && Date.now() - cached.at < TABLE_PREFIX_TTL_MS) {
+            return cached.promise;
+        }
+        return new Promise(function (resolve) {
+            _tableDebouncePending.push({ prefix: prefix, resolve: resolve });
+            clearTimeout(_tableDebounceTimer);
+            _tableDebounceTimer = setTimeout(function () {
+                var pending = _tableDebouncePending.splice(0);
+                var latest = pending[pending.length - 1].prefix;
+                var promise = _fetchTablesMatchingNow(latest);
+                _tablePrefixCache[latest] = { at: Date.now(), promise: promise };
+                promise.then(function (tables) {
+                    pending.forEach(function (p) {
+                        p.resolve(
+                            tables.filter(function (t) {
+                                return t.name.indexOf(p.prefix) === 0;
+                            })
+                        );
+                    });
+                });
+            }, 150);
+        });
+    }
+
+    function _fetchTablesMatchingNow(prefix) {
         return new Promise(function (resolve) {
             var xhr = new XMLHttpRequest();
-            var query = 'nameNOT LIKE00' + (prefix ? '^nameSTARTSWITH' + prefix : '') + '^ORDERBYname';
+            var query = (prefix ? 'nameSTARTSWITH' + prefix + '^' : '') + 'ORDERBYname';
             var url =
                 '/api/now/table/sys_db_object' +
                 '?sysparm_query=' +
@@ -1063,7 +1539,7 @@
                                         };
                                     })
                                     .filter(function (t) {
-                                        return t.name;
+                                        return t.name && !/[a-z]\d{4}$/.test(t.name);
                                     })
                             );
                             return;
@@ -1080,48 +1556,48 @@
     }
 
     /**
-     * Scans a Monaco model for a GlideRecord or GlideRecordSecure assignment to
-     * the given variable name and returns the table name string, or null if not found.
-     *
-     * @param {Object} model - Monaco editor model.
-     * @param {string} varName - Variable name to look up.
-     * @returns {string|null}
-     */
-    function getGlideRecordTable(model, varName) {
-        var re = new RegExp(
-            '(?:var|let|const)\\s+' + varName + '\\s*=\\s*new\\s+GlideRecord(?:Secure)?\\s*\\(\\s*[\'"]([^\'"]+)[\'"]',
-            'g'
-        );
-        var m = re.exec(model.getValue());
-        return m ? m[1] : null;
-    }
-
-    /**
-     * Scans backward from upToLine (up to 150 lines) for an assignment of the form:
-     *   [var|let|const] varName = new GlideRecord[Secure|Aggregate]('table')
-     * Used by string-argument providers that need the table at the current cursor
-     * line without scanning the entire file.
+     * Returns the table of the nearest GlideRecord, GlideRecordSecure or
+     * GlideAggregate assigned to varName at or above the given position.
      *
      * @param {Object} model    - Monaco editor model.
      * @param {string} varName  - Variable name to look up.
-     * @param {number} upToLine - Current line number (1-based); search starts here.
+     * @param {Object} position - Monaco position {lineNumber, column}.
+     * @param {number} [depth] - Internal recursion depth.
      * @returns {string|null}
      */
-    function _findGrTable(model, varName, upToLine) {
-        var searchFrom = Math.max(1, upToLine - 1);
-        var searchTo = Math.max(1, searchFrom - 150);
+    function _findGrTable(model, varName, position, depth) {
+        var text = model.getValueInRange({
+            startLineNumber: 1,
+            startColumn: 1,
+            endLineNumber: position.lineNumber,
+            endColumn: model.getLineMaxColumn(position.lineNumber),
+        });
         var pat = new RegExp(
-            '(?:var\\s+|let\\s+|const\\s+)?' +
+            '(?:^|[^\\w$.])' +
                 varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
-                '\\s*=\\s*new\\s+(?:GlideRecord(?:Secure)?|GlideAggregate)\\s*\\(\\s*[\'"]([^\'"]+)[\'"]'
+                '\\s*=\\s*new\\s+(?:global\\.)?(?:GlideRecordSecure|GlideRecord|GlideAggregate)\\s*\\(\\s*[\'"]([^\'"]+)[\'"]',
+            'g'
         );
-        for (var i = searchFrom; i >= searchTo; i--) {
-            var m = model.getLineContent(i).match(pat);
-            if (m) {
-                return m[1];
-            }
+        var table = null;
+        var m;
+        while ((m = pat.exec(text)) !== null) {
+            table = m[1];
         }
-        return null;
+        if (table || depth) {
+            return table;
+        }
+        /* QueryCondition from gr.addQuery(...) — resolve to its GlideRecord. */
+        var qcPat = new RegExp(
+            '(?:^|[^\\w$.])' +
+                varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
+                '\\s*=\\s*([\\w$]+)\\s*\\.\\s*(?:addQuery|addOrCondition)\\s*\\(',
+            'g'
+        );
+        var owner = null;
+        while ((m = qcPat.exec(text)) !== null) {
+            owner = m[1];
+        }
+        return owner ? _findGrTable(model, owner, position, 1) : null;
     }
 
     /**
@@ -1154,6 +1630,11 @@
             });
         }, Promise.resolve(baseTable));
     }
+
+    /* GlideRecord/GlideAggregate calls whose first argument is a field name; shared by completion and hover. */
+    var _GR_FIELD_CALL_RE =
+        /(\w+)\.(getValue|getDisplayValue|setValue|getElement|isChanged|isValidField|canRead|canWrite|addNullQuery|addNotNullQuery|orderBy|orderByDesc|addQuery|addOrCondition|groupBy|addExtraField)\s*\($/;
+    var _GR_AGGREGATE_FIELD_RE = /(\w+)\.(?:addAggregate|getAggregate|addHaving)\s*\(\s*['"][^'"]*['"]\s*,\s*$/;
 
     /**
      * Returns {varName, fieldName} if the cursor is over a field-name string literal
@@ -1199,9 +1680,7 @@
         }
 
         var before = line.substring(0, startIdx).replace(/\s+$/, '');
-        var m = before.match(
-            /(\w+)\.(getValue|setValue|getDisplayValue|getElement|isChanged|addQuery|addNullQuery|addNotNullQuery|orderBy|orderByDesc|addExtraField)\s*\($/
-        );
+        var m = before.match(_GR_FIELD_CALL_RE) || before.match(_GR_AGGREGATE_FIELD_RE);
         if (!m) {
             return null;
         }
@@ -1265,20 +1744,10 @@
         var before = line.substring(0, startIdx).replace(/\s+$/, '');
         var varName = null;
 
-        // Primary: field name is the FIRST argument.
-        var m = before.match(
-            /(\w+)\.(getValue|getDisplayValue|setValue|getElement|isValidField|canRead|canWrite|addNullQuery|addNotNullQuery|orderBy|orderByDesc|addQuery|groupBy|addExtraField)\s*\($/
-        );
+        // Field name is the first argument, or the second for addAggregate(type, field).
+        var m = before.match(_GR_FIELD_CALL_RE) || before.match(_GR_AGGREGATE_FIELD_RE);
         if (m) {
             varName = m[1];
-        }
-
-        if (!varName) {
-            // Special case: addAggregate(type, fieldName) — field is SECOND argument.
-            var m2 = before.match(/(\w+)\.addAggregate\s*\(\s*['"][^'"]*['"]\s*,\s*$/);
-            if (m2) {
-                varName = m2[1];
-            }
         }
 
         if (!varName) {
@@ -1419,8 +1888,8 @@
         if (!window.monaco || !monaco.languages || !monaco.languages.typescript) {
             return;
         }
-        /* A Script Include may expose only properties, which is still worth a DTS. */
-        if ((!methods || !methods.length) && (!properties || !properties.length)) {
+        /* A Script Include may expose only properties or constants, which is still worth a DTS. */
+        if ((!methods || !methods.length) && (!properties || !properties.length) && (!constants || !constants.length)) {
             return;
         }
 
@@ -1483,7 +1952,7 @@
         if (constants && constants.length) {
             constants.forEach(function (c) {
                 if (c.documentation) {
-                    lines.push('    /** ' + c.documentation + ' */');
+                    lines.push('    /** ' + _escapeDocComment(c.documentation) + ' */');
                 }
                 lines.push('    static readonly ' + c.name + ': ' + c.tsType + ';');
             });
@@ -1491,18 +1960,22 @@
         if (properties && properties.length) {
             properties.forEach(function (p) {
                 if (p.documentation) {
-                    lines.push('    /** ' + p.documentation + ' */');
+                    lines.push('    /** ' + _escapeDocComment(p.documentation) + ' */');
                 }
                 lines.push('    ' + p.name + ': ' + p.tsType + ';');
             });
         }
         (methods || []).forEach(function (m) {
-            lines.push('    ' + m.signature + ';');
+            if (m.jsDoc) {
+                lines.push('    ' + m.jsDoc.replace(/\n/g, '\n    '));
+            }
+            lines.push('    ' + (m.isStatic ? 'static ' : '') + m.signature + ';');
         });
         lines.push('}');
         var dts = lines.join('\n');
         monaco.languages.typescript.typescriptDefaults.addExtraLib(dts, ourUri);
         monaco.languages.typescript.javascriptDefaults.addExtraLib(dts, ourUri);
+        _siDtsRegistered[className] = true;
     }
 
     /* TABLE_PARAM / FIELD_PARAM — param name patterns for SI string-arg completions. */
@@ -1691,7 +2164,7 @@
      */
     function _prewarmFieldCompletions(model) {
         var text = model.getValue();
-        var pat = /new\s+(?:GlideRecord(?:Secure)?|GlideAggregate)\s*\(\s*['"](\S+?)['"]/g;
+        var pat = /new\s+(?:global\.)?(?:GlideRecord(?:Secure)?|GlideAggregate)\s*\(\s*['"]([\w$]+)['"]/g;
         var m;
         while ((m = pat.exec(text)) !== null) {
             if (!(_tableFieldCache[m[1]] || _tablePendingCache[m[1]])) {
@@ -2110,6 +2583,9 @@
         }
         _clientDiLastParamsKey = key;
 
+        Object.keys(_providerDiTypes).forEach(function (name) {
+            di.types[name] = _providerDiTypes[name];
+        });
         monaco.languages.typescript.javascriptDefaults.addExtraLib(di.buildApiDts(params), _CLIENT_API_LIB_URI);
     }
 
@@ -2560,6 +3036,11 @@
         WeakMap: true,
         WeakRef: true,
         WeakSet: true,
+        Atomics: true,
+        Intl: true,
+        JSON: true,
+        Math: true,
+        Reflect: true,
         Class: true /* SN PrototypeJS helper — not a user Script Include */,
     };
 
@@ -2684,188 +3165,95 @@
     var _providerNameChecks = Object.create(null);
     var _providerNameMap = {}; // name -> sys_id ('' = confirmed not a service/factory provider)
     var _providerMethodCache = {};
+    /* { name: typeName } — provider parameter types, merged into the client DI map whenever it is (re)loaded. */
+    var _providerDiTypes = {};
     var _providerPropertyCache = {};
 
-    /** Parses \`this.name = function (...) {}\` methods from a 'service' provider's script. */
+    /** Parses top-level \`this.name = function (...) {}\` and arrow methods from a 'service' provider's body. */
     function parseServiceMethods(script) {
+        var top = _blankNestedBraces(script);
         var methods = [];
-        var re =
-            /(\/\*\*(?:(?!\*\/)[\s\S])*\*\/|\/\*(?:(?!\*\/)[\s\S])*\*\/)?\s*\bthis\.(\w+)\s*=\s*function\s*\(([^)]*)\)/g;
+        var re = /(\/\*\*(?:(?!\*\/)[\s\S])*\*\/|\/\*(?:(?!\*\/)[\s\S])*\*\/)?\s*\bthis\.([\w$]+)\s*=(?!=)\s*/g;
         var m;
-        while ((m = re.exec(script)) !== null) {
-            var methodName = m[2];
-            var comment = m[1] || null;
-            var docInfo = parseSiDocComment(comment);
-            var rawParams = m[3]
-                .split(',')
-                .map(function (p) {
-                    return p.trim();
-                })
-                .filter(Boolean);
-            var typedParams = rawParams
-                .map(function (p) {
-                    var info = docInfo.params[p];
-                    return info ? p + (info.optional ? '?' : '') + ': ' + info.type : p + ': any';
-                })
-                .join(', ');
-
-            var docLines = [];
-            if (comment) {
-                var descText = comment
-                    .replace(/^\/\*+\s*/, '')
-                    .replace(/\s*\*+\/$/, '')
-                    .replace(/^\s*\*\s?/gm, '');
-                var descMatch = descText.match(/^([\s\S]*?)(?=\s*@|\s*$)/);
-                if (descMatch && descMatch[1].trim()) {
-                    docLines.push(descMatch[1].trim());
-                }
+        while ((m = re.exec(top)) !== null) {
+            var params = _functionValueParams(top.slice(m.index + m[0].length));
+            if (params !== null) {
+                methods.push(_buildMethodDescriptor(m[2], params, m[1] || null));
             }
-            rawParams.forEach(function (p) {
-                var info = docInfo.params[p];
-                if (info && info.description) {
-                    docLines.push('*@param* `' + p + '` \u2014 ' + info.description);
-                }
-            });
-            if (docInfo.returns !== 'any') {
-                docLines.push('*@returns* `' + docInfo.returns + '`');
-            }
-
-            methods.push({
-                name: methodName,
-                signature: methodName + '(' + typedParams + '): ' + docInfo.returns,
-                documentation: docLines.join('\n\n'),
-            });
         }
         return methods;
-    }
-
-    /** Finds the '}' matching the '{' at openIndex, skipping string/comment contents. */
-    function _findMatchingBraceSkippingStrings(script, openIndex) {
-        var depth = 0;
-        var inStr = null;
-        var n = script.length;
-        for (var j = openIndex; j < n; j++) {
-            var ch = script.charAt(j);
-            if (inStr) {
-                if (ch === '\\') {
-                    j++;
-                } else if (ch === inStr) {
-                    inStr = null;
-                }
-                continue;
-            }
-            if (ch === '"' || ch === "'") {
-                inStr = ch;
-                continue;
-            }
-            if (ch === '/' && script.charAt(j + 1) === '*') {
-                var blockEnd = script.indexOf('*/', j + 2);
-                j = blockEnd === -1 ? n : blockEnd + 1;
-                continue;
-            }
-            if (ch === '/' && script.charAt(j + 1) === '/') {
-                var lineEnd = script.indexOf('\n', j);
-                j = lineEnd === -1 ? n : lineEnd;
-                continue;
-            }
-            if (ch === '{') {
-                depth++;
-            } else if (ch === '}') {
-                depth--;
-                if (depth === 0) {
-                    return j;
-                }
-            }
-        }
-        return -1;
     }
 
     /**
      * Unwraps a provider DDF's outer \`function () { ... }\` wrapper, exposing its body
      * (helper declarations + \`return {...}\`) as top-level content for member scanning.
-     * Without this, _stripFunctionBodies collapses the whole script from the first
-     * 'function' keyword it finds — which for a provider script is this outer wrapper.
      */
     function _unwrapProviderFunctionBody(script) {
-        var idx = script.indexOf('function');
+        var idx = _findFunctionKeyword(script);
         if (idx === -1) {
             return script;
         }
-        var open = script.indexOf('{', idx);
+        var paren = script.indexOf('(', idx);
+        if (paren === -1) {
+            return script;
+        }
+        var open = script.indexOf('{', _skipBalanced(script, paren));
         if (open === -1) {
             return script;
         }
-        var close = _findMatchingBraceSkippingStrings(script, open);
-        if (close === -1) {
-            return script;
-        }
-        return script.slice(open + 1, close);
-    }
-
-    /**
-     * Resolves \`key: identifierName\` shorthand exports (a very common revealing-module
-     * pattern: declare a named function, then return \`{ key: identifierName }\`) to a real
-     * method signature from that function's own declaration, instead of an untyped property.
-     */
-    function _resolveBareRefMethods(body, decls) {
-        var methods = [];
-        var handledKeys = {};
-        var re = /([A-Za-z_$][\w$]*)\s*:\s*([A-Za-z_$][\w$]*)\s*(?=[,\}])/g;
-        var m;
-        while ((m = re.exec(body)) !== null) {
-            var decl = decls[m[2]];
-            if (!decl) {
-                continue;
-            }
-            var docInfo = parseSiDocComment(decl.comment);
-            var rawParams = decl.params
-                .split(',')
-                .map(function (p) {
-                    return p.trim();
-                })
-                .filter(Boolean);
-            var typedParams = rawParams
-                .map(function (p) {
-                    var info = docInfo.params[p];
-                    return info ? p + (info.optional ? '?' : '') + ': ' + info.type : p + ': any';
-                })
-                .join(', ');
-            methods.push({
-                name: m[1],
-                signature: m[1] + '(' + typedParams + '): ' + docInfo.returns,
-                documentation: decl.comment
-                    ? decl.comment
-                          .replace(/^\/\*+\s*/, '')
-                          .replace(/\s*\*+\/$/, '')
-                          .replace(/^\s*\*\s?/gm, '')
-                          .trim()
-                    : '',
-            });
-            handledKeys[m[1]] = true;
-        }
-        return { methods: methods, handledKeys: handledKeys };
+        var close = _skipBalanced(script, open);
+        return script.slice(open + 1, close - 1);
     }
 
     /**
      * Parses a service/factory provider's script for its public members. Runs every
      * strategy unconditionally (inline \`key: function(){}\`, \`this.key = ...\`, and
-     * shorthand \`key: namedFn\` exports) rather than branching on the provider's declared
+     * \`key: namedFn\` or shorthand \`{ namedFn }\` exports resolved to the named
+     * function's own signature) rather than branching on the provider's declared
      * type, since developer code frequently doesn't match the type dropdown's convention.
      */
     function parseProviderMembers(script) {
         var body = _unwrapProviderFunctionBody(script);
+        var top = _blankNestedBraces(body);
 
         var decls = {};
-        var declRe = /(\/\*\*(?:(?!\*\/)[\s\S])*\*\/\s*)?function\s+(\w+)\s*\(([^)]*)\)/g;
+        var declRe =
+            /(\/\*\*(?:(?!\*\/)[\s\S])*\*\/\s*)?(?:\bfunction\s+([\w$]+)\s*(?=\()|\b(?:var|let|const)\s+([\w$]+)\s*=\s*(?=async\b|function\b|\(|[\w$]+\s*=>))/g;
         var dm;
-        while ((dm = declRe.exec(body)) !== null) {
-            decls[dm[2]] = { comment: dm[1] || null, params: dm[3] };
+        while ((dm = declRe.exec(top)) !== null) {
+            var rest = top.slice(dm.index + dm[0].length);
+            var params = dm[2] ? rest.slice(1, _skipBalanced(rest, 0) - 1) : _functionValueParams(rest);
+            if (params !== null) {
+                decls[dm[2] || dm[3]] = { comment: dm[1] || null, params: params };
+            }
         }
 
-        var bareRefs = _resolveBareRefMethods(body, decls);
-        var methods = parseSiMethods(body).concat(parseServiceMethods(body)).concat(bareRefs.methods);
+        var methods = [];
+        var handled = {};
+        function addMethod(name, params, comment) {
+            if (!handled[name]) {
+                handled[name] = true;
+                methods.push(_buildMethodDescriptor(name, params, comment));
+            }
+        }
+        _parseTopLevelMembers(body).forEach(function (m) {
+            if (m.kind === 'method') {
+                addMethod(m.key, m.params, m.comment);
+                return;
+            }
+            var ref = m.value && /^[A-Za-z_$][\w$]*$/.test(m.value) ? decls[m.value] : null;
+            if (ref) {
+                addMethod(m.key, ref.params, m.comment || ref.comment);
+            }
+        });
+        parseServiceMethods(body).forEach(function (m) {
+            if (!handled[m.name]) {
+                handled[m.name] = true;
+                methods.push(m);
+            }
+        });
         var properties = parseSiProperties(body, null).filter(function (p) {
-            return !bareRefs.handledKeys[p.name];
+            return !handled[p.name];
         });
         return { methods: methods, properties: properties };
     }
@@ -2882,13 +3270,13 @@
         var lines = ['declare class ' + providerName + ' {'];
         (properties || []).forEach(function (p) {
             if (p.documentation) {
-                lines.push('    /** ' + p.documentation + ' */');
+                lines.push('    /** ' + _escapeDocComment(p.documentation) + ' */');
             }
             lines.push('    ' + p.name + ': ' + (p.tsType || 'any') + ';');
         });
         (methods || []).forEach(function (m) {
-            if (m.documentation) {
-                lines.push('    /** ' + m.documentation + ' */');
+            if (m.jsDoc) {
+                lines.push('    ' + m.jsDoc.replace(/\n/g, '\n    '));
             }
             lines.push('    ' + m.signature + ';');
         });
@@ -2930,9 +3318,7 @@
 
                 // Type the matching api.controller parameter as this provider, then
                 // force the ambient 'declare var api' signature to pick it up.
-                if (window.MONACO_LANGUAGE_CLIENT_DI) {
-                    window.MONACO_LANGUAGE_CLIENT_DI.types[providerName] = providerName;
-                }
+                _providerDiTypes[providerName] = providerName;
                 _clientDiLastParamsKey = null;
                 if (window.monaco && monaco.editor) {
                     monaco.editor.getModels().forEach(function (m) {
@@ -2944,6 +3330,27 @@
             } catch (e) {}
         };
         xhr.send();
+    }
+
+    /**
+     * Drops a provider's cached members and refetches them, so other panes see a saved change.
+     *
+     * @param {string} providerName - Provider name.
+     * @param {string} sysId - Provider sys_id.
+     */
+    function refreshProvider(providerName, sysId) {
+        if (!providerName || !sysId) {
+            return;
+        }
+        delete _providerMethodCache[providerName];
+        delete _providerPropertyCache[providerName];
+        _providerNameMap[providerName] = sysId;
+        if (window.monaco && monaco.languages && monaco.languages.typescript) {
+            ['javascriptDefaults', 'typescriptDefaults'].forEach(function (target) {
+                monaco.languages.typescript[target].addExtraLib('', 'ts:snlib-provider-plus-' + providerName + '.d.ts');
+            });
+        }
+        fetchProviderMembers(providerName, sysId);
     }
 
     /** Checks candidate names against sp_angular_provider in batches of 50; confirmed service/factory providers trigger a fetch. */
@@ -3527,13 +3934,13 @@
         }
 
         var isEmptyContext = !portalSysId || !portalUrlSuffix || !themeSysId;
-        if (isEmptyContext && _htmlClassIndexHasRealContext) {
+        var clearIfUnset = !!(context && context.clearIfUnset);
+        if (isEmptyContext && _htmlClassIndexHasRealContext && !clearIfUnset) {
             // A real portal/theme has already been supplied by some caller (or is still
             // resolving) — ignore this no-context call instead of wiping/cancelling that
             // work. Callers race an early call before user preferences finish loading
-            // against a retrigger once they do; preferences never revert to unset once
-            // loaded, so a later no-context call here is a caller that simply doesn't
-            // have them, not a legitimate "preference cleared" signal.
+            // against a retrigger once they do, so a later no-context call is a caller that
+            // simply doesn't have them. Saving preferences passes clearIfUnset instead.
             return _htmlClassIndexPromise || Promise.resolve();
         }
         _htmlClassIndexContextKey = contextKey;
@@ -3627,7 +4034,7 @@
     function _buildSiInstanceSuggestions(methods, className, targetRange) {
         var methodSugs = (methods || [])
             .filter(function (m) {
-                return !m.isConstructor && m.name;
+                return !m.isConstructor && !m.isStatic && m.name;
             })
             .map(function (m) {
                 return {
@@ -3666,16 +4073,32 @@
      */
     function _buildSiConstantSuggestions(className, targetRange) {
         var consts = _siConstantCache[className] || [];
-        return consts.map(function (c) {
-            return {
-                label: String(c.name),
-                kind: monaco.languages.CompletionItemKind.Constant,
-                detail: className + '.' + c.name + ': ' + c.tsType,
-                documentation: c.documentation ? { value: c.documentation, isTrusted: true } : undefined,
-                insertText: String(c.name),
-                range: targetRange,
-            };
+        var statics = (_siMethodCache[className] || []).filter(function (m) {
+            return m.isStatic;
         });
+        return consts
+            .map(function (c) {
+                return {
+                    label: String(c.name),
+                    kind: monaco.languages.CompletionItemKind.Constant,
+                    detail: className + '.' + c.name + ': ' + c.tsType,
+                    documentation: c.documentation ? { value: c.documentation, isTrusted: true } : undefined,
+                    insertText: String(c.name),
+                    range: targetRange,
+                };
+            })
+            .concat(
+                statics.map(function (m) {
+                    return {
+                        label: String(m.name),
+                        kind: monaco.languages.CompletionItemKind.Method,
+                        detail: 'static ' + m.signature,
+                        documentation: m.documentation ? { value: m.documentation, isTrusted: true } : undefined,
+                        insertText: String(m.name),
+                        range: targetRange,
+                    };
+                })
+            );
     }
 
     /** Dot-completion provider for TypeScript/JavaScript: this. (live-parsed) and instance. (via REST fetch of the assigned SI). */
@@ -3796,7 +4219,7 @@
                 if (newChainMatch) {
                     var siClassName = newChainMatch[1];
                     /* Once the DTS is registered, TypeScript is the sole provider — avoids duplicate suggestions. */
-                    if (_siMethodCache[siClassName]) {
+                    if (_siDtsRegistered[siClassName]) {
                         return null;
                     }
                     return fetchSiMethods(siClassName).then(function (methods) {
@@ -3811,7 +4234,7 @@
                 if (multiSegMatch) {
                     var chainRoot = multiSegMatch[1];
                     var chainSegments = multiSegMatch[2].slice(1).split('.');
-                    var chainBaseTable = getGlideRecordTable(model, chainRoot);
+                    var chainBaseTable = _findGrTable(model, chainRoot, position);
                     if (chainBaseTable) {
                         return _resolveFieldChain(chainBaseTable, chainSegments).then(function (resolvedTable) {
                             if (!resolvedTable) return { suggestions: [] };
@@ -3842,7 +4265,7 @@
                 var varName = dotMatch[1];
 
                 // GlideRecord/GlideRecordSecure — show table field names
-                var grTable = getGlideRecordTable(model, varName);
+                var grTable = _findGrTable(model, varName, position);
                 if (grTable) {
                     return fetchTableFields(grTable).then(function (fields) {
                         return {
@@ -3888,10 +4311,15 @@
                 var instanceAssignRe = new RegExp(
                     '(?:var|let|const)\\s+' + varName + '\\s*=\\s*new\\s+[A-Z][A-Za-z0-9_]*\\s*\\('
                 );
-                if (/^[A-Z]/.test(varName) && _siNameMap[varName] !== '' && !instanceAssignRe.test(content)) {
+                if (
+                    /^[A-Z]/.test(varName) &&
+                    !_SI_SCAN_BUILTINS[varName] &&
+                    _siNameMap[varName] !== '' &&
+                    !instanceAssignRe.test(content)
+                ) {
                     if (_siNameMap[varName]) {
                         /* Already confirmed as an SI — DTS is registered, defer to TypeScript */
-                        if (_siMethodCache[varName]) {
+                        if (_siDtsRegistered[varName]) {
                             return null;
                         }
                         return fetchSiMethods(varName).then(function () {
@@ -3930,7 +4358,7 @@
                 var className = assignMatch[1];
 
                 /* DTS registered — TypeScript is the sole provider. */
-                if (_siMethodCache[className]) {
+                if (_siDtsRegistered[className]) {
                     return null;
                 }
                 return fetchSiMethods(className).then(function (methods) {
@@ -4131,11 +4559,22 @@
 
                 var varName = varMatch ? varMatch[1] : null;
 
-                /* Builds the hover result from a method descriptor array. */
-                function buildResult(methods) {
+                /* Builds the hover result from method descriptors, falling back to property descriptors. */
+                function buildResult(methods, properties) {
                     var found = methods.find(function (m) {
                         return m.name === word.word;
                     });
+                    if (!found && properties) {
+                        var prop = properties.find(function (p) {
+                            return p.name === word.word;
+                        });
+                        if (prop) {
+                            found = {
+                                signature: '(property) ' + prop.name + ': ' + prop.tsType,
+                                documentation: prop.documentation,
+                            };
+                        }
+                    }
                     if (!found) {
                         return null;
                     }
@@ -4161,8 +4600,14 @@
                     };
                 }
 
+                /* Once the DTS is registered, TypeScript's quick info covers SI members. */
                 if (newDotMatch) {
-                    return fetchSiMethods(newDotMatch[1]).then(buildResult);
+                    if (_siDtsRegistered[newDotMatch[1]]) {
+                        return null;
+                    }
+                    return fetchSiMethods(newDotMatch[1]).then(function (methods) {
+                        return buildResult(methods, _siPropertyCache[newDotMatch[1]]);
+                    });
                 }
 
                 if (varName === 'this') {
@@ -4170,7 +4615,7 @@
                     if (!/\bClass\.create\s*\(\s*\)/.test(content)) {
                         return null;
                     }
-                    return buildResult(parseSiMethods(content));
+                    return buildResult(parseSiMethods(content), parseSiProperties(content));
                 }
 
                 /* this.prop.method — TS types 'this' as any here, so native hover shows nothing useful. */
@@ -4178,12 +4623,14 @@
                 if (thisPropHover) {
                     var thisPropClass = _getThisPropClass(model.getValue(), thisPropHover[1]);
                     if (thisPropClass) {
-                        return fetchSiMethods(thisPropClass).then(buildResult);
+                        return fetchSiMethods(thisPropClass).then(function (methods) {
+                            return buildResult(methods, _siPropertyCache[thisPropClass]);
+                        });
                     }
                 }
 
-                // GlideRecord/GlideRecordSecure — show field type on hover
-                var grTable = getGlideRecordTable(model, varName);
+                // GlideRecord/GlideRecordSecure/GlideAggregate — show field type on hover
+                var grTable = _findGrTable(model, varName, position);
                 if (grTable) {
                     return fetchTableFields(grTable).then(function (fields) {
                         var found = fields.find(function (f) {
@@ -4205,7 +4652,8 @@
                                         (found.mandatory ? ' *(required)*' : '') +
                                         '\n\nType: `' +
                                         found.type +
-                                        '`',
+                                        '`' +
+                                        (found.reference ? '\n\nReferences: `' + found.reference + '`' : ''),
                                     isTrusted: true,
                                 },
                             ],
@@ -4223,9 +4671,14 @@
                 var hoverInstanceRe = new RegExp(
                     '(?:var|let|const)\\s+' + varName + '\\s*=\\s*new\\s+[A-Z][A-Za-z0-9_]*\\s*\\('
                 );
-                if (/^[A-Z]/.test(varName) && _siNameMap[varName] !== '' && !hoverInstanceRe.test(model.getValue())) {
+                if (
+                    /^[A-Z]/.test(varName) &&
+                    !_SI_SCAN_BUILTINS[varName] &&
+                    _siNameMap[varName] !== '' &&
+                    !hoverInstanceRe.test(model.getValue())
+                ) {
                     if (_siNameMap[varName]) {
-                        if (_siMethodCache[varName]) {
+                        if (_siDtsRegistered[varName]) {
                             return null;
                         }
                         return fetchSiMethods(varName).then(function () {
@@ -4253,15 +4706,57 @@
                 if (!assignMatch || _isChainedConstructor(model.getValue(), assignMatch)) {
                     return null;
                 }
+                if (_siDtsRegistered[assignMatch[1]]) {
+                    return null;
+                }
 
                 return fetchSiMethods(assignMatch[1]).then(function (methods) {
-                    return buildResult(methods, assignMatch[1]);
+                    return buildResult(methods, _siPropertyCache[assignMatch[1]]);
                 });
             },
         };
 
         monaco.languages.registerHoverProvider('typescript', provider);
         monaco.languages.registerHoverProvider('javascript', provider);
+    }
+
+    /**
+     * Finds the innermost unclosed call around the cursor, looking back up to
+     * 50 lines and ignoring brackets and commas in strings, comments and nested arguments.
+     *
+     * @param {Object} model    - Monaco editor model.
+     * @param {Object} position - Monaco position {lineNumber, column}.
+     * @returns {{callee: string, activeParam: number}|null}
+     */
+    function _getOpenCallContext(model, position) {
+        var text = model.getValueInRange({
+            startLineNumber: Math.max(1, position.lineNumber - 50),
+            startColumn: 1,
+            endLineNumber: position.lineNumber,
+            endColumn: position.column,
+        });
+        var stack = [];
+        for (var i = 0; i < text.length; i++) {
+            var skip = _skipStringOrComment(text, i);
+            if (skip !== i) {
+                i = skip - 1;
+                continue;
+            }
+            var ch = text.charAt(i);
+            if (ch === '(' || ch === '[' || ch === '{') {
+                stack.push({ ch: ch, idx: i, commas: 0 });
+            } else if (ch === ')' || ch === ']' || ch === '}') {
+                stack.pop();
+            } else if (ch === ',' && stack.length) {
+                stack[stack.length - 1].commas++;
+            }
+        }
+        for (var k = stack.length - 1; k >= 0; k--) {
+            if (stack[k].ch === '(') {
+                return { callee: text.slice(0, stack[k].idx).replace(/\s+$/, ''), activeParam: stack[k].commas };
+            }
+        }
+        return null;
     }
 
     /** Shows parameter hints for this.methodName( and instance.methodName( (assigned via new). */
@@ -4275,17 +4770,18 @@
             signatureHelpTriggerCharacters: ['('],
             signatureHelpRetriggerCharacters: [','],
             provideSignatureHelp: function (model, position) {
-                var lineText = model.getLineContent(position.lineNumber);
-                var beforeCursor = lineText.substring(0, position.column - 1);
-                var callMatch = beforeCursor.match(/(\w+)\.(\w+)\s*\(([^)]*)$/);
-                var newCallMatch = beforeCursor.match(/\bnew\s+([A-Z][A-Za-z0-9_]*)\s*\([^)]*\)\.(\w+)\s*\(([^)]*)$/);
+                var call = _getOpenCallContext(model, position);
+                if (!call) {
+                    return null;
+                }
+                var callMatch = call.callee.match(/(\w+)\.(\w+)$/);
+                var newCallMatch = call.callee.match(/\bnew\s+([A-Z][A-Za-z0-9_]*)\s*\([^)]*\)\s*\.\s*(\w+)$/);
                 if (!callMatch && !newCallMatch) {
                     return null;
                 }
 
-                var varName = callMatch ? callMatch[1] : null;
-                var methodName = callMatch ? callMatch[2] : newCallMatch[2];
-                var argsTyped = callMatch ? callMatch[3] : newCallMatch[3];
+                var varName = newCallMatch ? null : callMatch[1];
+                var methodName = newCallMatch ? newCallMatch[2] : callMatch[2];
 
                 /* Builds the signature help result from a method descriptor array. */
                 function buildResult(methods) {
@@ -4295,7 +4791,7 @@
                     if (!found) {
                         return null;
                     }
-                    var activeParam = argsTyped.split(',').length - 1;
+                    var activeParam = call.activeParam;
                     var parameters = (found.params || []).map(function (p) {
                         var desc = found.paramDocs && found.paramDocs[p];
                         return desc
@@ -4341,7 +4837,7 @@
 
                 /* this.prop.method( — instance property assigned via
                  * this.prop = new SI(). */
-                var thisPropCall = beforeCursor.match(/\bthis\.(\w+)\.(\w+)\s*\(([^)]*)$/);
+                var thisPropCall = call.callee.match(/\bthis\.(\w+)\.(\w+)$/);
                 if (thisPropCall) {
                     var thisPropClass = _getThisPropClass(model.getValue(), thisPropCall[1]);
                     if (thisPropClass) {
@@ -4358,9 +4854,7 @@
                     return null;
                 }
 
-                return fetchSiMethods(assignMatch[1]).then(function (methods) {
-                    return buildResult(methods, assignMatch[1]);
-                });
+                return fetchSiMethods(assignMatch[1]).then(buildResult);
             },
         };
 
@@ -4526,7 +5020,7 @@
                 if (!ctx) {
                     return { suggestions: [] };
                 }
-                var baseTable = _findGrTable(model, ctx.varName, position.lineNumber);
+                var baseTable = _findGrTable(model, ctx.varName, position);
                 if (!baseTable) {
                     return { suggestions: [] };
                 }
@@ -4549,14 +5043,13 @@
                     };
                 }
 
-                // No dot-walk — fast synchronous path when the table is already cached.
+                // No dot-walk — synchronous when the table is already cached.
                 if (!ctx.dotPath || ctx.dotPath.length === 0) {
                     var cached = _tableFieldCache[baseTable];
                     if (cached && !_tablePendingCache[baseTable]) {
                         return buildSuggestions(cached);
                     }
-                    fetchTableFields(baseTable); // fire-and-forget
-                    return { incomplete: true, suggestions: [] };
+                    return fetchTableFields(baseTable).then(buildSuggestions);
                 }
 
                 // Dot-walk: resolve the reference chain, then return fields of the
@@ -4587,7 +5080,7 @@
                 if (!ctx) {
                     return null;
                 }
-                var baseTable = _findGrTable(model, ctx.varName, position.lineNumber);
+                var baseTable = _findGrTable(model, ctx.varName, position);
                 if (!baseTable) {
                     return null;
                 }
@@ -4889,6 +5382,8 @@
                 return _siNameMap[name] || null;
             };
             _api.checkSiExists = _checkSiExists;
+            _api.refreshScriptInclude = refreshScriptInclude;
+            _api.refreshProvider = refreshProvider;
             _api.loadCssVariables = _loadCssVariables;
             _api.loadScssVariables = _loadScssVariables;
             _api.loadHtmlClassIndex = _loadHtmlClassIndex;
@@ -4951,28 +5446,31 @@
                 if (global.SNMonacoPlusBootstrap && global.SNMonacoPlusBootstrap.registerUnicodeHover) {
                     global.SNMonacoPlusBootstrap.registerUnicodeHover(monaco);
                 }
-                applyCompilerOptions();
-                _installUnusedVarSeverityPatch();
                 _registerCssVarCompletions();
                 _registerScssVarCompletions();
                 _registerScssVarHover();
-                if (_isJs) {
-                    _installQuickInfoHover();
-                    registerDotCompletions();
-                    registerHoverProvider();
-                    registerSignatureHelp();
-                    registerNewSiCompletions();
-                    registerGrFieldStringCompletions();
-                    registerGrFieldStringHover();
-                    registerGrConstructorCompletions();
-                    registerSiParamStringCompletions();
-                    if (monaco.editor && monaco.editor.getModels) {
-                        monaco.editor.getModels().forEach(_prewarmFieldCompletions);
-                        monaco.editor.getModels().forEach(function (m) {
-                            _scanAndFetchSIs(m.getValue());
-                            _registerLocalTypedefs(m.id, m.getValue());
-                        });
-                    }
+            }
+
+            // JS setup runs on the first JS init, even when an HTML or CSS editor initialised first.
+            if (_isJs && !_jsSetupDone) {
+                _jsSetupDone = true;
+                applyCompilerOptions();
+                _installUnusedVarSeverityPatch();
+                _installQuickInfoHover();
+                registerDotCompletions();
+                registerHoverProvider();
+                registerSignatureHelp();
+                registerNewSiCompletions();
+                registerGrFieldStringCompletions();
+                registerGrFieldStringHover();
+                registerGrConstructorCompletions();
+                registerSiParamStringCompletions();
+                if (monaco.editor && monaco.editor.getModels) {
+                    monaco.editor.getModels().forEach(_prewarmFieldCompletions);
+                    monaco.editor.getModels().forEach(function (m) {
+                        _scanAndFetchSIs(m.getValue());
+                        _registerLocalTypedefs(m.id, m.getValue());
+                    });
                 }
             }
 

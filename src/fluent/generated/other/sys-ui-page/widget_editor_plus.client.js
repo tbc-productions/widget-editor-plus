@@ -4958,7 +4958,7 @@
                     }
                 }
 
-                function loadHtmlMonarchDts(cb) {
+                function loadHtmlMonarchDts(cb, clearIfUnset) {
                     var _bs = window.SNMonacoPlusBootstrap;
                     if (!_bs) {
                         if (typeof cb === 'function') {
@@ -4985,6 +4985,7 @@
                                 themeSysId: $scope.userPrefs.htmlClassThemeSysId,
                                 dependencySysIds: _dependencySysIds,
                                 includeStandardCss: $scope.userPrefs.htmlClassIncludeStandardCss,
+                                clearIfUnset: !!clearIfUnset,
                             });
                         }
                         if (api && typeof api.loadHtmlMonarchDts === 'function') {
@@ -5743,6 +5744,13 @@
                             pane.saveError = null;
                             originalValues[pane.field] = value;
                             lastServerValues[pane.field] = value;
+                            if (
+                                $scope.recordTable === 'sys_script_include' &&
+                                window.SNMonacoPlus &&
+                                window.SNMonacoPlus.refreshScriptInclude
+                            ) {
+                                window.SNMonacoPlus.refreshScriptInclude($scope.widget.name);
+                            }
                             if (data.sys_updated_on) {
                                 $scope.widget.sys_updated_on = data.sys_updated_on;
                             }
@@ -7498,6 +7506,9 @@
                             }
                             pane.lastServerContent = value;
                             delete pane._pendingSaveContent;
+                            if (window.SNMonacoPlus && window.SNMonacoPlus.refreshScriptInclude) {
+                                window.SNMonacoPlus.refreshScriptInclude(pane.recordId);
+                            }
                             pane.dirty = !_editorValuesEqual(editor ? editor.getValue() : pane.content || '', value);
                             _writeLocalDraft(true);
                             if (!hasUnsavedChanges()) {
@@ -7544,6 +7555,9 @@
                             return;
                         }
                         pane.sys_id = res.sys_id;
+                        if (!isTemplate && window.SNMonacoPlus && window.SNMonacoPlus.refreshProvider) {
+                            window.SNMonacoPlus.refreshProvider(dataObj.name, res.sys_id);
+                        }
                         startPanePresence(pane); // subscribe now that the record exists
                         startPaneRecordWatcher(pane); // watch for external changes
                         pane.lastServerContent = value;
@@ -9847,6 +9861,8 @@
                             MONACO_LANGUAGE_HTML.setAutoCloseTagsEnabled($scope.userPrefs.htmlAutoCloseTags);
                         }
                     }
+                    // Reloads class completions for the chosen portal theme, or clears them when none is chosen.
+                    loadHtmlMonarchDts(null, true);
                     $scope.onEditorVisibilityChange();
                     // Editor layout is only committed as the new default here, since this
                     // is the one place the user explicitly chose to change it.
