@@ -81,7 +81,7 @@ test('individual history choices are persisted separately from the update set op
     let stored;
     const { ctrl, context } = client({ context: {
         localStorage: { setItem: (_key, value) => { stored = value; }, getItem: () => stored },
-        storageKey: () => 'selection', dismissedSuggestionKeys: {}, $q: { resolve: () => Promise.resolve() },
+        storageKey: () => 'selection', dismissedSuggestionKeys: {}, updateUpdateSetUrl() {}, $q: { resolve: () => Promise.resolve() },
         validateRowsNeedingLabel: () => Promise.resolve(),
     } });
     vm.runInContext(script.slice(script.indexOf('ctrl.saveSelections ='), script.indexOf('// Re-resolves label/tableLabel/updatedOn')), context);

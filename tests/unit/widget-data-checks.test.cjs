@@ -405,13 +405,14 @@ test('focus rechecks reopen the Different Update Set alert when the current upda
 test('widgets without an in-progress update set compare against the load-time update set, and saves move it', () => {
     assert.match(
         source,
-        /\$scope\.widgetUpdateSetId =\s*data\.widget\.widget_update_set_id \|\| data\.widget\.current_update_set_id \|\| '';/
+        /\$scope\.widgetUpdateSetId =\s*\$scope\.isWidgetRecord === false\s*\? ''\s*: data\.widget\.widget_update_set_id \|\| data\.widget\.current_update_set_id \|\| '';/
     );
     assert.match(
         source,
-        /\$scope\.widgetUpdateSetName =\s*data\.widget\.widget_update_set_name \|\| data\.widget\.current_update_set_name \|\| '';/
+        /\$scope\.widgetUpdateSetName =\s*\$scope\.isWidgetRecord === false\s*\? ''\s*: data\.widget\.widget_update_set_name \|\| data\.widget\.current_update_set_name \|\| '';/
     );
-    assert.equal((source.match(/_applySavedUpdateSet\(\$scope\.lastSaveUpdateSet\)/g) || []).length, 2);
+    assert.match(source, /if \(\$scope\.lastSaveUpdateSet\) _applySavedUpdateSet\(\$scope\.lastSaveUpdateSet\);/);
+    assert.match(source, /if \(savedUpdateSet\) _applySavedUpdateSet\(savedUpdateSet\);/);
     const scope = { isWidgetRecord: true, updateSetMismatch: true, widgetUpdateSetId: 'a', widgetUpdateSetName: 'A' };
     const ctx = vm.createContext({ $scope: scope, _knownUpdateSetId: 'a' });
     const applySaved = loadFunction(ctx, '_applySavedUpdateSet');
@@ -422,7 +423,28 @@ test('widgets without an in-progress update set compare against the load-time up
     );
     scope.isWidgetRecord = false;
     applySaved({ name: 'C', sys_id: 'c' });
-    assert.equal(scope.widgetUpdateSetId, 'b', 'other record types are unaffected');
+    assert.equal(scope.widgetUpdateSetId, 'b', 'other record types keep the widget mismatch state');
+    assert.deepEqual([scope.recordUpdateSet.sys_id, scope.currentUpdateSetId], ['c', 'c']);
+});
+
+test('the header marks records in the current update set', () => {
+    const scope = { currentUpdateSetId: 'a', recordUpdateSet: null };
+    const ctx = vm.createContext({ $scope: scope, _knownUpdateSetId: 'a' });
+    vm.runInContext(source.match(/\$scope\.isInCurrentUpdateSet = function \(\) \{[\s\S]*?\n {16}\};/)[0], ctx);
+    const applyCurrent = loadFunction(ctx, '_applyCurrentUpdateSet');
+    assert.equal(scope.isInCurrentUpdateSet(), false, 'records without an in-progress update set are unmarked');
+    scope.recordUpdateSet = { name: 'A', sys_id: 'a' };
+    assert.equal(scope.isInCurrentUpdateSet(), true);
+    applyCurrent('b');
+    assert.equal(scope.isInCurrentUpdateSet(), false, 'switching update sets elsewhere clears the mark');
+    assert.match(
+        source,
+        /\$scope\.widgetUpdateSetId \|\| \$scope\.recordUpdateSet\s*\? data\.widget\.current_update_set_id \|\| ''/
+    );
+    assert.match(
+        html,
+        /<i class="icon-livefeed we-record-update-set" role="img" ng-if="!loading &amp;&amp; !loadError &amp;&amp; !showPicker &amp;&amp; !isVersionView &amp;&amp; isInCurrentUpdateSet\(\)" aria-label="\{\{'Current update set: ' \+ recordUpdateSet\.name\}\}" we-tooltip-title="\{\{'Current update set: ' \+ recordUpdateSet\.name\}\}"><\/i>/
+    );
 });
 
 test('focus checks also listen on the framing Next Experience window', () => {

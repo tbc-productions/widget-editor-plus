@@ -196,7 +196,9 @@
                             if (!node.embeddedPrimary)
                                 actions.push({
                                     type: 'open',
-                                    title: 'Open record in platform',
+                                    title: node.opensInEditor
+                                        ? 'Open record in Widget Editor+'
+                                        : 'Open record in platform',
                                     iconClass: 'icon-open-document-new-tab',
                                 });
                             if (!node.primary)
@@ -1908,23 +1910,29 @@
                 .slice(0, 80);
         }
 
+        // Replaces the page URL, mirroring it into the Next Experience shell when framed once.
+        function replacePageUrl(url) {
+            window.history.replaceState(null, '', url.toString());
+
+            // Skip if nested 2+ levels deep (e.g. inside the Assistant modal's iframe).
+            if (window.top !== window && window.parent === window.top) {
+                var page = url.pathname.substring(1) + url.search + url.hash;
+                window.top.history.replaceState(
+                    null,
+                    '',
+                    '/now/nav/ui/classic/params/target/' + encodeURIComponent(page)
+                );
+            }
+        }
+
         // Reflects the primary record in the URL without reloading the page.
         function updatePrimaryUrl(table, sysId) {
             try {
                 var url = new URL(window.location.href);
                 url.searchParams.set('record_table', table);
                 url.searchParams.set('record_sys_id', sysId);
-                window.history.replaceState(null, '', url.toString());
-
-                // Skip if nested 2+ levels deep (e.g. inside the Assistant modal's iframe).
-                if (window.top !== window && window.parent === window.top) {
-                    var page = url.pathname.substring(1) + url.search + url.hash;
-                    window.top.history.replaceState(
-                        null,
-                        '',
-                        '/now/nav/ui/classic/params/target/' + encodeURIComponent(page)
-                    );
-                }
+                url.searchParams.delete('update_set');
+                replacePageUrl(url);
             } catch (e) {}
         }
 
@@ -1933,16 +1941,25 @@
                 var url = new URL(window.location.href);
                 url.searchParams.delete('record_table');
                 url.searchParams.delete('record_sys_id');
-                window.history.replaceState(null, '', url.toString());
+                replacePageUrl(url);
+            } catch (e) {}
+        }
 
-                if (window.top !== window && window.parent === window.top) {
-                    var page = url.pathname.substring(1) + url.search + url.hash;
-                    window.top.history.replaceState(
-                        null,
-                        '',
-                        '/now/nav/ui/classic/params/target/' + encodeURIComponent(page)
-                    );
-                }
+        // Reflects the added update sets in the URL while no primary record is selected.
+        function updateUpdateSetUrl(primarySysId, updateSets) {
+            try {
+                var url = new URL(window.location.href);
+                var ids = primarySysId
+                    ? ''
+                    : updateSets
+                          .map(function (us) {
+                              return us.sys_id;
+                          })
+                          .join(',');
+                if (ids === (url.searchParams.get('update_set') || '')) return;
+                if (ids) url.searchParams.set('update_set', ids);
+                else url.searchParams.delete('update_set');
+                replacePageUrl(url);
             } catch (e) {}
         }
 
@@ -2129,9 +2146,9 @@
                     });
                 });
 
-                function request(action, params) {
+                function request(action, params, processor) {
                     var deferred = $q.defer();
-                    var ga = new GlideAjax('WidgetEditorAssistantAjax');
+                    var ga = new GlideAjax(processor || 'WidgetEditorAssistantAjax');
                     ga.addParam('sysparm_name', action);
                     if (params) {
                         Object.keys(params).forEach(function (k) {
@@ -2186,7 +2203,10 @@
                 var placeholderRowObj = { placeholder: true, checked: false };
                 ctrl.generating = false;
                 ctrl.addingUpdateSet = false;
-                ctrl.loadingInitial = !!(window.WE_ASSISTANT_CONFIG && window.WE_ASSISTANT_CONFIG.sysId);
+                ctrl.loadingInitial = !!(
+                    window.WE_ASSISTANT_CONFIG &&
+                    (window.WE_ASSISTANT_CONFIG.sysId || window.WE_ASSISTANT_CONFIG.updateSetIds)
+                );
                 ctrl.progress = { done: 0, total: 0 };
                 ctrl.activeSidebarTab = 'xml';
                 ctrl.sidebarCollapsed = false;
@@ -3106,6 +3126,7 @@
                                 checked: !!r.checked,
                                 dimmed: (!r.checked && !r.partiallyChecked) || !rowMatchesActiveFilter(r),
                                 embeddedPrimary: !!(r.primary && ctrl.embeddedInModal),
+                                opensInEditor: ctrl.opensInEditor(r.table),
                                 column: columnIndex,
                                 order: rowIndex,
                                 row: r,
@@ -3200,13 +3221,38 @@
                     ctrl.onSelectionChange(row);
                 };
 
+                var editorTables = { sp_widget: true };
+                ctrl.opensInEditor = function (table) {
+                    return Object.prototype.hasOwnProperty.call(editorTables, table);
+                };
+                ctrl.recordUrl = function (table, sysId) {
+                    var uri = ctrl.opensInEditor(table)
+                        ? 'ui_page.do?sys_id=8b2e70458373fe1070b8b5dfeeaad35e' +
+                          (table === 'sp_widget'
+                              ? '&widget_id=' + encodeURIComponent(sysId)
+                              : '&record_table=' +
+                                encodeURIComponent(table) +
+                                '&record_sys_id=' +
+                                encodeURIComponent(sysId))
+                        : table + '.do?sys_id=' + sysId;
+                    return '/nav_to.do?uri=' + encodeURIComponent(uri);
+                };
+                ctrl.recordLinkTitle = function (table) {
+                    return ctrl.opensInEditor(table) ? 'Open record in Widget Editor+' : 'Open record in platform';
+                };
+                function loadEditorTables() {
+                    request('getEditorRecordTypes', null, 'WidgetEditorAjax').then(function (res) {
+                        if (!res || !res.success || !Array.isArray(res.types)) return;
+                        res.types.forEach(function (type) {
+                            if (type && type.table) editorTables[type.table] = true;
+                        });
+                        if (ctrl.viewMode === 'graph') rebuildGraph();
+                    }, angular.noop);
+                }
+
                 ctrl.openGraphRecord = function (row) {
                     if (!row || (row.primary && ctrl.embeddedInModal)) return;
-                    window.open(
-                        '/nav_to.do?uri=' + encodeURIComponent(row.table + '.do?sys_id=' + row.sys_id),
-                        '_blank',
-                        'noopener,noreferrer'
-                    );
+                    window.open(ctrl.recordUrl(row.table, row.sys_id), '_blank', 'noopener,noreferrer');
                 };
 
                 async function fetchExportRecordXml(row) {
@@ -3767,6 +3813,7 @@
                 // except for DELETE-action update-set members, whose label is persisted since the
                 // underlying record is gone and can never be freshly re-resolved on reload.
                 ctrl.saveSelections = function () {
+                    updateUpdateSetUrl(ctrl.primary.sysId, ctrl.updateSets);
                     try {
                         var manual = ctrl.related
                             .filter(function (r) {
@@ -4739,29 +4786,7 @@
                                 ctrl.usPicker.error = 'Could not add ' + us.name + '. Please try again.';
                                 return;
                             }
-
-                            if (
-                                !ctrl.updateSets.some(function (u) {
-                                    return u.sys_id === us.sys_id;
-                                })
-                            ) {
-                                ctrl.updateSets.push({
-                                    sys_id: us.sys_id,
-                                    name: us.name,
-                                    state: us.state,
-                                    description: us.description,
-                                    updatedOn: us.updatedOn,
-                                });
-                            }
-
-                            var addedRows = addUpdateSetMembers(us, res.members);
-
-                            ctrl.saveSelections();
-                            rebuildRows();
-                            discoverGraphLinks(ctrl.related);
-                            if (ctrl.includePreviousUpdates && addedRows.length) {
-                                refreshPreviousVersions(addedRows);
-                            }
+                            applyUpdateSet(us, res.members);
                         },
                         function () {
                             delete ctrl.usPicker.pending[us.sys_id];
@@ -4770,6 +4795,54 @@
                         }
                     );
                 };
+
+                function applyUpdateSet(us, members) {
+                    if (
+                        !ctrl.updateSets.some(function (u) {
+                            return u.sys_id === us.sys_id;
+                        })
+                    ) {
+                        ctrl.updateSets.push({
+                            sys_id: us.sys_id,
+                            name: us.name,
+                            state: us.state,
+                            description: us.description,
+                            updatedOn: us.updatedOn,
+                        });
+                    }
+
+                    var addedRows = addUpdateSetMembers(us, members);
+
+                    ctrl.saveSelections();
+                    rebuildRows();
+                    discoverGraphLinks(ctrl.related);
+                    if (ctrl.includePreviousUpdates && addedRows.length) {
+                        refreshPreviousVersions(addedRows);
+                    }
+                }
+
+                // Adds update sets named in the URL, in their listed order.
+                function loadInitialUpdateSets(ids) {
+                    ctrl.loadingInitial = true;
+                    var requests = ids.map(function (id) {
+                        return ajax('getUpdateSetMembers', { update_set: id }).catch(function () {
+                            return null;
+                        });
+                    });
+                    return $q
+                        .all(requests)
+                        .then(function (results) {
+                            results.forEach(function (res) {
+                                if (res && res.success && res.updateSet) {
+                                    applyUpdateSet(res.updateSet, res.members);
+                                }
+                            });
+                            ctrl.saveSelections();
+                        })
+                        .finally(function () {
+                            ctrl.loadingInitial = false;
+                        });
+                }
 
                 ctrl.removeUpdateSet = function (us) {
                     ctrl.updateSets = ctrl.updateSets.filter(function (u) {
@@ -5202,6 +5275,7 @@
                 };
 
                 function init() {
+                    loadEditorTables();
                     loadFavouriteTables();
                     loadFavouriteGroups();
                     loadViewMode();
@@ -5227,6 +5301,17 @@
                             .finally(function () {
                                 ctrl.loadingInitial = false;
                             });
+                    } else if (window.WE_ASSISTANT_CONFIG && window.WE_ASSISTANT_CONFIG.updateSetIds) {
+                        var updateSetIds = window.WE_ASSISTANT_CONFIG.updateSetIds
+                            .split(',')
+                            .map(function (id) {
+                                return id.trim();
+                            })
+                            .filter(function (id, index, all) {
+                                return /^[0-9a-f]{32}$/.test(id) && all.indexOf(id) === index;
+                            });
+                        if (updateSetIds.length) loadInitialUpdateSets(updateSetIds);
+                        else ctrl.loadingInitial = false;
                     }
                 }
 

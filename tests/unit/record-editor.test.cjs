@@ -109,7 +109,7 @@ function serverHarness(table = 'sys_ui_page', options = {}) {
             sp_angular_provider: 'Angular Provider', sys_ui_page: 'UI Page', sp_ng_template: 'Angular HTML Template',
             sys_script_email: 'Email Script', sys_script_fix: 'Fix Script',
         }[name] || name);
-        const related = { sys_es_latest_script: options.es12, sys_update_version: options.origin, sys_user: options.user };
+        const related = { sys_es_latest_script: options.es12, sys_update_set: options.updateSet, sys_update_version: options.origin, sys_user: options.user };
         const record = Object.hasOwn(related, name) ? (related[name] || {}) : row;
         let current = record,
             cursor = 0;
@@ -160,7 +160,7 @@ function serverHarness(table = 'sys_ui_page', options = {}) {
             queries.push([name, field, value]);
             return { addOrCondition() {} };
         };
-        this.orderBy = this.chooseWindow = this.setLimit = () => {};
+        this.orderBy = this.orderByDesc = this.chooseWindow = this.setLimit = () => {};
         this.query = () => {
             cursor = 0;
         };
@@ -196,7 +196,8 @@ function serverHarness(table = 'sys_ui_page', options = {}) {
     const context = vm.createContext({
         Class: { create: () => function () {} },
         AbstractAjaxProcessor: {},
-        gs: { getProperty: (_, fallback) => fallback, warn: message => warnings.push(message) },
+        gs: { getPreference: name => options.preferences?.[name] ?? null, getProperty: (_, fallback) => fallback, warn: message => warnings.push(message) },
+        global: { GlideUpdateSet: function () { this.get = () => options.saveUpdateSet || ''; } },
         GlideRecordSecure: Record,
         GlideRecord: Record,
         GlideFilter: { checkRecord: (record, query) => query === 'active=true' && record.getValue('active') === '1' },
@@ -533,6 +534,20 @@ test('record origins share the widget history lookup and respect readable histor
     const defaults = serverHarness('sys_ui_page', { origin });
     assert.equal(defaults.api.getWidgetDefaults().widget.widgetOrigin, null);
     assert.equal(defaults.calls.includes('sys_update_version'), false);
+});
+
+test('records report their in-progress update set and saves return the update set they land in', () => {
+    const us = 'u'.repeat(32);
+    const updateSet = { name: 'Feature', state: 'in progress' };
+    const h = serverHarness('sys_script_include', { origin: { source: us }, updateSet, preferences: { sys_update_set: us }, saveUpdateSet: us });
+    const record = h.api.getWidget().widget;
+    assert.deepEqual([record.widget_update_set_id, record.widget_update_set_name, record.current_update_set_id], [us, 'Feature', us]);
+    Object.assign(h.params, { field: 'script', value: 'edited', original: JSON.stringify({ script: h.row.script }) });
+    const saved = h.api.saveField();
+    assert.deepEqual([saved.update_set_sys_id, saved.update_set_name], [us, 'Feature']);
+    const complete = serverHarness('sys_script_include', { origin: { source: us }, updateSet: { ...updateSet, state: 'complete' } });
+    assert.equal(complete.api.getWidget().widget.widget_update_set_id, '');
+    assert.equal(Object.hasOwn(serverHarness('sys_script_include').api.getWidgetDefaults().widget, 'widget_update_set_id'), false);
 });
 
 test('configured Active header fields respect field permissions', () => {

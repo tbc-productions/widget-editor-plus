@@ -30,6 +30,7 @@
         window.WE_ASSISTANT_CONFIG = {
             table: _weAssistantConfigParams.get('record_table') || '',
             sysId: _weAssistantConfigParams.get('record_sys_id') || '',
+            updateSetIds: _weAssistantConfigParams.get('update_set') || '',
             embedded: _weAssistantEmbedded,
             siteTitle: '${gs.getProperty("glide.product.name", "ServiceNow")}',
             exportBlocklistTables: '${gs.getProperty("monaco.plus.assistant.export_blocklist_tables", "cmn_notif_device,discovery_credentials,hr_employee,hr_profile,oauth_credential,sp_log,sys_credential,sys_user")}',
@@ -1751,7 +1752,7 @@
                                             <button type="button" class="btn btn-default" ng-click="ctrl.scanRow(row)" ng-disabled="row.scanning" title="Scan for related records">
                                                 <i class="icon-search"></i>
                                             </button>
-                                            <a class="btn btn-default" ng-if="!(row.primary &amp;&amp; ctrl.embeddedInModal)" ng-href="/nav_to.do?uri={{row.table}}.do%3Fsys_id%3D{{row.sys_id}}" target="_blank" title="Open record in platform">
+                                            <a class="btn btn-default" ng-if="!(row.primary &amp;&amp; ctrl.embeddedInModal)" ng-href="{{ctrl.recordUrl(row.table, row.sys_id)}}" target="_blank" title="{{ctrl.recordLinkTitle(row.table)}}">
                                                 <i class="icon-open-document-new-tab"></i>
                                             </a>
                                             <button type="button" class="btn btn-default" ng-if="!row.primary" ng-click="ctrl.removeRow(row)" title="Remove record">
@@ -2001,7 +2002,7 @@
                                                 <button type="button" class="btn btn-default" ng-click="ctrl.manageGroupScanRow(row)" ng-disabled="row.scanning" title="Scan for related records">
                                                     <i class="icon-search"></i>
                                                 </button>
-                                                <a class="btn btn-default" ng-href="/nav_to.do?uri={{row.table}}.do%3Fsys_id%3D{{row.sys_id}}" target="_blank" title="Open record in platform">
+                                                <a class="btn btn-default" ng-href="{{ctrl.recordUrl(row.table, row.sys_id)}}" target="_blank" title="{{ctrl.recordLinkTitle(row.table)}}">
                                                     <i class="icon-open-document-new-tab"></i>
                                                 </a>
                                                 <button type="button" class="btn btn-default" ng-click="ctrl.manageGroupRemoveRow(row)" title="Remove from group">
@@ -2155,7 +2156,7 @@
                                     <span class="we-picker-item-status" ng-if="ctrl.lookup.selectingPrimary &amp;&amp; ctrl.primary.table === ctrl.lookup.chosenTable &amp;&amp; ctrl.primary.sysId === r.sys_id">Adding…</span>
                                     <span class="we-picker-item-status" ng-if="!ctrl.lookup.selectingPrimary &amp;&amp; ctrl.lookup.mode === 'add' &amp;&amp; ctrl.isRecordSelected(r)" title="Click to remove">Added</span>
                                     <div class="we-picker-item-actions">
-                                        <a class="we-picker-action-btn" ng-href="/nav_to.do?uri={{ctrl.lookup.chosenTable}}.do%3Fsys_id%3D{{r.sys_id}}" target="_blank" ng-click="$event.stopPropagation()" title="Open in platform" aria-label="Open record in platform">
+                                        <a class="we-picker-action-btn" ng-href="{{ctrl.recordUrl(ctrl.lookup.chosenTable, r.sys_id)}}" target="_blank" ng-click="$event.stopPropagation()" title="{{ctrl.recordLinkTitle(ctrl.lookup.chosenTable)}}" aria-label="{{ctrl.recordLinkTitle(ctrl.lookup.chosenTable)}}">
                                             <i class="icon-open-document-new-tab" aria-hidden="true"></i>
                                         </a>
                                     </div>

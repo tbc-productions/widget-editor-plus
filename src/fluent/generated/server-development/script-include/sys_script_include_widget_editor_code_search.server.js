@@ -138,6 +138,7 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
         var caseSensitive = this._getParam('case_sensitive') === 'true' || this._getParam('case_sensitive') === '1';
         var needle = caseSensitive ? term : term.toLowerCase();
         var activeOnly = this._getParam('active_only') === 'true' || this._getParam('active_only') === '1';
+        var editorProfiles = null;
         var secondaryFilters;
         try {
             secondaryFilters = JSON.parse(this._getParam('secondary_filters') || '[]');
@@ -450,7 +451,16 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
 
                 if (matches.length > 0) {
                     var recSysId = record.getUniqueValue();
-                    var isWidget = table === 'sp_widget';
+                    if (!editorProfiles) editorProfiles = new WidgetEditorAjax()._getEditorProfiles();
+                    var editorUri = '';
+                    if (table === 'sp_widget')
+                        editorUri = 'ui_page.do?sys_id=8b2e70458373fe1070b8b5dfeeaad35e&widget_id=' + recSysId;
+                    else if (Object.prototype.hasOwnProperty.call(editorProfiles, table))
+                        editorUri =
+                            'ui_page.do?sys_id=8b2e70458373fe1070b8b5dfeeaad35e&record_table=' +
+                            encodeURIComponent(table) +
+                            '&record_sys_id=' +
+                            recSysId;
 
                     // Determine active status, matching the OR semantics of the query above.
                     // A table with neither field is always considered active, so it's never
@@ -509,8 +519,7 @@ WidgetEditorCodeSearchAjax.prototype = Object.extendsObject(AbstractAjaxProcesso
                             ? record.getDisplayValue('sys_updated_on')
                             : '',
                         matches: matches,
-                        isWidget: isWidget,
-                        widgetEditorUrl: isWidget ? '/widget_editor.do?widget_id=' + recSysId : null,
+                        editorUrl: editorUri ? '/nav_to.do?uri=' + encodeURIComponent(editorUri) : null,
                         url: '/nav_to.do?uri=' + encodeURIComponent(table + '.do?sys_id=' + recSysId),
                     });
                 }

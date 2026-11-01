@@ -70,7 +70,8 @@ function serverHarness(records, options = {}) {
     }
     const context = {
         AbstractAjaxProcessor: {}, Class: { create() { return function () {}; } },
-        GlideRecord, JSON, encodeURIComponent, Date: options.Date || Date
+        GlideRecord, JSON, encodeURIComponent, Date: options.Date || Date,
+        WidgetEditorAjax: function () { this._getEditorProfiles = () => options.editorProfiles || {}; }
     };
     context.Object = Object.create(Object);
     context.Object.extendsObject = (_base, members) => members;
@@ -371,4 +372,14 @@ test('a later batch failure retains earlier matches and advances to the next tab
     assert.equal(h.vm.searchProgress.completed, 2);
     assert.equal(h.vm.loading, false);
     assert.match(h.notices.at(-1), /1 table configuration\(s\) skipped/);
+});
+
+test('results for Widget Editor+ record types link to the editor', () => {
+    const unsupported = serverHarness(rows(1)).search();
+    assert.equal(unsupported.results[0].editorUrl, null);
+    const supported = serverHarness(rows(1), { editorProfiles: { x_script: {} } }).search();
+    assert.equal(supported.results[0].editorUrl, '/nav_to.do?uri=' + encodeURIComponent(
+        'ui_page.do?sys_id=8b2e70458373fe1070b8b5dfeeaad35e&record_table=x_script&record_sys_id=' + id(1)));
+    assert.equal((pageSource.match(/ng-if="result\.editorUrl" ng-href="\{\{result\.editorUrl\}\}"/g) || []).length, 2);
+    assert.ok(!pageSource.includes('result.isWidget'));
 });

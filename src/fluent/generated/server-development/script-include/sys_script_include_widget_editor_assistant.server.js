@@ -1861,7 +1861,7 @@ WidgetEditorAssistantAjax.prototype = Object.extendsObject(AbstractAjaxProcessor
      * Accepts `update_set`.
      * @returns {{success: boolean, members: Array.<{table: string, sys_id: string, action: string,
      *   label: string, tableLabel: string, updatedOn: string, sysCreatedOnValue: string}>,
-     *   total: number}} Return value.
+     *   total: number, updateSet: ?Object}} Return value.
      */
     getUpdateSetMembers: function () {
         var updateSetId = this.getParameter('update_set');
@@ -1889,10 +1889,12 @@ WidgetEditorAssistantAjax.prototype = Object.extendsObject(AbstractAjaxProcessor
             seen[key] = true;
             members.push(parsed);
         }
+        var setGr = new GlideRecordSecure('sys_update_set');
         return this._answer({
-            success: true,
             members: members,
+            success: true,
             total: members.length,
+            updateSet: setGr.get(updateSetId) ? this._updateSetSummary(setGr) : null,
         });
     },
 

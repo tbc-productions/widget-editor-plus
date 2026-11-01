@@ -2643,14 +2643,23 @@
                                 });
                             };
                             $scope.updateSetMismatch = !!data.widget.update_set_mismatch;
+                            $scope.recordUpdateSet = data.widget.widget_update_set_id
+                                ? { name: data.widget.widget_update_set_name, sys_id: data.widget.widget_update_set_id }
+                                : null;
+                            $scope.currentUpdateSetId = data.widget.current_update_set_id || '';
                             // Without an in-progress update set, the widget is being edited in the one current at load.
                             $scope.widgetUpdateSetId =
-                                data.widget.widget_update_set_id || data.widget.current_update_set_id || '';
+                                $scope.isWidgetRecord === false
+                                    ? ''
+                                    : data.widget.widget_update_set_id || data.widget.current_update_set_id || '';
                             $scope.widgetUpdateSetName =
-                                data.widget.widget_update_set_name || data.widget.current_update_set_name || '';
-                            _knownUpdateSetId = $scope.widgetUpdateSetId
-                                ? data.widget.current_update_set_id || ''
-                                : null;
+                                $scope.isWidgetRecord === false
+                                    ? ''
+                                    : data.widget.widget_update_set_name || data.widget.current_update_set_name || '';
+                            _knownUpdateSetId =
+                                $scope.widgetUpdateSetId || $scope.recordUpdateSet
+                                    ? data.widget.current_update_set_id || ''
+                                    : null;
                             if ($scope.widgetSysPolicy) {
                                 $scope.canWriteWidget = false;
                             }
@@ -5765,16 +5774,18 @@
                                     if (result.success) $scope.versions = result.versions;
                                 });
                             }
+                            var savedUpdateSet =
+                                data.update_set_sys_id && data.update_set_name
+                                    ? {
+                                          sys_id: data.update_set_sys_id,
+                                          name: data.update_set_name,
+                                      }
+                                    : null;
+                            if (savedUpdateSet) _applySavedUpdateSet(savedUpdateSet);
                             if (!hasUnsavedChanges()) {
                                 pane.savedAt = null;
                                 $scope.lastSaveTime = new Date();
-                                if (data.update_set_sys_id && data.update_set_name) {
-                                    $scope.lastSaveUpdateSet = {
-                                        sys_id: data.update_set_sys_id,
-                                        name: data.update_set_name,
-                                    };
-                                    _applySavedUpdateSet($scope.lastSaveUpdateSet);
-                                }
+                                if (savedUpdateSet) $scope.lastSaveUpdateSet = savedUpdateSet;
                             } else {
                                 pane.savedAt = new Date();
                             }
@@ -5853,6 +5864,7 @@
                 function _applyCurrentUpdateSet(currentId) {
                     if (currentId === _knownUpdateSetId) return;
                     _knownUpdateSetId = currentId;
+                    $scope.currentUpdateSetId = currentId;
                     if (!$scope.widgetUpdateSetId) return;
                     $scope.updateSetMismatch = $scope.widgetUpdateSetId !== currentId;
                     if ($scope.updateSetMismatch) {
@@ -5865,12 +5877,18 @@
 
                 // Saves land in the current update set, which becomes the one the widget is being edited in.
                 function _applySavedUpdateSet(updateSet) {
+                    $scope.recordUpdateSet = updateSet;
+                    $scope.currentUpdateSetId = updateSet.sys_id;
+                    _knownUpdateSetId = updateSet.sys_id;
                     if ($scope.isWidgetRecord === false) return;
                     $scope.widgetUpdateSetId = updateSet.sys_id;
                     $scope.widgetUpdateSetName = updateSet.name;
                     $scope.updateSetMismatch = false;
-                    _knownUpdateSetId = updateSet.sys_id;
                 }
+
+                $scope.isInCurrentUpdateSet = function () {
+                    return !!$scope.recordUpdateSet && $scope.recordUpdateSet.sys_id === $scope.currentUpdateSetId;
+                };
 
                 function _checkCurrentUpdateSet() {
                     if (document.hidden || _updateSetCheckPending || _knownUpdateSetId === null || $scope.isVersionView)

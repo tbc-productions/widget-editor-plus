@@ -95,7 +95,7 @@ test('AI Assistant accepts drawer record parameters as its primary record and ke
     const ast = ts.createSourceFile('assistant.js', script, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
     const functions = {};
     function visit(node) {
-        if (ts.isFunctionDeclaration(node) && ['init', 'updatePrimaryUrl', 'clearPrimaryUrl'].includes(node.name?.text)) functions[node.name.text] = node.getText(ast);
+        if (ts.isFunctionDeclaration(node) && ['init', 'replacePageUrl', 'updatePrimaryUrl', 'clearPrimaryUrl'].includes(node.name?.text)) functions[node.name.text] = node.getText(ast);
         ts.forEachChild(node, visit);
     }
     visit(ast);
@@ -105,7 +105,7 @@ test('AI Assistant accepts drawer record parameters as its primary record and ke
     const context = vm.createContext({
         ctrl, URL,
         window: { WE_ASSISTANT_CONFIG: { table: url.searchParams.get('record_table'), sysId: url.searchParams.get('record_sys_id') }, location: { href: address }, history: { replaceState: (_, __, href) => { address = href; context.window.location.href = href; } } },
-        loadFavouriteTables() {}, loadFavouriteGroups() {}, loadViewMode() {}, loadTokenConfig() {},
+        loadEditorTables() {}, loadFavouriteTables() {}, loadFavouriteGroups() {}, loadViewMode() {}, loadTokenConfig() {},
         ajax: async () => ({ success: true, label: 'Example', tableLabel: 'Script Includes' }),
         loadPrimaryContext: () => { loaded = { ...ctrl.primary }; return Promise.resolve(); },
         rebuildRows() {}, tableLabel: table => table,
