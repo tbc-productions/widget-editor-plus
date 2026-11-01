@@ -14,7 +14,7 @@ Judge the code against the agent's rules and the other skills in this pack. Comm
 | Category | Look for |
 |---|---|
 | Security | Unjustified `GlideRecord`, unchecked client input, missing `canRead()`/`canWrite()`, unescaped HTML (`ng-bind-html`, `innerHTML`), hard-coded credentials. |
-| Performance | Queries in loops, counting without `GlideAggregate`, missing `setLimit()`, slow work outside async rules, `getXMLWait()`, GlideAjax where `g_scratchpad` would do. |
+| Performance | Queries in loops, existence checks that count rows or use `getRowCount()` instead of `setLimit(1)` and `hasNext()`, related-record filters done with a second query instead of `addJoinQuery()` or `RLQUERY`, dot-walking without `addExtraField()`, counting without `GlideAggregate`, missing `setLimit()`, slow work outside async rules, `getXMLWait()`, GlideAjax where `g_scratchpad` would do. |
 | Reliability | Boolean `getValue()` not compared with `'1'`, queries on empty values, unchecked `get()`, `current.update()` in before rules, wrong ES syntax, DOM APIs on the server, broken callers of shared code, safeguards dropped when code moved. |
 | Maintainability | Missing or wrong JSDoc, `if` statements without braces, missing block comments (or one on every line), positional parameters where a destructured object fits, single-use helpers, hard-coded sys_ids, dead code, duplicated logic. |
 | Best practice | Script Includes not defined with `Class.create()`, shorthand methods in server scripts, widget forms validated by hand instead of with `ngForm`, script where a condition or UI policy would do, `GlideElement` compared without `getValue()`, missing labels, `alt` text or keyboard access, repeated `<div>`s instead of list or table markup, `role` where a native element would do. |
@@ -67,7 +67,7 @@ Use this structure and keep each finding to one or two lines. Name records exact
 - **Low** · `client_script`: remove the unused `$timeout` injection.
 
 ### Script Include › TaskUtils
-- **Medium** · `getTasks`: queries `sys_user` once per task. Dot-walk `assigned_to.name` instead.
+- **Medium** · `getTasks`: queries `sys_user` once per task. Dot-walk `assigned_to.name` with `addExtraField()` instead.
 - **Low** · `getTasks`, `_format`: missing JSDoc.
 ```
 

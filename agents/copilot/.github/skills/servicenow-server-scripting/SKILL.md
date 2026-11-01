@@ -15,10 +15,44 @@ Examples use ES6+. Follow the `servicenow-es-compatibility` skill for widget ser
 - Check the result of `gr.get(sysId)` before using the record.
 - Use `setLimit()` when only some rows are needed, and `addActiveQuery()` for active records.
 - Use `GlideAggregate` for counts and sums, never a loop with a counter.
+- To check whether at least one record exists, use `setLimit(1)`, `query()` and `hasNext()`. Do not count rows or use `getRowCount()`.
 - Dot-walk (`gr.caller_id.department.getDisplayValue()`) instead of a second query.
+- Call `addExtraField()` before `query()` for every dot-walked field you read, so the values load with the query instead of one lookup per record. Use it wherever you dot-walk, especially in loops.
+- Filter by related records in the same query instead of looping a second query:
+  - `addJoinQuery(table, primaryField, joinField)` keeps records that have at least one matching related record. Add conditions to the returned join with `addCondition()`. Joined fields cannot be read.
+  - `RLQUERY` in an encoded query filters on a count of related records, including none: `RLQUERY<table>.<reference field>,<operator><count>^<conditions>^ENDRLQUERY`.
 - Use `updateMultiple()` or `deleteMultiple()` for bulk changes when per-record business rules are not needed.
 
 ```javascript
+/* Get active incidents with their caller's department */
+const gr = new GlideRecordSecure('incident');
+gr.addActiveQuery();
+gr.addExtraField('caller_id.department.name');
+gr.query();
+while (gr.next()) {
+    gs.info(`${gr.getValue('number')}: ${gr.caller_id.department.name}`);
+}
+
+/* Check if the user has an active incident */
+const incident = new GlideRecordSecure('incident');
+incident.addActiveQuery();
+incident.addQuery('caller_id', gs.getUserID());
+incident.setLimit(1);
+incident.query();
+const hasIncident = incident.hasNext();
+
+/* Get users who are callers on an active incident */
+const callers = new GlideRecordSecure('sys_user');
+const join = callers.addJoinQuery('incident', 'sys_id', 'caller_id');
+join.addCondition('active', true);
+callers.query();
+
+/* Get active users with no open incidents */
+const idle = new GlideRecordSecure('sys_user');
+idle.addEncodedQuery('active=true^RLQUERYincident.caller_id,=0^active=true^ENDRLQUERY');
+idle.query();
+
+/* Count active incidents */
 const count = new GlideAggregate('incident');
 count.addActiveQuery();
 count.addAggregate('COUNT');
