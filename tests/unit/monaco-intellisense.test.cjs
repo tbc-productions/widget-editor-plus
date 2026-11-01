@@ -1,5 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
 const { readFluentField } = require('../helpers/fluent-source.cjs');
@@ -72,7 +74,8 @@ function load() {
             exposed,
             exposed +
                 ' global.__we = { jsDocTypeToTs, parseSiDocComment, parseSiMethods, parseSiProperties,' +
-                ' parseSiConstants, parseProviderMembers, _registerSiDts, _findGrTable, _getOpenCallContext, _providerDiTypes };'
+                ' parseSiConstants, parseProviderMembers, _registerSiDts, _findGrTable, _getOpenCallContext, _providerDiTypes,' +
+                ' _getChoiceValueContext, _pickFieldChoices, registerGrChoiceValueCompletions };'
         ),
         context
     );
@@ -278,6 +281,104 @@ test('GlideRecord lookup uses the nearest declaration and query conditions', () 
     assert.equal(we._findGrTable(model, 'ga', { lineNumber: 5, column: 1 }), 'problem');
     assert.equal(we._findGrTable(model, 'qc', { lineNumber: 4, column: 1 }), 'incident');
     assert.equal(we._findGrTable(model, 'sub', { lineNumber: 5, column: 1 }), null);
+});
+
+test('GlideRecord lookup handles variable names containing a dollar sign', () => {
+    const { we } = load();
+    const model = makeModel("var $gr = new GlideRecord('incident');\n$gr.");
+    assert.equal(we._findGrTable(model, '$gr', { lineNumber: 2, column: 5 }), 'incident');
+});
+
+test('UI script sources avoid the dollar-brace sequence the instance strips when serving', () => {
+    const dir = path.join(__dirname, '../../src/fluent/generated/client-development/ui-script');
+    for (const file of fs.readdirSync(dir).filter((f) => f.endsWith('.js'))) {
+        assert.ok(!fs.readFileSync(path.join(dir, file), 'utf8').includes('${'), file);
+    }
+});
+
+test('choice value context covers query, comparison and element value strings', () => {
+    const { we } = load();
+    const at = (line) => {
+        const cursor = line.indexOf('|');
+        const text = line.replace('|', '');
+        return plain(we._getChoiceValueContext(makeModel(text), { lineNumber: 1, column: cursor + 1 }));
+    };
+    const range = (start, end) => ({ endColumn: end, endLineNumber: 1, startColumn: start, startLineNumber: 1 });
+
+    assert.deepEqual(at("gr.addQuery('u_category', 'ha|')"), {
+        exclude: [],
+        fieldPath: ['u_category'],
+        range: range(28, 30),
+        varName: 'gr',
+    });
+    assert.deepEqual(at("gr.addQuery('caller_id.department', '!=', '|')").fieldPath, ['caller_id', 'department']);
+    assert.deepEqual(at("gr.addQuery('state', 'IN', '1,2|,3')").range, range(31, 32));
+    assert.deepEqual(at("gr.addQuery('state', 'IN', '1,2|,3')").exclude, ['1', '3']);
+    assert.deepEqual(at("gr.addQuery('state', 'IN', ['1', '2|', \"3\"])"), {
+        exclude: ['1', '3'],
+        fieldPath: ['state'],
+        range: range(35, 36),
+        varName: 'gr',
+    });
+    assert.deepEqual(at("gr.addQuery('state', 'NOT IN', ['|'])").exclude, []);
+    assert.deepEqual(at("gr.addQuery('state', 'NOTIN', [\"7\", \"|\"])").exclude, ['7']);
+    assert.equal(at("gr.addQuery('state', '=', ['|'])"), null);
+    assert.equal(at("if (gr.state == '|') {}").varName, 'gr');
+    assert.deepEqual(at("gr.priority.setValue('|')").fieldPath, ['priority']);
+    assert.equal(at("gr.addQuery('state', '1').addOrCondition('|')"), null);
+    assert.equal(at("gr.getValue('|')"), null);
+});
+
+test('choice picker uses the most specific table and the preferred language', () => {
+    const { we } = load();
+    const rows = [
+        { label: 'New', language: 'en', name: 'task', value: '1' },
+        { label: 'Nouveau', language: 'fr', name: 'incident', value: '1' },
+        { label: 'New', language: 'en', name: 'incident', value: '1' },
+        { label: 'On Hold', language: 'en', name: 'incident', value: '3' },
+    ];
+    assert.deepEqual(plain(we._pickFieldChoices(rows, ['incident', 'task'], 'fr')), [
+        { label: 'Nouveau', value: '1' },
+        { label: 'On Hold', value: '3' },
+    ]);
+    assert.deepEqual(plain(we._pickFieldChoices(rows.slice(0, 1), ['incident', 'task'], 'en')), [
+        { label: 'New', value: '1' },
+    ]);
+});
+
+test('choice value completions suggest values with their labels', async () => {
+    const { we, fake, context } = load();
+    const urls = [];
+    context.XMLHttpRequest = class {
+        open(method, url) {
+            this.url = decodeURIComponent(url);
+            urls.push(this.url);
+        }
+        setRequestHeader() {}
+        send() {
+            this.status = 200;
+            const result = this.url.includes('sys_db_object')
+                ? [{ 'super_class.name': '' }]
+                : [
+                      { label: 'Hardware', language: 'en', name: 'u_request', value: 'hardware' },
+                      { label: 'Software', language: 'en', name: 'u_request', value: 'software' },
+                  ];
+            this.responseText = JSON.stringify({ result });
+            setTimeout(() => this.onload());
+        }
+    };
+    we.registerGrChoiceValueCompletions();
+    const provider = fake.calls.find((c) => c.kind === 'completion' && c.lang === 'javascript').provider;
+    const text = "var gr = new GlideRecord('u_request');\ngr.addQuery('u_category', '');";
+    const result = await provider.provideCompletionItems(makeModel(text), { lineNumber: 2, column: 28 });
+    assert.deepEqual(
+        plain(result.suggestions.map((s) => [s.label, s.detail, s.insertText])),
+        [
+            ['hardware', 'Hardware', 'hardware'],
+            ['software', 'Software', 'software'],
+        ]
+    );
+    assert.ok(urls.some((u) => u.includes('sys_choice') && u.includes('nameINu_request^element=u_category')));
 });
 
 test('signature help finds the open call across nested calls and lines', () => {

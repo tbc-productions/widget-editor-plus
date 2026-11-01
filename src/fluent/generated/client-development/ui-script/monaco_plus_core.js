@@ -166,11 +166,14 @@
     var _newSiRegistered = false;
     var _grStringCompletionRegistered = false;
     var _grStringHoverRegistered = false;
+    var _grChoiceCompletionRegistered = false;
     var _grConstructorCompletionRegistered = false;
     var _siParamStringCompletionRegistered = false;
 
     /* 'table.field' → field descriptor | null — for string-arg hover. */
     var _fieldDocCache = {};
+    /* 'table.field' → Promise<{value, label}[]> — active sys_choice entries for choice-value completion. */
+    var _fieldChoiceCache = {};
 
     var _clientMonarchLoading = false;
     var _clientMonarchPending = [];
@@ -222,6 +225,11 @@
             return fallback != null ? fallback : '';
         }
         return typeof v === 'object' ? v.value || v.display_value || fallback || '' : v || fallback || '';
+    }
+
+    /* Escapes RegExp metacharacters; the class avoids a literal dollar-brace, which the instance strips from served UI scripts. */
+    function _escapeRegExp(text) {
+        return text.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&');
     }
 
     ///////////////////////////////////////////
@@ -565,7 +573,7 @@
     function parseSiConstants(script, className) {
         var constants = [];
         var seen = {};
-        var escaped = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        var escaped = _escapeRegExp(className);
         var re = new RegExp(
             '(\\/\\*\\*(?:(?!\\*\\/)[\\s\\S])*\\*\\/)?\\s*(?:^|[^\\w$.])' + escaped + '\\.(\\w+)\\s*=(?!=)\\s*',
             'gm'
@@ -1471,6 +1479,102 @@
     }
 
     /**
+     * Fetches active choices for a field from the most specific table in its hierarchy
+     * that defines them, preferring the user's language and falling back to English.
+     *
+     * @param {string} table - ServiceNow table name.
+     * @param {string} field - Field element name.
+     * @returns {Promise<Array<{value: string, label: string}>>}
+     */
+    function fetchFieldChoices(table, field) {
+        var key = table + '.' + field;
+        if (_fieldChoiceCache[key]) {
+            return _fieldChoiceCache[key];
+        }
+        var lang = String(window.g_lang || 'en');
+        _fieldChoiceCache[key] = _fetchTableHierarchy(table).then(function (chain) {
+            var tables = chain.length ? chain : [table];
+            return new Promise(function (resolve) {
+                var xhr = new XMLHttpRequest();
+                var query =
+                    'nameIN' +
+                    tables.join(',') +
+                    '^element=' +
+                    field +
+                    '^inactive!=true^languageIN' +
+                    (lang === 'en' ? 'en' : lang + ',en') +
+                    '^ORDERBYsequence^ORDERBYlabel';
+                var url =
+                    '/api/now/table/sys_choice' +
+                    '?sysparm_query=' +
+                    encodeURIComponent(query) +
+                    '&sysparm_fields=name%2Cvalue%2Clabel%2Clanguage&sysparm_limit=1000';
+                xhr.open('GET', url, true);
+                xhr.setRequestHeader('X-UserToken', window.g_ck || '');
+                xhr.setRequestHeader('Accept', 'application/json');
+                xhr.onload = function () {
+                    try {
+                        var records = xhr.status === 200 ? JSON.parse(xhr.responseText).result : null;
+                        if (Array.isArray(records)) {
+                            resolve(_pickFieldChoices(records, tables, lang));
+                            return;
+                        }
+                    } catch (e) {}
+                    delete _fieldChoiceCache[key];
+                    resolve([]);
+                };
+                xhr.onerror = function () {
+                    delete _fieldChoiceCache[key];
+                    resolve([]);
+                };
+                xhr.send();
+            });
+        });
+        return _fieldChoiceCache[key];
+    }
+
+    /**
+     * Picks sys_choice rows from the first table in the chain that has any, one per value,
+     * using the label in the preferred language when present.
+     *
+     * @param {Array<Object>} records - sys_choice rows ordered by sequence.
+     * @param {string[]} tables - Table hierarchy, most specific first.
+     * @param {string} lang - Preferred language code.
+     * @returns {Array<{value: string, label: string}>}
+     */
+    function _pickFieldChoices(records, tables, lang) {
+        var rows = records.map(function (r) {
+            return {
+                label: String(_snVal(r.label) || ''),
+                language: String(_snVal(r.language) || 'en'),
+                table: String(_snVal(r.name) || ''),
+                value: String(_snVal(r.value) || ''),
+            };
+        });
+        var owner = tables.find(function (t) {
+            return rows.some(function (r) {
+                return r.table === t;
+            });
+        });
+        var byValue = {};
+        var order = [];
+        rows.forEach(function (r) {
+            if (r.table !== owner || !r.value) {
+                return;
+            }
+            if (!byValue[r.value]) {
+                order.push(r.value);
+                byValue[r.value] = r;
+            } else if (r.language === lang && byValue[r.value].language !== lang) {
+                byValue[r.value] = r;
+            }
+        });
+        return order.map(function (v) {
+            return { label: byValue[v].label || v, value: v };
+        });
+    }
+
+    /**
      * Fetches up to TABLE_PREFIX_LIMIT table names from sys_db_object whose name starts
      * with the given prefix, excluding rotation shards such as syslog0001.
      * Requests are debounced and each prefix's result is reused for TABLE_PREFIX_TTL_MS.
@@ -1574,7 +1678,7 @@
         });
         var pat = new RegExp(
             '(?:^|[^\\w$.])' +
-                varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
+                _escapeRegExp(varName) +
                 '\\s*=\\s*new\\s+(?:global\\.)?(?:GlideRecordSecure|GlideRecord|GlideAggregate)\\s*\\(\\s*[\'"]([^\'"]+)[\'"]',
             'g'
         );
@@ -1589,7 +1693,7 @@
         /* QueryCondition from gr.addQuery(...) — resolve to its GlideRecord. */
         var qcPat = new RegExp(
             '(?:^|[^\\w$.])' +
-                varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
+                _escapeRegExp(varName) +
                 '\\s*=\\s*([\\w$]+)\\s*\\.\\s*(?:addQuery|addOrCondition)\\s*\\(',
             'g'
         );
@@ -1774,6 +1878,96 @@
         };
 
         return { varName: varName, range: range, dotPath: dotPath };
+    }
+
+    /* Value string args that compare against or assign a field: addQuery/addOrCondition/setValue (including IN arrays), comparisons and element setValue. */
+    var _GR_CHOICE_CALL_RE =
+        /(?:^|[^\w$.])([\w$]+)\.(?:addQuery|addOrCondition|setValue)\s*\(\s*(['"])([\w.]+)\2\s*,\s*(?:(['"])([^'"]*)\4\s*,\s*)?(\[(?:\s*(['"])[^'"]*\7\s*,)*\s*)?(['"])([^'"]*)$/;
+    var _GR_CHOICE_COMPARE_RE = /(?:^|[^\w$.])([\w$]+)\.([\w.]+?)\s*(?:===?|!==?|=)\s*(['"])([^'"]*)$/;
+    var _GR_CHOICE_ELEMENT_RE = /(?:^|[^\w$.])([\w$]+)\.([\w.]+)\.setValue\s*\(\s*(['"])([^'"]*)$/;
+
+    /**
+     * Returns {varName, fieldPath, range, exclude} if the cursor is inside a string that holds a
+     * value for a GlideRecord field, e.g. gr.addQuery('state', '|') or gr.state == '|'.
+     * For IN / NOT IN operators the range covers only the current comma-separated value or
+     * array element, and exclude lists the other values already given on the line.
+     *
+     * @param {Object} model    - Monaco editor model.
+     * @param {Object} position - Monaco position {lineNumber, column}.
+     * @returns {{varName: string, fieldPath: string[], range: Object, exclude: string[]}|null}
+     */
+    function _getChoiceValueContext(model, position) {
+        var line = model.getLineContent(position.lineNumber);
+        var col = position.column - 1; // 0-based
+        var before = line.substring(0, col);
+        var varName, field, quote, typed, op, arrayHead;
+
+        var m = before.match(_GR_CHOICE_CALL_RE);
+        if (m) {
+            varName = m[1];
+            field = m[3];
+            op = m[4] ? m[5].replace(/\s+/g, '').toUpperCase() : '';
+            arrayHead = m[6];
+            quote = m[8];
+            typed = m[9];
+        } else if ((m = before.match(_GR_CHOICE_ELEMENT_RE) || before.match(_GR_CHOICE_COMPARE_RE))) {
+            varName = m[1];
+            field = m[2];
+            quote = m[3];
+            typed = m[4];
+        } else {
+            return null;
+        }
+
+        var multi = op === 'IN' || op === 'NOTIN';
+        if (arrayHead && !multi) {
+            return null;
+        }
+        var split = multi && !arrayHead;
+        var startCol = col - typed.length;
+        if (split && typed.lastIndexOf(',') >= 0) {
+            startCol += typed.lastIndexOf(',') + 1;
+        }
+        var endCol = col;
+        while (endCol < line.length && line[endCol] !== quote && !(split && line[endCol] === ',')) {
+            endCol++;
+        }
+        if (endCol >= line.length) {
+            endCol = col;
+        }
+
+        var exclude = [];
+        if (arrayHead) {
+            var tail = line.substring(endCol + 1);
+            var close = tail.indexOf(']');
+            var listed = arrayHead + (close >= 0 ? tail.substring(0, close) : '');
+            var itemRe = /(['"])([^'"]*)\1/g;
+            var item;
+            while ((item = itemRe.exec(listed)) !== null) {
+                exclude.push(item[2]);
+            }
+        } else if (split) {
+            var closeQuote = line.indexOf(quote, col);
+            var whole = typed + line.substring(col, closeQuote >= 0 ? closeQuote : col);
+            exclude = whole.split(',');
+            exclude.splice(typed.split(',').length - 1, 1);
+        }
+
+        return {
+            exclude: exclude
+                .map(function (v) {
+                    return v.trim();
+                })
+                .filter(Boolean),
+            fieldPath: field.split('.').filter(Boolean),
+            range: {
+                endColumn: endCol + 1,
+                endLineNumber: position.lineNumber,
+                startColumn: startCol + 1,
+                startLineNumber: position.lineNumber,
+            },
+            varName: varName,
+        };
     }
 
     /**
@@ -5067,6 +5261,54 @@
         monaco.languages.registerCompletionItemProvider('typescript', provider);
     }
 
+    /** Suggests a choice field's values, labelled with their choice labels, inside GlideRecord value string args. */
+    function registerGrChoiceValueCompletions() {
+        if (_grChoiceCompletionRegistered || !window.monaco) {
+            return;
+        }
+        _grChoiceCompletionRegistered = true;
+
+        var provider = {
+            triggerCharacters: ["'", '"', ','],
+            provideCompletionItems: function (model, position) {
+                var ctx = _getChoiceValueContext(model, position);
+                if (!ctx || !ctx.fieldPath.length) {
+                    return { suggestions: [] };
+                }
+                var baseTable = _findGrTable(model, ctx.varName, position);
+                if (!baseTable) {
+                    return { suggestions: [] };
+                }
+                var field = ctx.fieldPath[ctx.fieldPath.length - 1];
+                return _resolveFieldChain(baseTable, ctx.fieldPath.slice(0, -1))
+                    .then(function (table) {
+                        return table ? fetchFieldChoices(table, field) : [];
+                    })
+                    .then(function (choices) {
+                        var remaining = choices.filter(function (c) {
+                            return ctx.exclude.indexOf(c.value) < 0;
+                        });
+                        return {
+                            suggestions: remaining.map(function (c, i) {
+                                return {
+                                    detail: c.label !== c.value ? c.label : '',
+                                    filterText: c.value + ' ' + c.label,
+                                    insertText: c.value,
+                                    kind: monaco.languages.CompletionItemKind.EnumMember,
+                                    label: c.value,
+                                    range: ctx.range,
+                                    sortText: ('0000' + i).slice(-5),
+                                };
+                            }),
+                        };
+                    });
+            },
+        };
+
+        monaco.languages.registerCompletionItemProvider('javascript', provider);
+        monaco.languages.registerCompletionItemProvider('typescript', provider);
+    }
+
     /** Shows dictionary metadata on hover for a GlideRecord field-name string, resolving each dot-walked segment's table. */
     function registerGrFieldStringHover() {
         if (_grStringHoverRegistered || !window.monaco) {
@@ -5462,6 +5704,7 @@
                 registerSignatureHelp();
                 registerNewSiCompletions();
                 registerGrFieldStringCompletions();
+                registerGrChoiceValueCompletions();
                 registerGrFieldStringHover();
                 registerGrConstructorCompletions();
                 registerSiParamStringCompletions();
