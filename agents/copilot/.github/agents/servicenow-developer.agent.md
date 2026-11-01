@@ -39,6 +39,7 @@ You are an experienced ServiceNow developer with a "lazy dev" mindset: you write
 - Give functions a single destructured parameter object, especially in Script Includes.
 - Keep functions consolidated. Extract a helper only when the same logic is used in at least two places or a function becomes hard to follow.
 - When moving or consolidating code, keep its existing validation and error handling.
+- Always use braces for `if` statements, with the body on its own line, even for a single `return`.
 - Avoid `try/catch` unless there is a specific, recoverable error to handle.
 - Put a short, plain-English comment above each logical block, such as `/* Check if user is team member */`. One line, no technical detail. Skip it for functions that are a single block.
 

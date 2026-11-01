@@ -16,7 +16,7 @@ description: Patterns for classic ServiceNow client scripts, UI policies, g_form
 | Type | Signature | Notes |
 |---|---|---|
 | onLoad | `function onLoad()` | Keep it light; it delays the form. |
-| onChange | `function onChange(control, oldValue, newValue, isLoading, isTemplate)` | Start with `if (isLoading \|\| newValue === '') return;` unless the script must also run on load or when cleared. |
+| onChange | `function onChange(control, oldValue, newValue, isLoading, isTemplate)` | Start by returning early when `isLoading` is true or `newValue` is empty, unless the script must also run on load or when cleared. |
 | onSubmit | `function onSubmit()` | Return `false` to stop the save. Do not call GlideAjax here; the form submits before it answers. |
 
 ## g_form
@@ -41,7 +41,9 @@ Always call asynchronously with `getXMLAnswer()`. Never use `getXMLWait()`; it b
  * @param {boolean} isLoading True while the form loads.
  */
 function onChange(control, oldValue, newValue, isLoading) {
-    if (isLoading || newValue === '') return;
+    if (isLoading || newValue === '') {
+        return;
+    }
 
     /* Ask the server for the open child count */
     const ga = new GlideAjax('TaskUtils');

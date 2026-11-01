@@ -90,6 +90,46 @@ api.controller = function ($scope) {
 - Write plain text in templates. Do not use `${…}` message tags or `gs.getMessage()` for template text unless asked.
 - Use `<sp-widget widget="c.data.embedded">` with `$sp.getWidget()` to embed widgets.
 
+## Forms
+
+Build forms with `ngForm` and AngularJS validation, not hand-written checks in the controller.
+
+```html
+<form name="c.taskForm" novalidate ng-submit="c.submit()">
+  <div class="form-group" ng-class="{ 'has-error': c.taskForm.shortDescription.$invalid && (c.taskForm.shortDescription.$touched || c.taskForm.$submitted) }">
+    <label for="short-description">Short description</label>
+    <input id="short-description" name="shortDescription" class="form-control" ng-model="c.data.shortDescription"
+           required ng-maxlength="160" aria-describedby="short-description-error"
+           ng-attr-aria-invalid="{{c.taskForm.shortDescription.$invalid && (c.taskForm.shortDescription.$touched || c.taskForm.$submitted)}}">
+    <div id="short-description-error" class="help-block" ng-messages="c.taskForm.shortDescription.$error"
+         ng-if="c.taskForm.shortDescription.$touched || c.taskForm.$submitted">
+      <p ng-message="required">Enter a short description.</p>
+      <p ng-message="maxlength">Use 160 characters or fewer.</p>
+    </div>
+  </div>
+  <button type="submit" class="btn btn-primary">Save</button>
+</form>
+```
+
+```javascript
+/**
+ * Saves the task when the form is valid.
+ */
+c.submit = function () {
+    if (c.taskForm.$invalid) {
+        return;
+    }
+    c.server.get({ action: 'save', shortDescription: c.data.shortDescription }).then((response) => {
+        c.data = response.data;
+    });
+};
+```
+
+- Name the form on the controller (`name="c.taskForm"`) and add `novalidate` so AngularJS, not the browser, shows the errors.
+- Use built-in validators (`required`, `ng-required`, `ng-minlength`, `ng-maxlength`, `ng-pattern`, `type="email"`) before writing a custom one.
+- Show errors with `ng-messages` and `ng-message`, after the field is touched or the form is submitted, linked to the input with `aria-describedby`.
+- Return early from the submit function when `$invalid`. The server script still validates `input`, because client checks can be bypassed.
+
 ## Angular providers
 
 Directives, services and factories live in `sp_angular_provider` and are attached through the widget's Angular Providers related list. Put shared client logic there instead of copying it between widgets.

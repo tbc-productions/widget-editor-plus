@@ -18,11 +18,14 @@ Every function gets a JSDoc block. Keep it short: a description, then `@param` a
 
 ## Parameter descriptions
 
-| Parameter | Description |
-|---|---|
-| sys_id or field value | The table and field it comes from, in backticks: `` `task.assigned_to` ``. For a record's own sys_id, use `` `sys_user.sys_id` ``. |
-| GlideRecord or GlideRecordSecure | The table, in backticks, followed by "record": `` `task` record ``. |
-| Anything else | A short plain-English description. |
+| Parameter | Pattern | Examples |
+|---|---|---|
+| Field value, including a reference sys_id | `` `<table>.<field>` `` for the table and field the value comes from or is matched against | `` `task.assigned_to` ``, `` `incident.assignment_group` `` |
+| A record's own sys_id | `` `<table>.sys_id` `` | `` `sys_user.sys_id` ``, `` `sc_cat_item.sys_id` `` |
+| GlideRecord or GlideRecordSecure | `` `<table>` record `` | `` `incident` record ``, `` `sys_user` record `` |
+| Anything else | A short plain-English description | Maximum number of rows to return. |
+
+Use the parameter's actual table and field, never one copied from these examples.
 
 ## Destructured parameters
 
@@ -80,9 +83,13 @@ GroupUtils.prototype = {
      */
     getGroupSummary: function ({ groupId, limit = 50 } = {}) {
         /* Get the group */
-        if (!groupId) return null;
+        if (!groupId) {
+            return null;
+        }
         const group = new GlideRecordSecure('sys_user_group');
-        if (!group.get(groupId)) return null;
+        if (!group.get(groupId)) {
+            return null;
+        }
 
         /* Collect the group's active incidents */
         const incidents = [];
@@ -110,7 +117,9 @@ GroupUtils.prototype = {
      * @returns {{sys_id: string, is_active: boolean}|null} User status, or null if the user is missing or not found.
      */
     getUserStatus: function ({ userId } = {}) {
-        if (!userId) return null;
+        if (!userId) {
+            return null;
+        }
         const user = new GlideRecordSecure('sys_user');
         return user.get(userId) ? { is_active: user.getValue('active') === '1', sys_id: userId } : null;
     },
@@ -145,7 +154,9 @@ ES5 equivalent for scripts without ES12:
  */
 function getOpenTaskCount(params) {
     var userId = params && params.userId;
-    if (!userId) return 0;
+    if (!userId) {
+        return 0;
+    }
     var ga = new GlideAggregate('task');
     ga.addActiveQuery();
     ga.addQuery('assigned_to', userId);
@@ -165,7 +176,9 @@ Client-callable GlideAjax method:
  */
 getDepartment: function () {
     const userId = this.getParameter('sysparm_user_id');
-    if (!userId) return '';
+    if (!userId) {
+        return '';
+    }
     const user = new GlideRecordSecure('sys_user');
     return user.get(userId) ? user.getDisplayValue('department') : '';
 },
@@ -180,6 +193,8 @@ Business rule:
  * @param {GlideRecord} previous `incident` record before the save
  */
 (function executeRule(current, previous) {
-    if (current.location.nil()) current.setValue('location', current.caller_id.location.toString());
+    if (current.location.nil()) {
+        current.setValue('location', current.caller_id.location.toString());
+    }
 })(current, previous);
 ```

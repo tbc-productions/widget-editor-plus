@@ -43,7 +43,9 @@ TaskUtils.prototype = Object.extendsObject(AbstractAjaxProcessor, {
      */
     getOpenChildCount: function () {
         const parentId = this.getParameter('sysparm_parent');
-        if (!parentId) return '0';
+        if (!parentId) {
+            return '0';
+        }
         const ga = new GlideAggregate('task');
         ga.addQuery('parent', parentId);
         ga.addActiveQuery();
