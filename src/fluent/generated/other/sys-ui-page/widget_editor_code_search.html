@@ -1867,7 +1867,7 @@
                                     </div>
                                     <div class="cs-card-actions">
                                         <span class="cs-updated" ng-if="result.updatedOn">Updated on {{ctrl.formatDate(result.updatedOn)}}</span>
-                                        <a class="btn btn-default" ng-if="result.isWidget" ng-href="{{result.widgetEditorUrl}}" target="_blank" title="Open widget in Widget Editor+">
+                                        <a class="btn btn-default" ng-if="result.editorUrl" ng-href="{{result.editorUrl}}" target="_blank" title="Open record in Widget Editor+">
                                             <span>Widget Editor+</span>
                                         </a>
                                     </div>
@@ -1927,8 +1927,8 @@
                                 </div>
                                 <div class="cs-card-actions">
                                     <span class="cs-updated" ng-if="result.updatedOn">Updated on {{ctrl.formatDate(result.updatedOn)}}</span>
-                                    <a class="btn btn-primary" ng-if="result.isWidget" ng-href="{{result.widgetEditorUrl}}" target="_blank" title="Open widget in Widget Editor+"> 
-                                        <span>Open widget</span>
+                                    <a class="btn btn-primary" ng-if="result.editorUrl" ng-href="{{result.editorUrl}}" target="_blank" title="Open record in Widget Editor+">
+                                        <span>Widget Editor+</span>
                                     </a>
                                 </div>
                             </header>

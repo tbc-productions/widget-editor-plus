@@ -203,6 +203,7 @@ test('update-set records gain graph edges without adding suggested records', asy
     const ctrl = {
         related: [first], rows: [first], viewMode: 'graph',
         isExportBlocked: () => false, includesPreviousVersion: () => false, canIncludePreviousVersion: () => false, includePreviousUpdates: false, embeddedInModal: false,
+        opensInEditor: () => false,
     };
     const context = {
         ctrl,
@@ -237,4 +238,65 @@ test('update-set records gain graph edges without adding suggested records', asy
     linkedProvider = 'provider-2';
     await context.discoverGraphLinks([first], true);
     assert.equal(ctrl.graph.edges.length, 0, 'refresh removes stale relationships');
+});
+
+test('update set links reflect added sets and load them when opened', async () => {
+    const setId = 'a'.repeat(32);
+    const missingId = 'b'.repeat(32);
+    const urls = [];
+    const window = {
+        location: { href: 'https://example.test/ui_page.do?sys_id=page' },
+        history: {
+            replaceState(_state, _title, url) {
+                urls.push(url);
+                window.location.href = url;
+            },
+        },
+    };
+    window.top = window;
+    window.parent = window;
+    const urlContext = { URL, window };
+    vm.createContext(urlContext);
+    vm.runInContext(script.slice(script.indexOf('function replacePageUrl('), script.indexOf('async function runPool(')), urlContext);
+
+    urlContext.updateUpdateSetUrl('', [{ sys_id: setId }, { sys_id: missingId }]);
+    assert.equal(new URL(urls.at(-1)).searchParams.get('update_set'), setId + ',' + missingId);
+    urlContext.updateUpdateSetUrl('', [{ sys_id: setId }, { sys_id: missingId }]);
+    assert.equal(urls.length, 1);
+    urlContext.updatePrimaryUrl('sp_widget', 'widget-1');
+    assert.equal(new URL(urls.at(-1)).searchParams.has('update_set'), false);
+
+    const requests = [];
+    const ctrl = {
+        usPicker: { pending: {}, error: '' },
+        updateSets: [],
+        related: [],
+        primary: { table: '', sysId: '' },
+        includePreviousUpdates: false,
+        loadingInitial: true,
+        saveSelections() {},
+    };
+    const context = {
+        ctrl,
+        $q: Promise,
+        ajax(_action, params) {
+            requests.push(params.update_set);
+            if (params.update_set === missingId) return Promise.resolve({ success: true, members: [], updateSet: null });
+            return Promise.resolve({
+                success: true,
+                members: [{ table: 'sp_widget', sys_id: 'widget-1', label: 'Widget' }],
+                updateSet: { sys_id: setId, name: 'Shared set' },
+            });
+        },
+        rebuildRows() {},
+        discoverGraphLinks() {},
+    };
+    vm.createContext(context);
+    vm.runInContext(script.slice(script.indexOf('function addUpdateSetMembers('), script.indexOf('ctrl.removeUpdateSet =')), context);
+    await context.loadInitialUpdateSets([setId, missingId]);
+
+    assert.deepEqual(requests, [setId, missingId]);
+    assert.deepEqual(ctrl.updateSets.map(set => set.name), ['Shared set']);
+    assert.deepEqual(ctrl.related.map(row => row.updateSetSysId), [setId]);
+    assert.equal(ctrl.loadingInitial, false);
 });

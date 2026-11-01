@@ -1202,15 +1202,18 @@ test('Credit preferences export fresh shared values, import on Save and stay out
     assert.equal(saves.length, 1, 'Import stays staged until Save');
     h.run('_applyPrefsBlobToEdit({credit:{view:"invalid",whitespace:"all"}})');
     assert.deepEqual(JSON.parse(JSON.stringify(h.$scope.userPrefsEdit.credit)), downloads[0].credit);
+    const classReloads = [];
     Object.assign(h.context, {
-        _buildFontFamily: value => value, _applyJsFormatOptions() {}, _snapshotEditorPrefs() {},
+        _buildFontFamily: value => value, _applyJsFormatOptions() {}, _runWidgetDataChecks() {}, _snapshotEditorPrefs() {},
         _findLocalDrafts() {}, _closeModal: fn => fn(), monacoEditors: {},
+        loadHtmlMonarchDts: (cb, clearIfUnset) => classReloads.push(clearIfUnset),
     });
     h.$scope.onEditorVisibilityChange = () => {};
     const saveStart = source.indexOf('                $scope.saveUserPrefsModal =');
     vm.runInContext(source.slice(saveStart, source.indexOf('                $scope.cancelUserPrefsModal', saveStart)), h.context);
     h.$scope.saveUserPrefsModal();
     assert.deepEqual(saves.at(-1).credit, downloads[0].credit, 'Save includes the imported choices');
+    assert.deepEqual(classReloads, [true], 'Save reloads class completions for the chosen portal theme');
 });
 
 function loadUnsavedGuard(h) {

@@ -500,6 +500,12 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         }
         if (values.sys_policy) values.sys_policy_display = gr.getDisplayValue('sys_policy') || '';
         values.canWrite = values.canWrite && !values.sys_policy;
+        if (sysId) {
+            var recordUpdateSet = this._getInProgressUpdateSet(gr.getTableName() + '_' + sysId);
+            values.current_update_set_id = gs.getPreference('sys_update_set') || '';
+            values.widget_update_set_id = recordUpdateSet ? recordUpdateSet.sys_id : '';
+            values.widget_update_set_name = recordUpdateSet ? recordUpdateSet.name : '';
+        }
         return {
             success: true,
             widget: values,
@@ -617,12 +623,15 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             } else if (names.length && !gr.update())
                 throw new Error('Save failed. Check access and record validation.');
             var readable = gr.get(sysId) && gr.canRead();
+            var saveUpdateSet = isNew || names.length ? this._getSaveUpdateSet() : null;
             return this._answer({
                 success: true,
                 sys_id: sysId,
                 sys_updated_on: gr.getValue('sys_updated_on') || '',
                 sys_mod_count: gr.getValue('sys_mod_count') || '',
                 created_record: isNew && readable ? this._editorRecordData(gr, profiles[table], sysId) : null,
+                update_set_sys_id: saveUpdateSet ? saveUpdateSet.sys_id : null,
+                update_set_name: saveUpdateSet ? saveUpdateSet.name : null,
             });
         } catch (error) {
             return this._answer({ success: false, error: error.message || 'Save failed.' });
@@ -751,7 +760,8 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
      *   volatility_level: string, volatility_level_display: string,
      *   deprecated: boolean,
      *   update_set_mismatch: boolean, widget_update_set_id: string,
-     *   widget_update_set_name: string}}} Return value.
+     *   widget_update_set_name: string, current_update_set_id: string,
+     *   current_update_set_name: string}}} Return value.
      */
     getWidget: function () {
         if (this._getEditorTable() !== 'sp_widget') return this._getEditorRecord();
@@ -815,38 +825,11 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             widgetVolDisplay = widgetVolLevel ? widgetVolGr.getDisplayValue('volatility_level') : '';
         }
 
-        // Only flag if the update set is still in progress; follows the reverted_from chain to the version whose update set the content actually reflects.
-        var widgetUpdateSetId = '';
-        var widgetUpdateSetName = '';
-        var updateSetMismatch = false;
-        var uvGr = new GlideRecordSecure('sys_update_version');
-        uvGr.addQuery('name', sysClassName + '_' + sysId);
-        uvGr.orderByDesc('sys_created_on');
-        uvGr.setLimit(1);
-        uvGr.query();
-        if (uvGr.next()) {
-            var seen = {};
-            seen[uvGr.getUniqueValue()] = true;
-            var revertedFrom = uvGr.getValue('reverted_from');
-            var resolvedGr = uvGr;
-            while (revertedFrom && !seen[revertedFrom]) {
-                seen[revertedFrom] = true;
-                var chainGr = new GlideRecordSecure('sys_update_version');
-                if (!chainGr.get(revertedFrom)) {
-                    break;
-                }
-                resolvedGr = chainGr;
-                revertedFrom = chainGr.getValue('reverted_from');
-            }
-            var uxSetId = resolvedGr.getValue('source');
-            var usGr = new GlideRecordSecure('sys_update_set');
-            if (usGr.get(uxSetId) && usGr.getValue('state') === 'in progress') {
-                widgetUpdateSetId = uxSetId;
-                widgetUpdateSetName = usGr.getDisplayValue('name');
-                var currentUpdateSetId = gs.getPreference('sys_update_set');
-                updateSetMismatch = widgetUpdateSetId !== currentUpdateSetId;
-            }
-        }
+        var currentUpdateSetId = gs.getPreference('sys_update_set') || '';
+        var widgetUpdateSet = this._getInProgressUpdateSet(sysClassName + '_' + sysId);
+        var widgetUpdateSetId = widgetUpdateSet ? widgetUpdateSet.sys_id : '';
+        var widgetUpdateSetName = widgetUpdateSet ? widgetUpdateSet.name : '';
+        var updateSetMismatch = !!widgetUpdateSet && widgetUpdateSetId !== currentUpdateSetId;
 
         var instGr = new GlideRecordSecure('sp_instance');
         instGr.addQuery('sp_widget', sysId);
@@ -888,6 +871,8 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             update_set_mismatch: updateSetMismatch,
             widget_update_set_id: widgetUpdateSetId,
             widget_update_set_name: widgetUpdateSetName,
+            current_update_set_id: currentUpdateSetId,
+            current_update_set_name: this._getUpdateSetName(currentUpdateSetId),
             sys_class_name: sysClassName,
             is_header_footer: isHeaderFooter,
             'static': isHeaderFooter && gr.getValue('static') == '1',
@@ -1044,25 +1029,14 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             // Re-read after update so the returned sys_updated_on reflects what the DB committed
             // (AJAX processor context may suppress auto-sys-field updates until commit).
             gr.get(resultId);
-            var updateSetSysId = null;
-            var updateSetName = null;
-            try {
-                var usId = new global.GlideUpdateSet().get();
-                if (usId) {
-                    var usGr = new GlideRecordSecure('sys_update_set');
-                    if (usGr.get(usId)) {
-                        updateSetSysId = usGr.getUniqueValue();
-                        updateSetName = usGr.getValue('name');
-                    }
-                }
-            } catch (e) {}
+            var saveUpdateSet = this._getSaveUpdateSet();
             return this._answer({
                 success: true,
                 sys_id: resultId,
                 sys_updated_on: gr.getValue('sys_updated_on') || '',
                 sys_mod_count: gr.getValue('sys_mod_count') || '',
-                update_set_sys_id: updateSetSysId,
-                update_set_name: updateSetName,
+                update_set_sys_id: saveUpdateSet ? saveUpdateSet.sys_id : null,
+                update_set_name: saveUpdateSet ? saveUpdateSet.name : null,
             });
         } catch (ex) {
             return this._answer({
@@ -2480,6 +2454,72 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     ////////////////////////////////////////////////////////////
     // Presence
     ////////////////////////////////////////////////////////////
+
+    /**
+     * Returns the session's current update set so the editor can detect changes made in other windows.
+     * @returns {{success: boolean, update_set_id: string}} Return value.
+     */
+    getCurrentUpdateSet: function () {
+        return this._answer({
+            success: true,
+            update_set_id: gs.getPreference('sys_update_set') || '',
+        });
+    },
+
+    /**
+     * Returns an update set's display name, or an empty string when it is missing or unreadable.
+     * @param {string} sysId - sys_update_set sys_id.
+     * @returns {string} Update set name.
+     */
+    _getUpdateSetName: function (sysId) {
+        var usGr = new GlideRecordSecure('sys_update_set');
+        return sysId && usGr.get(sysId) ? usGr.getDisplayValue('name') : '';
+    },
+
+    /**
+     * Returns the in-progress update set holding a record's latest version, following the
+     * reverted_from chain to the version whose update set the content actually reflects.
+     * @param {string} updateName - sys_update_version name, such as sp_widget_<sys_id>.
+     * @returns {{sys_id: string, name: string}|null} Update set, or null when none is in progress.
+     */
+    _getInProgressUpdateSet: function (updateName) {
+        var uvGr = new GlideRecordSecure('sys_update_version');
+        uvGr.addQuery('name', updateName);
+        uvGr.orderByDesc('sys_created_on');
+        uvGr.setLimit(1);
+        uvGr.query();
+        if (!uvGr.next()) return null;
+        var seen = {};
+        seen[uvGr.getUniqueValue()] = true;
+        var revertedFrom = uvGr.getValue('reverted_from');
+        var resolvedGr = uvGr;
+        while (revertedFrom && !seen[revertedFrom]) {
+            seen[revertedFrom] = true;
+            var chainGr = new GlideRecordSecure('sys_update_version');
+            if (!chainGr.get(revertedFrom)) {
+                break;
+            }
+            resolvedGr = chainGr;
+            revertedFrom = chainGr.getValue('reverted_from');
+        }
+        var usId = resolvedGr.getValue('source');
+        var usGr = new GlideRecordSecure('sys_update_set');
+        if (!usGr.get(usId) || usGr.getValue('state') !== 'in progress') return null;
+        return { name: usGr.getDisplayValue('name'), sys_id: usId };
+    },
+
+    /**
+     * Returns the update set that saves in this transaction are recorded in.
+     * @returns {{sys_id: string, name: string}|null} Current update set, or null when unreadable.
+     */
+    _getSaveUpdateSet: function () {
+        try {
+            var usId = new global.GlideUpdateSet().get();
+            var usGr = new GlideRecordSecure('sys_update_set');
+            if (usId && usGr.get(usId)) return { name: usGr.getValue('name'), sys_id: String(usId) };
+        } catch (e) {}
+        return null;
+    },
 
     /**
      * Returns other users currently present on the widget or its related Angular templates

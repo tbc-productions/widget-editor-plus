@@ -47,6 +47,8 @@ A Monaco-based editor for Service Portal widgets.
 - Recover unsaved changes from automatic local drafts.
 - ServiceNow and AngularJS IntelliSense, including table fields, Script Includes and providers.
 - AngularJS expression validation and syntax highlighting.
+- Check that widget data and server actions match across templates, the client script, link function and server script, and flag `data` or `options` used in the wrong script.
+- Warn when the current update set changes in another window.
 - Hover over Unicode escapes in JSON and scripts to preview characters and emoji.
 - Widget search, recent history, live developer presence and SN Utils integration.
 

@@ -108,6 +108,13 @@
             color: rgb(var(--now-color--neutral-0, var(--now-color--neutral-12, 38, 50, 56)));
         }
 
+        .we-record-update-set {
+            flex: 0 0 auto;
+            margin-left: -0.25rem;
+            font-size: var(--now-font-size--md, 16px);
+            color: rgb(var(--now-color--neutral-2));
+        }
+
         .we-alert-pill-wrapper {
             position: relative;
             display: inline-flex;
@@ -2815,6 +2822,7 @@
             <div class="we-alert-pills-row" ng-class="{'we-alert-pills-row--empty': loading || loadError || showPicker}" ng-click="(showWidgetPickerModal || showPicker) &amp;&amp; $event.stopPropagation()">
                 <we-app-drawer current-app="widget-editor" credit-available="${gs.hasRole('admin')}"></we-app-drawer>
                 <span class="we-record-name" ng-attr-title="{{loading || loadError || showPicker ? 'Widget Editor+' : (widget[recordPrimaryField] || (isNewWidget ? 'New ' + recordLabel : recordLabel))}}">{{loading || loadError || showPicker ? 'Widget Editor+' : (widget[recordPrimaryField] || (isNewWidget ? 'New ' + recordLabel : recordLabel))}}</span>
+                <i class="icon-livefeed we-record-update-set" role="img" ng-if="!loading &amp;&amp; !loadError &amp;&amp; !showPicker &amp;&amp; !isVersionView &amp;&amp; isInCurrentUpdateSet()" aria-label="{{'Current update set: ' + recordUpdateSet.name}}" we-tooltip-title="{{'Current update set: ' + recordUpdateSet.name}}"></i>
 
                 <!-- ==================== 1. CRITICAL PILLS ==================== -->
 
@@ -3977,6 +3985,12 @@
                                     <span class="input-group-checkbox">
                                         <input type="checkbox" class="checkbox" id="chk-show-unused-vars" ng-model="userPrefsEdit.showUnusedVars" />
                                         <label class="checkbox-label" for="chk-show-unused-vars">Show unused variables</label>
+                                    </span>
+                                </div>
+                                <div class="we-modal-option" ng-if="isWidgetRecord !== false">
+                                    <span class="input-group-checkbox">
+                                        <input type="checkbox" class="checkbox" id="chk-widget-data-checks" ng-model="userPrefsEdit.widgetDataChecks" />
+                                        <label class="checkbox-label" for="chk-widget-data-checks" we-tooltip-title="Highlights data properties the server script never sets, server data the client script, link function and templates never use, actions the server script doesn't handle, and data or options used in the wrong script.">Check widget data and actions</label>
                                     </span>
                                 </div>
                                 <div class="we-modal-option we-modal-option-row">

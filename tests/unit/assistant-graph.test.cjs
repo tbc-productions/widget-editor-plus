@@ -292,3 +292,22 @@ test('A deferred fit cannot override a subsequent source-preserving rebuild', ()
     frames.pop()();
     assert.equal(context.fits, 1);
 });
+
+test('record links open Widget Editor+ record types in the editor', async () => {
+    const ctrl = { viewMode: 'table' };
+    let processor;
+    const context = { ctrl, angular: { noop() {} }, rebuildGraph() {},
+        request: async (_action, _params, name) => { processor = name; return { success: true, types: [{ table: 'sp_widget' }, { table: 'sys_script_include' }] }; } };
+    vm.createContext(context);
+    vm.runInContext(source.slice(source.indexOf('var editorTables ='), source.indexOf('ctrl.openGraphRecord =')) + ';loadEditorTables();', context);
+    await new Promise(resolve => setImmediate(resolve));
+    const editor = 'ui_page.do?sys_id=8b2e70458373fe1070b8b5dfeeaad35e';
+    assert.equal(processor, 'WidgetEditorAjax');
+    assert.equal(ctrl.recordUrl('sp_widget', 'a1'), '/nav_to.do?uri=' + encodeURIComponent(editor + '&widget_id=a1'));
+    assert.equal(ctrl.recordUrl('sys_script_include', 'b2'),
+        '/nav_to.do?uri=' + encodeURIComponent(editor + '&record_table=sys_script_include&record_sys_id=b2'));
+    assert.equal(ctrl.recordUrl('incident', 'c3'), '/nav_to.do?uri=' + encodeURIComponent('incident.do?sys_id=c3'));
+    assert.equal(ctrl.recordLinkTitle('sys_script_include'), 'Open record in Widget Editor+');
+    assert.equal(ctrl.recordLinkTitle('incident'), 'Open record in platform');
+    assert.ok(!/nav_to\.do\?uri=\{\{/.test(source));
+});

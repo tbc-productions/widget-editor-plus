@@ -46,7 +46,8 @@ function searchOneScript(script, query, configure = () => {}) {
         Class: { create() { return function WidgetEditorCodeSearchAjax() {}; } },
         GlideRecord,
         JSON,
-        encodeURIComponent
+        encodeURIComponent,
+        WidgetEditorAjax: function () { this._getEditorProfiles = () => ({}); }
     };
     context.Object = Object.create(Object);
     context.Object.extendsObject = (_base, members) => members;
