@@ -9,17 +9,17 @@ Review the code the user supplied: an AI Assistant export, attached files or pas
 
 ## What to check
 
-Judge the code against the other skills in this pack.
+Judge the code against the agent's rules and the other skills in this pack. Common findings:
 
 | Category | Look for |
 |---|---|
-| Security | `GlideRecord` without a justifying comment, client input used without checks, missing `canRead()`/`canWrite()`, privileged actions from client input, unescaped HTML (`ng-bind-html`, `innerHTML`), hard-coded credentials or instance URLs. |
-| Performance | Queries inside loops, counting with loops instead of `GlideAggregate`, missing `setLimit()`, fetching whole records when one value is needed, synchronous work that belongs in an async rule, `getXMLWait()`. |
-| Reliability | Boolean fields read with `getValue()` and compared with `true`, `'true'` or used as a truthy check instead of `=== '1'`, queries run with `null`/`undefined` values, unchecked `get()` results, `current.update()` in before rules, missing required parameter checks, wrong ES syntax for the script type or release, DOM or browser APIs in server scripts, changes to shared code that break other callers, validation or error handling dropped when code was moved. |
-| Maintainability | Missing or inaccurate JSDoc, blocks of code without a short comment saying what they do (or comments on every line), positional parameters where destructuring fits, unnecessary helpers, hard-coded sys_ids or values that belong in a property, dead code, unclear names, code that duplicates an existing Script Include or built-in API. |
-| Best practice | Script Includes not using `Class.create()`, shorthand methods in server scripts, string comparison on `GlideElement` values without `getValue()`/`String()`, logic that belongs in a condition, ACL or UI policy instead of script, widget templates missing labels, `alt` text or keyboard access, `ng-repeat` lists built from repeating `<div>`s where `<ul>`/`<ol>` and `<li>`, `<dl>` for term–description pairs, or a table for tabular data would give screen readers the group context, `role` attributes where a native HTML element would do. |
+| Security | Unjustified `GlideRecord`, unchecked client input, missing `canRead()`/`canWrite()`, unescaped HTML (`ng-bind-html`, `innerHTML`), hard-coded credentials. |
+| Performance | Queries in loops, counting without `GlideAggregate`, missing `setLimit()`, slow work outside async rules, `getXMLWait()`, GlideAjax where `g_scratchpad` would do. |
+| Reliability | Boolean `getValue()` not compared with `'1'`, queries on empty values, unchecked `get()`, `current.update()` in before rules, wrong ES syntax, DOM APIs on the server, broken callers of shared code, safeguards dropped when code moved. |
+| Maintainability | Missing or wrong JSDoc, missing block comments (or one on every line), positional parameters, single-use helpers, hard-coded sys_ids, dead code, duplicated logic. |
+| Best practice | No `Class.create()`, shorthand methods, script where a condition or UI policy would do, `GlideElement` compared without `getValue()`, missing labels, `alt` text or keyboard access, repeated `<div>`s instead of list or table markup, `role` where a native element would do. |
 
-Also flag over-engineering as Low: validation the caller cannot need, such as sys_id pattern checks, and helpers used only once.
+Also flag over-engineering as Low, such as sys_id pattern checks.
 
 ## Priorities
 

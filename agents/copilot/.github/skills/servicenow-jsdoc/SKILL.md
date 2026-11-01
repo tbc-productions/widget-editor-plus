@@ -15,7 +15,6 @@ Every function gets a JSDoc block. Keep it short: a description, then `@param` a
 - Use `@throws` only when the function deliberately throws.
 - Use `@private` for Script Include methods prefixed with `_`.
 - Do not describe validation the function does not perform.
-- Use Australian English.
 
 ## Parameter descriptions
 
@@ -27,12 +26,11 @@ Every function gets a JSDoc block. Keep it short: a description, then `@param` a
 
 ## Destructured parameters
 
-Functions take a single destructured object so parameters can be added later without changing callers. This applies especially to Script Include functions.
+Functions take a single destructured object, defaulted to `{}`, so parameters can be added later without changing callers: `getTasks: function ({ userId, limit = 10 } = {})`.
 
-- Destructure in the signature and default the object to `{}`: `getTasks: function ({ userId, limit = 10 } = {})`.
 - Document the object as `params` and each property as `params.name`.
-- Keep positional parameters only where the platform calls the function with fixed arguments, such as business rules (`current`, `previous`), client scripts and GlideAjax methods.
-- Parameter destructuring works in any script with ES12 enabled, on any release, including widget server scripts. Only scripts without ES12 take a `params` object and read its properties instead.
+- Keep positional parameters only where the platform calls the function with fixed arguments: business rules (`current`, `previous`), client scripts and GlideAjax methods.
+- Without ES12, take a `params` object instead (see the ES5 example).
 
 ## Types
 
@@ -46,15 +44,8 @@ Functions take a single destructured object so parameters can be added later wit
 | Client form | `{GlideForm}` |
 | Array | `{string[]}`, `{Object[]}`, `{{number: string}[]}`; never `Array<…>` |
 | Small object | Inline: `{{sys_id: string, is_active: boolean}}` |
-| Complex object | `@typedef` (see below) |
-
-## Angular provider scope bindings
-
-Document each directive scope binding with a one-line `@type` comment: `/** @type {string} Tooltip text */`. See the `service-portal-widgets` skill for an example.
-
-## `@typedef`
-
-Use `@typedef` in moderation. It suits a non-private Script Include function that returns a complex object: many properties, nested objects or arrays of objects. Use inline notation for small, flat objects, and for private functions. Place the `@typedef` immediately above the Script Include.
+| Complex object | `@typedef`, in moderation: for a non-private Script Include function returning many properties, nested objects or arrays of objects. Place it immediately above the Script Include. |
+| Directive scope binding | One-line `@type`: `/** @type {string} Tooltip text */` |
 
 ## Examples
 

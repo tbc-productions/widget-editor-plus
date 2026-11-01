@@ -18,7 +18,7 @@ description: Patterns for Service Portal widgets, including server scripts, clie
 
 ## Server script
 
-Write widget server scripts in ES5 style (`var`, `function`, no optional chaining). Destructured function parameters are fine when ES12 is enabled for the widget. See the `servicenow-es-compatibility` skill.
+Widget server scripts are ES5 style; see the `servicenow-es-compatibility` skill.
 
 ```javascript
 (function () {
@@ -45,8 +45,7 @@ Write widget server scripts in ES5 style (`var`, `function`, no optional chainin
 ```
 
 - Branch on `input` for client actions. `input` is `undefined` on the first load.
-- Treat `input` as untrusted: check required values are present before querying, and limit actions to a known set.
-- Use `GlideRecordSecure` because widget input comes from the browser.
+- Treat `input` as untrusted: check required values before querying, limit actions to a known set, and use `GlideRecordSecure`.
 - Put only what the template needs in `data`.
 
 ## Client controller
@@ -57,9 +56,10 @@ api.controller = function ($scope) {
 
     /**
      * Closes a task and refreshes the list.
-     * @param {string} sysId sys_id of the task to close.
+     * @param {Object} params
+     * @param {string} params.sysId `task.sys_id`
      */
-    c.close = function (sysId) {
+    c.close = function ({ sysId } = {}) {
         c.server.get({ action: 'close', sysId }).then((response) => {
             c.data.tasks = response.data.tasks;
         });
@@ -74,8 +74,19 @@ api.controller = function ($scope) {
 
 ## Template
 
-- Use `ng-repeat` with `track by` for lists from the server. Repeat semantic elements so screen readers announce the group and item count: `<li>` inside `<ul>`/`<ol>` for lists, `<dt>`/`<dd>` inside `<dl>` for term–description pairs, `<tr>` for tabular data. Use repeating `<div>`s only for purely visual layouts that are not a list.
-- Always prefer native HTML elements (`<button>`, `<a>`, `<ul>`, `<table>`, `<label>`) over `role` attributes on generic elements.
+```html
+<ul class="list-group">
+  <li class="list-group-item" ng-repeat="task in c.data.tasks track by task.sys_id">
+    {{task.number}}
+    <button type="button" class="btn btn-default btn-sm" ng-click="c.close({ sysId: task.sys_id })">Close</button>
+  </li>
+</ul>
+```
+
+- Use `ng-repeat` with `track by`.
+- Repeat semantic elements so screen readers announce the group and item count: `<li>` in `<ul>`/`<ol>`, `<dt>`/`<dd>` in `<dl>` for term–description pairs, `<tr>` for tabular data. Repeat `<div>`s only for purely visual layouts that are not a list.
+- Prefer native HTML elements (`<button>`, `<a>`, `<label>`, `<table>`) over `role` attributes on generic elements.
+- Keep form labels, `alt` text, `aria-*` attributes where needed, and keyboard access for anything clickable.
 - Write plain text in templates. Do not use `${…}` message tags or `gs.getMessage()` for template text unless asked.
 - Use `<sp-widget widget="c.data.embedded">` with `$sp.getWidget()` to embed widgets.
 

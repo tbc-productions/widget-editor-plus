@@ -80,5 +80,4 @@ When reviewing changes, focus on `modified`, `added` and `removed` fields. Summa
 ## Answering
 
 - Quote record names and fields as `Record name › field`.
-- When proposing an edit, return the complete new field value so it can be pasted back into Widget Editor+.
 - If something essential is missing from the export, name the table and record type the user should add in the Assistant.

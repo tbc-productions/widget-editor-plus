@@ -17,6 +17,7 @@ To use the skills in every workspace, copy the folders under `.github/skills/` i
 | [`skills/servicenow-es-compatibility`](.github/skills/servicenow-es-compatibility/SKILL.md) | Safe syntax by release, scope and ES12 mode. |
 | [`skills/widget-editor-assistant-export`](.github/skills/widget-editor-assistant-export/SKILL.md) | Reading AI Assistant `context_bundle` XML exports. |
 | [`skills/servicenow-server-scripting`](.github/skills/servicenow-server-scripting/SKILL.md) | GlideRecord, Script Include, GlideAjax and business rule patterns. |
+| [`skills/servicenow-client-scripts`](.github/skills/servicenow-client-scripts/SKILL.md) | Client scripts, UI policies, `g_form` and client-side GlideAjax. |
 | [`skills/service-portal-widgets`](.github/skills/service-portal-widgets/SKILL.md) | Widget scripts, templates, CSS and Angular providers. |
 | [`skills/servicenow-peer-review`](.github/skills/servicenow-peer-review/SKILL.md) | Prioritised peer review grouped by record, with category ratings. |
 
