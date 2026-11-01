@@ -41,7 +41,7 @@ Functions take a single destructured object so parameters can be added later wit
 | Record | `{GlideRecordSecure}`, or `{GlideRecord}` for platform-supplied records such as `current` |
 | Date/time | `{GlideDateTime}` |
 | sys_id | `{string}` |
-| Value from `getValue()` | `{string}` (it may be `null` for an empty field) |
+| Value from `getValue()` | `{string}` (it may be `null` for an empty field; booleans are `'1'` or `'0'`) |
 | Widget server data | `{Object}` |
 | Client form | `{GlideForm}` |
 | Array | `{string[]}`, `{Object[]}`, `{{number: string}[]}`; never `Array<…>` |
@@ -88,9 +88,12 @@ GroupUtils.prototype = {
      * @returns {GroupSummary|null} Group summary, or null if the group is missing or not found.
      */
     getGroupSummary: function ({ groupId, limit = 50 } = {}) {
+        /* Get the group */
         if (!groupId) return null;
         const group = new GlideRecordSecure('sys_user_group');
         if (!group.get(groupId)) return null;
+
+        /* Collect the group's active incidents */
         const incidents = [];
         const gr = new GlideRecordSecure('incident');
         gr.addActiveQuery();
@@ -100,6 +103,7 @@ GroupUtils.prototype = {
         while (gr.next()) {
             incidents.push({ number: gr.getValue('number'), short_description: gr.getValue('short_description') });
         }
+
         return {
             incidents,
             manager: { name: group.getDisplayValue('manager'), sys_id: group.getValue('manager') },

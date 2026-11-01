@@ -10,6 +10,7 @@ Examples use ES6+. Follow the `servicenow-es-compatibility` skill for older targ
 ## GlideRecord
 
 - Read values with `gr.getValue('field')` (string or `null`) and display values with `gr.getDisplayValue('field')`.
+- `getValue()` on a boolean field always returns the string `'1'` (true) or `'0'` (false), never `true`, `false`, `'true'` or `'false'`. Compare with `gr.getValue('active') === '1'`. `if (gr.getValue('active'))` is always truthy because `'0'` is a non-empty string.
 - Set values with `gr.setValue('field', value)`.
 - Never pass `null`, `undefined` or an empty string to `addQuery()` or `get()`. Return early when a required value is missing.
 - Use `gr.get(sysId)` for a single record and check its return value before using the record.

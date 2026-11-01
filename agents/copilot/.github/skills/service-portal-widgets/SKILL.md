@@ -22,7 +22,7 @@ Write widget server scripts in ES5 style (`var`, `function`, no optional chainin
 
 ```javascript
 (function () {
-    /* populate the 'data' object */
+    /* Close the task the user selected */
     if (input && input.action === 'close' && input.sysId) {
         var task = new GlideRecordSecure('task');
         if (task.get(input.sysId) && task.canWrite()) {
@@ -31,6 +31,7 @@ Write widget server scripts in ES5 style (`var`, `function`, no optional chainin
         }
     }
 
+    /* Get the user's open tasks */
     data.tasks = [];
     var gr = new GlideRecordSecure('task');
     gr.addActiveQuery();
@@ -73,7 +74,8 @@ api.controller = function ($scope) {
 
 ## Template
 
-- Use `ng-repeat` with `track by` for lists from the server.
+- Use `ng-repeat` with `track by` for lists from the server. Repeat semantic elements so screen readers announce the group and item count: `<li>` inside `<ul>`/`<ol>` for lists, `<dt>`/`<dd>` inside `<dl>` for term–description pairs, `<tr>` for tabular data. Use repeating `<div>`s only for purely visual layouts that are not a list.
+- Always prefer native HTML elements (`<button>`, `<a>`, `<ul>`, `<table>`, `<label>`) over `role` attributes on generic elements.
 - Write plain text in templates. Do not use `${…}` message tags or `gs.getMessage()` for template text unless asked.
 - Use `<sp-widget widget="c.data.embedded">` with `$sp.getWidget()` to embed widgets.
 
