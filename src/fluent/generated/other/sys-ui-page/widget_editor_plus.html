@@ -3979,6 +3979,12 @@
                                         <label class="checkbox-label" for="chk-show-unused-vars">Show unused variables</label>
                                     </span>
                                 </div>
+                                <div class="we-modal-option" ng-if="isWidgetRecord !== false">
+                                    <span class="input-group-checkbox">
+                                        <input type="checkbox" class="checkbox" id="chk-widget-data-checks" ng-model="userPrefsEdit.widgetDataChecks" />
+                                        <label class="checkbox-label" for="chk-widget-data-checks" we-tooltip-title="Highlights data properties the server script never sets, server data the client script, link function and templates never use, actions the server script doesn't handle, and data or options used in the wrong script.">Check widget data and actions</label>
+                                    </span>
+                                </div>
                                 <div class="we-modal-option we-modal-option-row">
                                     <label class="we-modal-option-label" for="pref-tab-size">Tab size</label>
                                     <div class="we-spin-wrap">

@@ -751,7 +751,8 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
      *   volatility_level: string, volatility_level_display: string,
      *   deprecated: boolean,
      *   update_set_mismatch: boolean, widget_update_set_id: string,
-     *   widget_update_set_name: string}}} Return value.
+     *   widget_update_set_name: string, current_update_set_id: string,
+     *   current_update_set_name: string}}} Return value.
      */
     getWidget: function () {
         if (this._getEditorTable() !== 'sp_widget') return this._getEditorRecord();
@@ -819,6 +820,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         var widgetUpdateSetId = '';
         var widgetUpdateSetName = '';
         var updateSetMismatch = false;
+        var currentUpdateSetId = gs.getPreference('sys_update_set') || '';
         var uvGr = new GlideRecordSecure('sys_update_version');
         uvGr.addQuery('name', sysClassName + '_' + sysId);
         uvGr.orderByDesc('sys_created_on');
@@ -843,7 +845,6 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             if (usGr.get(uxSetId) && usGr.getValue('state') === 'in progress') {
                 widgetUpdateSetId = uxSetId;
                 widgetUpdateSetName = usGr.getDisplayValue('name');
-                var currentUpdateSetId = gs.getPreference('sys_update_set');
                 updateSetMismatch = widgetUpdateSetId !== currentUpdateSetId;
             }
         }
@@ -888,6 +889,8 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             update_set_mismatch: updateSetMismatch,
             widget_update_set_id: widgetUpdateSetId,
             widget_update_set_name: widgetUpdateSetName,
+            current_update_set_id: currentUpdateSetId,
+            current_update_set_name: this._getUpdateSetName(currentUpdateSetId),
             sys_class_name: sysClassName,
             is_header_footer: isHeaderFooter,
             'static': isHeaderFooter && gr.getValue('static') == '1',
@@ -2480,6 +2483,27 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     ////////////////////////////////////////////////////////////
     // Presence
     ////////////////////////////////////////////////////////////
+
+    /**
+     * Returns the session's current update set so the editor can detect changes made in other windows.
+     * @returns {{success: boolean, update_set_id: string}} Return value.
+     */
+    getCurrentUpdateSet: function () {
+        return this._answer({
+            success: true,
+            update_set_id: gs.getPreference('sys_update_set') || '',
+        });
+    },
+
+    /**
+     * Returns an update set's display name, or an empty string when it is missing or unreadable.
+     * @param {string} sysId - sys_update_set sys_id.
+     * @returns {string} Update set name.
+     */
+    _getUpdateSetName: function (sysId) {
+        var usGr = new GlideRecordSecure('sys_update_set');
+        return sysId && usGr.get(sysId) ? usGr.getDisplayValue('name') : '';
+    },
 
     /**
      * Returns other users currently present on the widget or its related Angular templates

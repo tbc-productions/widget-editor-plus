@@ -2683,11 +2683,6 @@ declare var $interpolate: angular.IInterpolateService;
 declare var $parse: angular.IParseService;
 /** In-memory cache for Angular templates. */
 declare var $templateCache: angular.ITemplateCacheService;
-/** Service Portal server-side data returned to the widget (populated by the server script). */
-declare var data: { [key: string]: any };
-/** Service Portal options object (widget instance options configured on the page). */
-declare var options: { [key: string]: any };
-
 /** Service Portal client utility service. */
 declare var spUtil: SpUtil;
 /** Service Portal modal dialog service. */
@@ -2738,12 +2733,6 @@ type $document = JQLite;
     * $templateCache.put("card.html", "<div class=\\"card\\">{{title}}</div>");
     */
     declare var $templateCache: angular.ITemplateCacheService;
-    
-    /** Service Portal server-side data returned to the widget (populated by the server script). */
-    declare var data: { [key: string]: any };
-    
-    /** Service Portal options object (widget instance options configured on the page). */
-    declare var options: { [key: string]: any };
     
     // -----------------------------------------------------------------------------
     // ServiceNow Client-Side API Declarations

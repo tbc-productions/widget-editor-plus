@@ -998,7 +998,9 @@
                 });
                 $scope.$watch('widget.controller_as', function (v) {
                     $scope.headerDirty.controller_as = (v || 'c') !== originalHeader.controller_as;
+                    _scheduleWidgetDataChecks();
                 });
+                $scope.$watch('templates', _scheduleWidgetDataChecks);
                 $scope.$watch('widget.is_public', function (v) {
                     $scope.headerDirty.is_public = !!v !== originalHeader.is_public;
                 });
@@ -1430,6 +1432,7 @@
                     fontFamily: '',
                     languageHelpers: true,
                     showUnusedVars: true,
+                    widgetDataChecks: true,
                     remBase: 16,
                     stickyScroll: true,
                     htmlValidation: true,
@@ -2365,6 +2368,7 @@
                         'htmlAutoCloseTags',
                         'languageHelpers',
                         'showUnusedVars',
+                        'widgetDataChecks',
                         'stickyScroll',
                         'insertSpaceBeforeFuncParen',
                         'linkedEditing',
@@ -2639,8 +2643,14 @@
                                 });
                             };
                             $scope.updateSetMismatch = !!data.widget.update_set_mismatch;
-                            $scope.widgetUpdateSetId = data.widget.widget_update_set_id || '';
-                            $scope.widgetUpdateSetName = data.widget.widget_update_set_name || '';
+                            // Without an in-progress update set, the widget is being edited in the one current at load.
+                            $scope.widgetUpdateSetId =
+                                data.widget.widget_update_set_id || data.widget.current_update_set_id || '';
+                            $scope.widgetUpdateSetName =
+                                data.widget.widget_update_set_name || data.widget.current_update_set_name || '';
+                            _knownUpdateSetId = $scope.widgetUpdateSetId
+                                ? data.widget.current_update_set_id || ''
+                                : null;
                             if ($scope.widgetSysPolicy) {
                                 $scope.canWriteWidget = false;
                             }
@@ -3995,6 +4005,16 @@
                                 });
                             }
 
+                            if (
+                                !$scope.isVersionView &&
+                                $scope.isWidgetRecord !== false &&
+                                (['client_script', 'link', 'script', 'template'].indexOf(pane.key) !== -1 ||
+                                    pane.recordType === 'template')
+                            ) {
+                                _scheduleWidgetDataChecks();
+                                ed.onDidChangeModelContent(_scheduleWidgetDataChecks);
+                            }
+
                             if (lang === 'html' && !$scope.isVersionView) {
                                 _lintNgExpressions(pane.key);
                                 var _ngLintTimer = null;
@@ -4453,6 +4473,426 @@
                     try {
                         monaco.editor.setModelMarkers(model, 'NG_EXPR_MARKER', _computeNgExpressionMarkers(model));
                     } catch (e) {}
+                }
+
+                // Widget data checks: cross-reference data properties and actions between the template, client and server scripts.
+                var WIDGET_DATA_MARKER = 'WE_WIDGET_DATA_MARKER';
+                var WIDGET_DATA_PANES = {
+                    client: 'client_script',
+                    link: 'link',
+                    server: 'script',
+                    template: 'template',
+                };
+                var _widgetDataTimer = null;
+
+                function _blankComments(text, isHtml, blankStrings) {
+                    function blank(chunk) {
+                        return chunk.replace(/[^\n]/g, ' ');
+                    }
+                    if (isHtml) return text.replace(/<!--[\s\S]*?-->/g, blank);
+                    var out = [];
+                    var quote = null;
+                    var i = 0;
+                    while (i < text.length) {
+                        var ch = text[i];
+                        var next = text[i + 1];
+                        var end;
+                        if (quote) {
+                            if (ch === '\\') {
+                                out.push(blankStrings ? blank(text.substr(i, 2)) : text.substr(i, 2));
+                                i += 2;
+                                continue;
+                            }
+                            if (ch === quote || (ch === '\n' && quote !== '`')) quote = null;
+                            out.push(blankStrings && quote ? blank(ch) : ch);
+                            i++;
+                        } else if (ch === '"' || ch === "'" || ch === '`') {
+                            quote = ch;
+                            out.push(ch);
+                            i++;
+                        } else if (ch === '/' && (next === '/' || next === '*')) {
+                            end = next === '/' ? text.indexOf('\n', i) : text.indexOf('*/', i + 2);
+                            end = end < 0 ? text.length : next === '/' ? end : end + 2;
+                            out.push(blank(text.slice(i, end)));
+                            i = end;
+                        } else {
+                            out.push(ch);
+                            i++;
+                        }
+                    }
+                    return out.join('');
+                }
+
+                function _analyseWidgetData(sources) {
+                    var ID = '[A-Za-z_$][\\w$]*';
+                    var server = _blankComments(sources.server || '');
+                    var issues = { angularTemplates: [], client: [], link: [], server: [], template: [] };
+
+                    function escapeRe(text) {
+                        return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    }
+                    function scan(re, text, fn) {
+                        var m;
+                        re.lastIndex = 0;
+                        while ((m = re.exec(text))) fn(m);
+                    }
+                    function keyRefs(prefix, text) {
+                        var refs = [];
+                        var re = new RegExp(
+                            prefix + '\\s*(?:\\.\\s*(' + ID + ')|\\[\\s*([\'"])(' + ID + ')\\2\\s*\\])(\\s*=(?!=))?',
+                            'g'
+                        );
+                        scan(re, text, function (m) {
+                            var key = m[1] || m[3];
+                            var start = m.index + m[0].lastIndexOf(key);
+                            refs.push({ end: start + key.length, key: key, start: start, write: !!m[4] });
+                        });
+                        return refs;
+                    }
+                    function keySet(refs, writesOnly) {
+                        var set = {};
+                        refs.forEach(function (ref) {
+                            if (!writesOnly || ref.write) set[ref.key] = true;
+                        });
+                        return set;
+                    }
+                    // Ranges where name is a function parameter; null when it's declared for the whole script.
+                    function parameterScopes(name, text) {
+                        var global = new RegExp(
+                            '(?:\\b(?:var|let|const|function)\\s+|(?<![\\w$.])(?=' +
+                                name +
+                                '\\s*=(?![=>])))' +
+                                name +
+                                '(?![\\w$])'
+                        );
+                        if (global.test(text)) return null;
+                        var param = new RegExp('^\\s*(?:\\.\\.\\.)?' + name + '\\s*(?:=|$)');
+                        var ranges = [];
+                        scan(
+                            new RegExp(
+                                'function\\s*[\\w$]*\\s*\\(([^)]*)\\)|\\(([^()]*)\\)\\s*=>|catch\\s*\\(([^)]*)\\)|(?<![\\w$.])(' +
+                                    name +
+                                    ')\\s*=>',
+                                'g'
+                            ),
+                            text,
+                            function (m) {
+                                var params = m[4] ? [m[4]] : (m[1] || m[2] || m[3] || '').split(',');
+                                if (
+                                    !params.some(function (p) {
+                                        return param.test(p);
+                                    })
+                                )
+                                    return;
+                                ranges.push([m.index, scopeEnd(text, m.index + m[0].length)]);
+                            }
+                        );
+                        return ranges;
+                    }
+                    function scopeEnd(text, from) {
+                        var i = from;
+                        while (/\s/.test(text[i] || '')) i++;
+                        var braced = text[i] === '{';
+                        var depth = 0;
+                        for (; i < text.length; i++) {
+                            var ch = text[i];
+                            if ('({['.indexOf(ch) !== -1) {
+                                depth++;
+                            } else if (')}]'.indexOf(ch) !== -1) {
+                                depth--;
+                                if (depth < 0) return i;
+                                if (braced && !depth) return i + 1;
+                            } else if (!braced && !depth && (ch === ';' || ch === ',')) {
+                                return i;
+                            }
+                        }
+                        return text.length;
+                    }
+                    function wholeUse(prefix, text) {
+                        return new RegExp(prefix + '(?!\\s*(?:\\.\\s*' + ID + '|\\[\\s*[\'"]))', 'g').test(text);
+                    }
+
+                    // Server data: dynamic population (e.g. $sp.getRecordValues(data, ...)) disables "never set" checks.
+                    var serverData = '(?<![\\w$.])data';
+                    var serverRefs = keyRefs(serverData, server);
+                    var serverKeys = keySet(serverRefs);
+                    var serverOpen =
+                        new RegExp(serverData + '\\s*=(?!=)').test(server) ||
+                        /[(,]\s*data\s*[,)]/.test(server) ||
+                        wholeUse(serverData + '(?=\\s*\\[)', server);
+
+                    // Client script and link function; the link function reaches data through its scope and controller parameters.
+                    var controllerAs = escapeRe(sources.controllerAs || 'c');
+                    var client = _blankComments(sources.client || '');
+                    var clientAliases = [controllerAs, '\\$scope', 'this'];
+                    scan(new RegExp('(?:var|let|const)\\s+(' + ID + ')\\s*=\\s*this\\b', 'g'), client, function (m) {
+                        clientAliases.push(escapeRe(m[1]));
+                    });
+                    var link = _blankComments(sources.link || '');
+                    var linkParams = (/function\s*[\w$]*\s*\(([^)]*)\)/.exec(link) || ['', ''])[1]
+                        .split(',')
+                        .map(function (param) {
+                            return escapeRe(param.trim());
+                        });
+                    var linkAliases = [];
+                    if (linkParams[0]) linkAliases.push(linkParams[0], linkParams[0] + '\\s*\\.\\s*' + controllerAs);
+                    if (linkParams[3]) linkAliases.push(linkParams[3]);
+                    var scripts = [
+                        { aliases: clientAliases, issues: issues.client, text: client },
+                        { aliases: linkAliases, issues: issues.link, text: link },
+                    ].filter(function (entry) {
+                        return entry.aliases.length;
+                    });
+                    var clientWrites = {};
+                    var clientReplaced = false;
+                    var clientWhole = false;
+                    scripts.forEach(function (entry) {
+                        entry.prefix = '(?<![\\w$.])(?:' + entry.aliases.join('|') + ')\\s*\\.\\s*data';
+                        entry.refs = keyRefs(entry.prefix, entry.text);
+                        Object.assign(clientWrites, keySet(entry.refs, true));
+                        clientReplaced = clientReplaced || new RegExp(entry.prefix + '\\s*=(?!=)').test(entry.text);
+                        clientWhole = clientWhole || wholeUse(entry.prefix, entry.text);
+                    });
+
+                    // Angular templates share the widget scope, including ones not open in the editor.
+                    var templates = [{ issues: issues.template, text: sources.template }].concat(
+                        (sources.angularTemplates || []).map(function (text) {
+                            var list = [];
+                            issues.angularTemplates.push(list);
+                            return { issues: list, text: text };
+                        })
+                    );
+                    var templateWrites = {};
+                    templates.forEach(function (entry) {
+                        var text = _blankComments(entry.text || '', true);
+                        var repeatsData = /ng-repeat\s*=\s*["']\s*\(?\s*(?:[\w$]+\s*,\s*)?data\b/.test(text);
+                        var prefix =
+                            '(?<![\\w$.])' +
+                            (repeatsData ? controllerAs + '\\s*\\.\\s*' : '(?:' + controllerAs + '\\s*\\.\\s*)?') +
+                            'data';
+                        entry.refs = keyRefs(prefix, text);
+                        Object.assign(templateWrites, keySet(entry.refs, true));
+                        scan(
+                            new RegExp('ng-model\\s*=\\s*["\']\\s*' + prefix + '\\s*\\.\\s*(' + ID + ')', 'g'),
+                            text,
+                            function (m) {
+                                templateWrites[m[1]] = true;
+                            }
+                        );
+                    });
+
+                    if (!serverOpen && !clientReplaced) {
+                        scripts.concat(templates).forEach(function (entry) {
+                            entry.refs.forEach(function (ref) {
+                                if (
+                                    ref.write ||
+                                    serverKeys[ref.key] ||
+                                    clientWrites[ref.key] ||
+                                    templateWrites[ref.key]
+                                )
+                                    return;
+                                entry.issues.push({
+                                    end: ref.end,
+                                    message: 'data.' + ref.key + ' is never set',
+                                    severity: 'warning',
+                                    start: ref.start,
+                                });
+                            });
+                        });
+                    }
+
+                    // Server data the client never reads; skipped when the client script or link function uses data as a whole.
+                    if (!clientWhole) {
+                        var used = keySet(
+                            scripts.concat(templates).reduce(function (refs, entry) {
+                                return refs.concat(entry.refs);
+                            }, [])
+                        );
+                        var serverReads = {};
+                        serverRefs.forEach(function (ref) {
+                            if (!ref.write) serverReads[ref.key] = true;
+                        });
+                        serverRefs.forEach(function (ref) {
+                            if (!ref.write || used[ref.key] || serverReads[ref.key]) return;
+                            issues.server.push({
+                                end: ref.end,
+                                message: 'data.' + ref.key + ' is never used',
+                                severity: 'unused',
+                                start: ref.start,
+                            });
+                        });
+                    }
+
+                    // Data references copied between scripts that don't share the same names.
+                    function flagUndefined(name, follow, source, list) {
+                        var text = _blankComments(source, false, true);
+                        var scopes = parameterScopes(name, text);
+                        if (!scopes) return;
+                        scan(new RegExp('(?<![\\w$.])' + name + '(?=' + follow + ')', 'g'), text, function (m) {
+                            var inScope = scopes.some(function (range) {
+                                return m.index >= range[0] && m.index < range[1];
+                            });
+                            if (inScope) return;
+                            list.push({
+                                end: m.index + m[0].length,
+                                message: name.replace(/\\/g, '') + ' is not defined',
+                                severity: 'warning',
+                                start: m.index,
+                            });
+                        });
+                    }
+                    ['data', 'options'].forEach(function (object) {
+                        [controllerAs, 'c'].forEach(function (name, index, names) {
+                            if (names.indexOf(name) === index) {
+                                flagUndefined(name, '\\s*\\.\\s*' + object + '\\b', server, issues.server);
+                            }
+                        });
+                        flagUndefined(object, '\\s*[.[]', client, issues.client);
+                        if (linkParams[0]) flagUndefined(object, '\\s*[.[]', link, issues.link);
+                    });
+
+                    // Actions: only checked when the server dispatches on literal input.action values.
+                    var actionNames = ['input\\s*\\.\\s*action'];
+                    scan(
+                        new RegExp('(?<![\\w$.])(' + ID + ')\\s*=\\s*input\\s*\\.\\s*action\\b(?!\\s*\\.)', 'g'),
+                        server,
+                        function (m) {
+                            actionNames.push(escapeRe(m[1]));
+                        }
+                    );
+                    var actionRe = '(?<![\\w$.])(?:' + actionNames.join('|') + ')(?![\\w$])';
+                    var dynamicAction = new RegExp(
+                        '(?:\\[\\s*|(?:indexOf|includes|hasOwnProperty|test)\\s*\\(\\s*)' +
+                            actionRe +
+                            '|' +
+                            actionRe +
+                            '\\s*\\.\\s*' +
+                            ID
+                    ).test(server);
+                    if (!dynamicAction && new RegExp(actionRe).test(server)) {
+                        var handled = {};
+                        var literal = '([\'"])([^\'"\\n]+)';
+                        scan(new RegExp(actionRe + '\\s*[!=]==?\\s*' + literal + '\\1', 'g'), server, function (m) {
+                            handled[m[2]] = true;
+                        });
+                        scan(new RegExp(literal + '\\1\\s*[!=]==?\\s*' + actionRe, 'g'), server, function (m) {
+                            handled[m[2]] = true;
+                        });
+                        if (new RegExp('switch\\s*\\(\\s*' + actionRe + '\\s*\\)').test(server)) {
+                            scan(new RegExp('case\\s*' + literal + '\\1\\s*:', 'g'), server, function (m) {
+                                handled[m[2]] = true;
+                            });
+                        }
+                        scripts.forEach(function (entry) {
+                            var sent = [];
+                            scan(
+                                new RegExp(
+                                    '\\.\\s*server\\s*\\.\\s*(?:get|update)\\s*\\(\\s*\\{[^}]*?\\baction\\s*:\\s*' +
+                                        literal +
+                                        '\\1',
+                                    'g'
+                                ),
+                                entry.text,
+                                function (m) {
+                                    sent.push({ index: m.index + m[0].lastIndexOf(m[1] + m[2]) + 1, name: m[2] });
+                                }
+                            );
+                            scan(
+                                new RegExp(entry.prefix + '\\s*\\.\\s*action\\s*=(?!=)\\s*' + literal + '\\1', 'g'),
+                                entry.text,
+                                function (m) {
+                                    sent.push({ index: m.index + m[0].lastIndexOf(m[1] + m[2]) + 1, name: m[2] });
+                                }
+                            );
+                            sent.forEach(function (action) {
+                                if (handled[action.name]) return;
+                                entry.issues.push({
+                                    end: action.index + action.name.length,
+                                    message: "Action '" + action.name + "' is not handled",
+                                    severity: 'warning',
+                                    start: action.index,
+                                });
+                            });
+                        });
+                    }
+                    return issues;
+                }
+
+                function _scheduleWidgetDataChecks() {
+                    clearTimeout(_widgetDataTimer);
+                    _widgetDataTimer = setTimeout(_runWidgetDataChecks, 700);
+                }
+
+                function _runWidgetDataChecks() {
+                    clearTimeout(_widgetDataTimer);
+                    if (!window.monaco) return;
+                    var targets = [];
+                    var sources = {
+                        angularTemplates: [],
+                        controllerAs: ($scope.widget && $scope.widget.controller_as) || 'c',
+                    };
+                    function modelFor(key) {
+                        var ed = monacoEditors[key];
+                        return (ed && ed.getModel && ed.getModel()) || null;
+                    }
+                    Object.keys(WIDGET_DATA_PANES).forEach(function (part) {
+                        var model = modelFor(WIDGET_DATA_PANES[part]);
+                        sources[part] = model
+                            ? model.getValue()
+                            : ($scope.widget && $scope.widget[WIDGET_DATA_PANES[part]]) || '';
+                        targets.push({ model: model, pick: issuesFor(part) });
+                    });
+                    // Open template panes supply unsaved text; other linked templates use their saved content.
+                    var openTemplates = extraPanes.filter(function (pane) {
+                        return pane.recordType === 'template';
+                    });
+                    openTemplates.forEach(function (pane) {
+                        var model = modelFor(pane.key);
+                        targets.push({
+                            model: model,
+                            pick: issuesFor('angularTemplates', sources.angularTemplates.length),
+                        });
+                        sources.angularTemplates.push(model ? model.getValue() : pane.content || '');
+                    });
+                    ($scope.templates || []).forEach(function (t) {
+                        var open = openTemplates.some(function (pane) {
+                            return pane.sys_id && pane.sys_id === t.sys_id;
+                        });
+                        if (!open) sources.angularTemplates.push(t.template || '');
+                    });
+                    function issuesFor(part, index) {
+                        return function (issues) {
+                            var list = issues ? issues[part] : [];
+                            return (index === undefined ? list : list[index]) || [];
+                        };
+                    }
+                    var enabled =
+                        $scope.userPrefs.widgetDataChecks !== false &&
+                        $scope.isWidgetRecord !== false &&
+                        !$scope.isVersionView;
+                    var issues = enabled ? _analyseWidgetData(sources) : null;
+                    targets.forEach(function (target) {
+                        var model = target.model;
+                        if (!model || model.isDisposed()) return;
+                        var markers = target.pick(issues).map(function (issue) {
+                            var start = model.getPositionAt(issue.start);
+                            var end = model.getPositionAt(issue.end);
+                            var unused = issue.severity === 'unused';
+                            return {
+                                endColumn: end.column,
+                                endLineNumber: end.lineNumber,
+                                message: issue.message,
+                                severity: unused ? monaco.MarkerSeverity.Hint : monaco.MarkerSeverity.Warning,
+                                source: 'Widget data',
+                                startColumn: start.column,
+                                startLineNumber: start.lineNumber,
+                                tags: unused ? [monaco.MarkerTag.Unnecessary] : [],
+                            };
+                        });
+                        try {
+                            monaco.editor.setModelMarkers(model, WIDGET_DATA_MARKER, markers);
+                        } catch (e) {}
+                    });
                 }
 
                 // Delegates DTS/diagnostic/provider setup to SNMonacoPlus.
@@ -5325,6 +5765,7 @@
                                         sys_id: data.update_set_sys_id,
                                         name: data.update_set_name,
                                     };
+                                    _applySavedUpdateSet($scope.lastSaveUpdateSet);
                                 }
                             } else {
                                 pane.savedAt = new Date();
@@ -5396,6 +5837,61 @@
                     }
                     return name.substring(0, 20) + '\u2026' + name.slice(-4);
                 };
+
+                // Rechecks the record's update set when the editor regains focus, in case it changed in another window.
+                var _knownUpdateSetId = null;
+                var _updateSetCheckPending = false;
+
+                function _applyCurrentUpdateSet(currentId) {
+                    if (currentId === _knownUpdateSetId) return;
+                    _knownUpdateSetId = currentId;
+                    if (!$scope.widgetUpdateSetId) return;
+                    $scope.updateSetMismatch = $scope.widgetUpdateSetId !== currentId;
+                    if ($scope.updateSetMismatch) {
+                        $scope.updateSetAlertDismissed = false;
+                        $scope.openDropdown = 'alert-updateset';
+                    } else if ($scope.openDropdown === 'alert-updateset') {
+                        $scope.openDropdown = null;
+                    }
+                }
+
+                // Saves land in the current update set, which becomes the one the widget is being edited in.
+                function _applySavedUpdateSet(updateSet) {
+                    if ($scope.isWidgetRecord === false) return;
+                    $scope.widgetUpdateSetId = updateSet.sys_id;
+                    $scope.widgetUpdateSetName = updateSet.name;
+                    $scope.updateSetMismatch = false;
+                    _knownUpdateSetId = updateSet.sys_id;
+                }
+
+                function _checkCurrentUpdateSet() {
+                    if (document.hidden || _updateSetCheckPending || _knownUpdateSetId === null || $scope.isVersionView)
+                        return;
+                    _updateSetCheckPending = true;
+                    ajax('getCurrentUpdateSet', {})
+                        .then(function (data) {
+                            if (data && data.success) _applyCurrentUpdateSet(data.update_set_id || '');
+                        })
+                        .finally(function () {
+                            _updateSetCheckPending = false;
+                        });
+                }
+
+                // The editor may be framed by the Next Experience shell, which receives focus instead.
+                var _focusWindows = [window];
+                try {
+                    if (window.top !== window && window.top.document) _focusWindows.push(window.top);
+                } catch (e) {}
+                document.addEventListener('visibilitychange', _checkCurrentUpdateSet);
+                _focusWindows.forEach(function (win) {
+                    win.addEventListener('focus', _checkCurrentUpdateSet);
+                });
+                $scope.$on('$destroy', function () {
+                    document.removeEventListener('visibilitychange', _checkCurrentUpdateSet);
+                    _focusWindows.forEach(function (win) {
+                        win.removeEventListener('focus', _checkCurrentUpdateSet);
+                    });
+                });
 
                 // Keep the relative labels fresh even when the user is idle
                 setInterval(function () {
@@ -5527,6 +6023,7 @@
                                           name: data.update_set_name,
                                       }
                                     : null;
+                            if ($scope.lastSaveUpdateSet) _applySavedUpdateSet($scope.lastSaveUpdateSet);
                             if (data.sys_updated_on) {
                                 $scope.widget.sys_updated_on = data.sys_updated_on;
                             }
@@ -6166,6 +6663,8 @@
                     prefs.fontSize = $scope.userPrefs.fontSize;
                     prefs.fontFamily = $scope.userPrefs.fontFamily;
                     prefs.languageHelpers = $scope.userPrefs.languageHelpers;
+                    prefs.showUnusedVars = $scope.userPrefs.showUnusedVars;
+                    prefs.widgetDataChecks = $scope.userPrefs.widgetDataChecks;
                     prefs.stickyScroll = $scope.userPrefs.stickyScroll;
                     prefs.htmlValidation = $scope.userPrefs.htmlValidation;
                     prefs.htmlAutoCloseTags = $scope.userPrefs.htmlAutoCloseTags;
@@ -9176,6 +9675,7 @@
                         fontFamily: $scope.userPrefs.fontFamily,
                         languageHelpers: $scope.userPrefs.languageHelpers,
                         showUnusedVars: $scope.userPrefs.showUnusedVars,
+                        widgetDataChecks: $scope.userPrefs.widgetDataChecks,
                         stickyScroll: $scope.userPrefs.stickyScroll,
                         htmlValidation: $scope.userPrefs.htmlValidation,
                         htmlAutoCloseTags: $scope.userPrefs.htmlAutoCloseTags,
@@ -9261,6 +9761,7 @@
                     $scope.userPrefs.fontFamily = $scope.userPrefsEdit.fontFamily || '';
                     $scope.userPrefs.languageHelpers = $scope.userPrefsEdit.languageHelpers;
                     $scope.userPrefs.showUnusedVars = !!$scope.userPrefsEdit.showUnusedVars;
+                    $scope.userPrefs.widgetDataChecks = !!$scope.userPrefsEdit.widgetDataChecks;
                     $scope.userPrefs.stickyScroll = !!$scope.userPrefsEdit.stickyScroll;
                     $scope.userPrefs.htmlValidation = !!$scope.userPrefsEdit.htmlValidation;
                     $scope.userPrefs.htmlAutoCloseTags = !!$scope.userPrefsEdit.htmlAutoCloseTags;
@@ -9305,6 +9806,7 @@
                     if (window.SNMonacoPlus && SNMonacoPlus.setUnusedVarsEnabled) {
                         SNMonacoPlus.setUnusedVarsEnabled($scope.userPrefs.showUnusedVars);
                     }
+                    _runWidgetDataChecks();
                     var stickyScrollVal = {
                         enabled: !!$scope.userPrefs.stickyScroll,
                     };
@@ -9518,6 +10020,7 @@
                     $scope.userPrefsEdit.fontFamily = '';
                     $scope.userPrefsEdit.languageHelpers = true;
                     $scope.userPrefsEdit.showUnusedVars = true;
+                    $scope.userPrefsEdit.widgetDataChecks = true;
                     $scope.userPrefsEdit.remBase = 16;
                     $scope.userPrefsEdit.stickyScroll = true;
                     $scope.userPrefsEdit.htmlValidation = true;
@@ -9672,6 +10175,7 @@
                         'fontFamily',
                         'languageHelpers',
                         'showUnusedVars',
+                        'widgetDataChecks',
                         'stickyScroll',
                         'htmlValidation',
                         'htmlAutoCloseTags',

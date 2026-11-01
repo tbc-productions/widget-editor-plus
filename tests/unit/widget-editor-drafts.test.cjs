@@ -1203,7 +1203,7 @@ test('Credit preferences export fresh shared values, import on Save and stay out
     h.run('_applyPrefsBlobToEdit({credit:{view:"invalid",whitespace:"all"}})');
     assert.deepEqual(JSON.parse(JSON.stringify(h.$scope.userPrefsEdit.credit)), downloads[0].credit);
     Object.assign(h.context, {
-        _buildFontFamily: value => value, _applyJsFormatOptions() {}, _snapshotEditorPrefs() {},
+        _buildFontFamily: value => value, _applyJsFormatOptions() {}, _runWidgetDataChecks() {}, _snapshotEditorPrefs() {},
         _findLocalDrafts() {}, _closeModal: fn => fn(), monacoEditors: {},
     });
     h.$scope.onEditorVisibilityChange = () => {};
