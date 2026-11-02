@@ -29,54 +29,132 @@ Also flag over-engineering as Low, such as sys_id pattern checks.
 | Medium | Likely bugs in edge cases, noticeable performance cost, or clear departures from best practice. Fix soon. |
 | Low | Readability, documentation, style and minor improvements. |
 
-Report only real findings. Do not pad sections; write "None." when a priority has no findings.
+Report only real findings. Do not pad the review.
 
 ## Output format
 
-Use this structure and keep each finding to one or two lines. Name records exactly as they appear in the instance so the user can find them. When an export supplies `record_url`, link the record name.
+Name records exactly as they appear in the instance so the user can find them. When an export supplies `record_url`, link the record name. Give each finding a one-line entry in the summary table and its full detail once, under its record.
 
-```markdown
+````markdown
 # Peer review
 
 ## Ratings
 
 | Category | Rating | Comment |
 |---|---|---|
-| Security | 3/5 | One unchecked client input. |
-| Performance | 4/5 | One query inside a loop. |
-| Reliability | 4/5 | Solid, apart from one unchecked `get()`. |
-| Maintainability | 2/5 | Most functions lack JSDoc. |
-| Best practice | 5/5 | No issues. |
-| **Overall** | **3.5/5** | Sound logic; fix the client input check before release. |
+| Security | 45% | One unchecked client input lets users close any task. |
+| Performance | 65% | One user lookup per task. |
+| Reliability | 85% | Solid, apart from one unchecked `get()`. |
+| Maintainability | 70% | Two functions lack JSDoc. |
+| Best practice | 100% | No issues. |
+| **Overall** | **73%** | Sound logic; fix the client input check before release. |
 
-## Priority summary
+## Summary
 
-### High
-1. **Widget › My Tasks** › `script`: `input.sysId` is used without a presence check.
+| # | Record | Location | Issue | Priority |
+|---|---|---|---|---|
+| 1 | **My Tasks** (Widget) | **Server script** - close action | Unchecked `input.sysId` reaches `get()` | High 🔴 |
+| 2 | **TaskUtils** (Script Include) | **Script** - `getTasks()` | One `sys_user` query per task | Medium 🟠 |
+| 3 | **TaskUtils** (Script Include) | **Script** - `getTasks()`, `_format()` | Missing JSDoc | Low 🔵 |
 
-### Medium
-1. **Script Include › TaskUtils** › `getTasks`: queries `sys_user` inside the task loop.
+## [**My Tasks**](record_url) (Widget)
 
-### Low
-1. **Script Include › TaskUtils**: add JSDoc to `getTasks` and `_format`.
+### 1. Unchecked `input.sysId` reaches `get()` (High 🔴)
 
-## Findings by record
+**Server script** - close action (Lines ~4–8)
 
-### Widget › [My Tasks](record_url)
-- **High** · `script`, `closeTask` branch: `input.sysId` reaches `get()` unchecked. Return early when it is missing and check `canWrite()`.
-- **Low** · `client_script`: remove the unused `$timeout` injection.
+`input` comes from the browser. When `sysId` is missing, `get()` runs on an empty value, and any user can close any task they can reach through the widget.
 
-### Script Include › TaskUtils
-- **Medium** · `getTasks`: queries `sys_user` once per task. Dot-walk `assigned_to.name` with `addExtraField()` instead.
-- **Low** · `getTasks`, `_format`: missing JSDoc.
+```javascript
+// Current
+if (input && input.action === 'close') {
+    var task = new GlideRecordSecure('task');
+    task.get(input.sysId);
+    task.setValue('state', 3);
+    task.update();
+}
 ```
+
+```javascript
+// Suggested
+if (input && input.action === 'close' && input.sysId) {
+    var task = new GlideRecordSecure('task');
+    if (task.get(input.sysId) && task.canWrite()) {
+        task.setValue('state', 3);
+        task.update();
+    }
+}
+```
+
+## **TaskUtils** (Script Include)
+
+### 2. One `sys_user` query per task (Medium 🟠)
+
+**Script** - `getTasks()` (Lines ~20–31)
+
+Each loop iteration queries `sys_user` for the assignee's name, so 100 tasks run 101 queries.
+
+```javascript
+// Current
+while (gr.next()) {
+    const user = new GlideRecordSecure('sys_user');
+    user.get(gr.getValue('assigned_to'));
+    tasks.push({ assignee: user.getValue('name'), number: gr.getValue('number') });
+}
+```
+
+```javascript
+// Suggested
+gr.addExtraField('assigned_to.name');
+gr.query();
+while (gr.next()) {
+    tasks.push({ assignee: gr.assigned_to.name.toString(), number: gr.getValue('number') });
+}
+```
+
+### 3. Missing JSDoc (Low 🔵)
+
+**Script** - `getTasks()`, `_format()`
+
+Neither function documents its parameters or return value.
+
+```javascript
+// Suggested
+/**
+ * Returns active tasks assigned to a user.
+ * @param {Object} params
+ * @param {string} params.userId `task.assigned_to`
+ * @returns {{assignee: string, number: string}[]} Matching tasks.
+ */
+```
+````
 
 Format rules:
 
-- Ratings are whole numbers out of 5. Overall is the average to one decimal place. The overall comment is one sentence.
-- Name records as `Table label › Record name`, using the table label from the export (`table_label`) or the record type the user gave.
-- Locate each finding by field and, where useful, function or approximate line, such as `` `script`, `getTasks` ``.
-- In the priority summary, list each finding once, highest impact first within each priority.
-- In findings by record, order records by their highest-priority finding, then list findings High to Low.
-- Give the fix in the same line. Include a short code snippet only when the fix is not obvious from one sentence.
-- End with the findings. Do not offer to apply fixes or rewrite the code; the user makes changes in ServiceNow.
+- Ratings are whole percentages. Use 90–100% for no or trivial issues, 70–89% for minor issues, 50–69% for a Medium finding or several minor ones, and below 50% for any High finding that is likely to be exploited or cause data loss. Overall is the average of the five categories, rounded to a whole percentage. The overall comment is one sentence.
+- Follow each priority with its emoji wherever it appears: High 🔴, Medium 🟠, Low 🔵.
+- The summary table has one row per finding, ordered High to Low. **Location** is the location line without the line numbers. **Issue** is the finding's title, in a few words.
+- Give each record a heading: `**Record name** (Record type)`, with the name in bold, such as **My Tasks** (Widget). Take the record type from `table_label` in the export, or from the type the user gave. Use the same form in the summary table's **Record** column.
+- Number findings in summary order, from 1 for the highest priority upwards. Under each record, list its findings High to Low with the same numbers, even when they are not consecutive.
+- Each finding has:
+  1. A heading: number, a short title, then the priority and its emoji in brackets, such as `### 1. Missing JSDoc (Low 🔵)`.
+  2. A location line: the field label in bold, a hyphen, the function or section, then the lines in brackets, such as ``**Script** - `getTasks()` (Lines ~2–6)`` or `**Server script** - data setup (Lines ~14)`. Use the field's form label, falling back to the field name in backticks when the label is unknown. Write functions with `()` in backticks, and a short plain-English section name for code outside a function. Omit the function or section when the finding covers the whole field.
+  - Line numbers count from the first line of the field's value, as shown in the editor. In an export, that is the first line of text inside the field's element. Count carefully, and keep the `~` because the count may be slightly off. Omit the lines when the finding spans several functions, or when the user supplied an excerpt rather than the whole field.
+  3. One to three sentences explaining the problem and its effect.
+  4. A `// Current` code block quoting only the relevant lines, and a `// Suggested` code block with the fix, written to the pack's conventions. Omit `// Current` when the issue is missing code, and omit both when the fix is not code.
+- Common field labels:
+
+  | Table | Field | Label |
+  |---|---|---|
+  | Widget | `script` | Server script |
+  | Widget | `client_script` | Client controller |
+  | Widget | `template` | Body HTML template |
+  | Widget | `css` | CSS |
+  | Widget | `link` | Link function |
+  | Widget | `option_schema` | Option schema |
+  | Script Include, business rule, client script | `script` | Script |
+  | UI policy | `script_true` / `script_false` | Execute if true / Execute if false |
+
+- Label code blocks with the language's comment style: `// Current` and `// Suggested` for JavaScript, `<!-- Current -->` and `<!-- Suggested -->` for HTML, `/* Current */` and `/* Suggested */` for CSS.
+- Keep code blocks short: the lines that change plus enough context to find them.
+- End with the findings. Do not offer to apply fixes; the user makes changes in ServiceNow.

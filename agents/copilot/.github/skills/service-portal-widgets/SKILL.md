@@ -75,10 +75,10 @@ api.controller = function ($scope) {
 ## Template
 
 ```html
-<ul class="list-group">
-  <li class="list-group-item" ng-repeat="task in c.data.tasks track by task.sys_id">
+<ul>
+  <li ng-repeat="task in c.data.tasks track by task.sys_id">
     {{task.number}}
-    <button type="button" class="btn btn-default btn-sm" ng-click="c.close({ sysId: task.sys_id })">Close</button>
+    <button type="button" ng-click="c.close({ sysId: task.sys_id })">Close</button>
   </li>
 </ul>
 ```
@@ -87,6 +87,7 @@ api.controller = function ($scope) {
 - Repeat semantic elements so screen readers announce the group and item count: `<li>` in `<ul>`/`<ol>`, `<dt>`/`<dd>` in `<dl>` for term–description pairs, `<tr>` for tabular data. Repeat `<div>`s only for purely visual layouts that are not a list.
 - Prefer native HTML elements (`<button>`, `<a>`, `<label>`, `<table>`) over `role` attributes on generic elements.
 - Keep form labels, `alt` text, `aria-*` attributes where needed, and keyboard access for anything clickable.
+- Bootstrap grid classes (`container`, `row`, `col-*`) are fine for layout. Do not add Bootstrap component classes (`alert`, `form-group`, `form-control`, `btn`, `list-group`, `panel`, `help-block` and so on) unless the user asks for them. Style with the widget's own `css` instead.
 - Write plain text in templates. Do not use `${…}` message tags or `gs.getMessage()` for template text unless asked.
 - Use `<sp-widget widget="c.data.embedded">` with `$sp.getWidget()` to embed widgets.
 
@@ -96,18 +97,18 @@ Build forms with `ngForm` and AngularJS validation, not hand-written checks in t
 
 ```html
 <form name="c.taskForm" novalidate ng-submit="c.submit()">
-  <div class="form-group" ng-class="{ 'has-error': c.taskForm.shortDescription.$invalid && (c.taskForm.shortDescription.$touched || c.taskForm.$submitted) }">
+  <div>
     <label for="short-description">Short description</label>
-    <input id="short-description" name="shortDescription" class="form-control" ng-model="c.data.shortDescription"
+    <input id="short-description" name="shortDescription" ng-model="c.data.shortDescription"
            required ng-maxlength="160" aria-describedby="short-description-error"
            ng-attr-aria-invalid="{{c.taskForm.shortDescription.$invalid && (c.taskForm.shortDescription.$touched || c.taskForm.$submitted)}}">
-    <div id="short-description-error" class="help-block" ng-messages="c.taskForm.shortDescription.$error"
+    <div id="short-description-error" ng-messages="c.taskForm.shortDescription.$error"
          ng-if="c.taskForm.shortDescription.$touched || c.taskForm.$submitted">
       <p ng-message="required">Enter a short description.</p>
       <p ng-message="maxlength">Use 160 characters or fewer.</p>
     </div>
   </div>
-  <button type="submit" class="btn btn-primary">Save</button>
+  <button type="submit">Save</button>
 </form>
 ```
 
@@ -152,7 +153,7 @@ function iconTooltip() {
             /** @type {function} Called when the icon is clicked */
             onClick: '&',
         },
-        template: '<i class="fa {{icon}}" title="{{tooltip}}" ng-click="onClick()"></i>',
+        template: '<button type="button" title="{{tooltip}}" aria-label="{{tooltip}}" ng-click="onClick()"><i class="fa {{icon}}" aria-hidden="true"></i></button>',
     };
 }
 ```
