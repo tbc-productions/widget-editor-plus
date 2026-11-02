@@ -167,6 +167,10 @@ Playwright tests cover editor features, language services and context menus agai
 
 *Note: Test fixtures automatically seed and tear down necessary test records via the ServiceNow Table API.*
 
+### Manual test bench
+
+[`tests/fixtures/update-sets/intellisense-test-bench.xml`](tests/fixtures/update-sets/intellisense-test-bench.xml) is a development-only update set for checking IntelliSense and widget data checks by hand. Import it on a development instance through **System Update Sets → Retrieved Update Sets**, then open the `we_plus_test_bench` portal page. It shows the test bench widget, with numbered checks in its scripts, and the Debug Context Menu. The update set is never included in releases.
+
 ---
 
 ## Configuration
