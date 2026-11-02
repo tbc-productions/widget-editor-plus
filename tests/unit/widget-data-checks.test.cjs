@@ -85,6 +85,28 @@ test('marks server data that nothing reads as unused', () => {
     assert.deepEqual(result.server, ['unused:unused']);
 });
 
+test('server data read from a server call response counts as used', () => {
+    const result = run({
+        client: `function () {
+            var c = this;
+            c.server.get().then((resp) => resp.data.arrow);
+            c.server.get({ action: 'load', ids: [1, 2] }).then(function (response) { use(response.data['bracket']); });
+            c.server.update().then(r => { r.data.bare; });
+            $scope.server.refresh().then(function (res) { return res.data.refresh; });
+            other.then((resp) => resp.data.notServer);
+            c.server.get().then((resp) => resp.data.inner);
+            resp.data.outside;
+        }`,
+        link: 'function (scope) { scope.server.get().then(function (r) { r.data.link; }); }',
+        server: `(function () {
+            data.arrow = 1; data.bracket = 2; data.bare = 3; data.refresh = 4; data.link = 5;
+            data.notServer = 6; data.outside = 7;
+        })();`,
+        template: '',
+    });
+    assert.deepEqual(result.server, ['unused:notServer', 'unused:outside']);
+});
+
 test('skips unused checks when the client script uses data as a whole', () => {
     for (const client of [
         'function () { var c = this; angular.copy(c.data); }',

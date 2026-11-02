@@ -1,0 +1,885 @@
+<?xml version="1.0" encoding="UTF-8"?><unload unload_date="2026-11-02 06:46:37">
+<sys_remote_update_set action="INSERT_OR_UPDATE">
+<application display_value="Global">global</application>
+<application_name>Global</application_name>
+<application_scope>global</application_scope>
+<application_version/>
+<collisions/>
+<commit_date/>
+<deleted/>
+<description>Test records for Widget Editor+ IntelliSense: three Script Includes, two Angular Providers, a widget with numbered checks in its scripts, and the we_plus_test_bench page showing it with the Debug Context Menu.</description>
+<inserted/>
+<name>Widget Editor+ IntelliSense test bench</name>
+<origin_sys_id/>
+<parent display_value=""/>
+<release_date/>
+<remote_base_update_set display_value=""/>
+<remote_parent_id/>
+<remote_sys_id>81c80755835c13108ae69d60ceaad3bf</remote_sys_id>
+<state>loaded</state>
+<summary/>
+<sys_class_name>sys_remote_update_set</sys_class_name>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-11-02 06:46:36</sys_created_on>
+<sys_id>4ab8c4318394d3108ae69d60ceaad388</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-11-02 06:46:36</sys_updated_on>
+<update_set display_value=""/>
+<update_source display_value=""/>
+<updated/>
+</sys_remote_update_set>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="Global">global</application>
+<category>customer</category>
+<comments/>
+<name>m2m_sp_ng_pro_sp_widget_d16beb441926c1fde4f685aaae9f1ce5</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="m2m_sp_ng_pro_sp_widget"><m2m_sp_ng_pro_sp_widget action="INSERT_OR_UPDATE"><sp_angular_provider display_value="wePlusTestService">72e89de7cad85f09d0c35f9d3d3d2ba2</sp_angular_provider><sp_widget display_value="Widget Editor+ IntelliSense test bench">ffdf3417f457eaaeacf87aac54095ff6</sp_widget><sys_class_name>m2m_sp_ng_pro_sp_widget</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-11-01 07:25:13</sys_created_on><sys_id>d16beb441926c1fde4f685aaae9f1ce5</sys_id><sys_mod_count>0</sys_mod_count><sys_package display_value="Global" source="global">global</sys_package><sys_policy/><sys_scope display_value="Global">global</sys_scope><sys_update_name>m2m_sp_ng_pro_sp_widget_d16beb441926c1fde4f685aaae9f1ce5</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-11-01 07:25:13</sys_updated_on></m2m_sp_ng_pro_sp_widget></record_update>]]></payload>
+<payload_hash>706485038</payload_hash>
+<remote_update_set display_value="Widget Editor+ IntelliSense test bench">4ab8c4318394d3108ae69d60ceaad388</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-11-02 06:46:36</sys_created_on>
+<sys_id>02b8c4318394d3108ae69d60ceaad389</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a19602b7390000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-11-02 06:46:36</sys_updated_on>
+<table>m2m_sp_ng_pro_sp_widget</table>
+<target_name>Widget Editor+ IntelliSense test bench → wePlusTestService</target_name>
+<type>Angular Provider Widget Relationship</type>
+<update_domain>global</update_domain>
+<update_guid/>
+<update_guid_history/>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="Global">global</application>
+<category>customer</category>
+<comments/>
+<name>m2m_sp_ng_pro_sp_widget_d93d1dab6fee1d09b027f612fee94c07</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="m2m_sp_ng_pro_sp_widget"><m2m_sp_ng_pro_sp_widget action="INSERT_OR_UPDATE"><sp_angular_provider display_value="wePlusTestFactory">b04204701288ecd5d4f061f5db81a58b</sp_angular_provider><sp_widget display_value="Widget Editor+ IntelliSense test bench">ffdf3417f457eaaeacf87aac54095ff6</sp_widget><sys_class_name>m2m_sp_ng_pro_sp_widget</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-11-01 07:25:13</sys_created_on><sys_id>d93d1dab6fee1d09b027f612fee94c07</sys_id><sys_mod_count>0</sys_mod_count><sys_package display_value="Global" source="global">global</sys_package><sys_policy/><sys_scope display_value="Global">global</sys_scope><sys_update_name>m2m_sp_ng_pro_sp_widget_d93d1dab6fee1d09b027f612fee94c07</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-11-01 07:25:13</sys_updated_on></m2m_sp_ng_pro_sp_widget></record_update>]]></payload>
+<payload_hash>-1496163591</payload_hash>
+<remote_update_set display_value="Widget Editor+ IntelliSense test bench">4ab8c4318394d3108ae69d60ceaad388</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-11-02 06:46:36</sys_created_on>
+<sys_id>02b8c4318394d3108ae69d60ceaad38a</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a19602b7340000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-11-02 06:46:36</sys_updated_on>
+<table>m2m_sp_ng_pro_sp_widget</table>
+<target_name>Widget Editor+ IntelliSense test bench → wePlusTestFactory</target_name>
+<type>Angular Provider Widget Relationship</type>
+<update_domain>global</update_domain>
+<update_guid/>
+<update_guid_history/>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="Global">global</application>
+<category>customer</category>
+<comments/>
+<name>sys_es_latest_script_1a7514b328b1072f0ac2cc3489f01f45</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_es_latest_script"><sys_es_latest_script action="INSERT_OR_UPDATE"><id>9156dfa33b7b270ce4bff30d441e7ca6</id><sys_created_by>admin</sys_created_by><sys_created_on>2026-11-01 07:25:13</sys_created_on><sys_id>1a7514b328b1072f0ac2cc3489f01f45</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-11-01 07:25:13</sys_updated_on><table>sys_script_include</table><use_es_latest>true</use_es_latest></sys_es_latest_script></record_update>]]></payload>
+<payload_hash>580186603</payload_hash>
+<remote_update_set display_value="Widget Editor+ IntelliSense test bench">4ab8c4318394d3108ae69d60ceaad388</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-11-02 06:46:36</sys_created_on>
+<sys_id>06b8c4318394d3108ae69d60ceaad38b</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a19602b7050000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-11-02 06:46:36</sys_updated_on>
+<table>sys_es_latest_script</table>
+<target_name>WEPlusTestConstants</target_name>
+<type>ES Latest Script</type>
+<update_domain>global</update_domain>
+<update_guid/>
+<update_guid_history/>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="Global">global</application>
+<category>customer</category>
+<comments/>
+<name>sys_script_include_44995fd572858db08ef08dac40171f21</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include"><sys_script_include action="INSERT_OR_UPDATE"><access>package_private</access><active>true</active><api_name>global.WEPlusTestES6</api_name><caller_access/><client_callable>false</client_callable><description>Widget Editor+ IntelliSense test bench: ES2021 class Script Include.</description><mobile_callable>false</mobile_callable><name>WEPlusTestES6</name><sandbox_callable>false</sandbox_callable><script>/*
+ * Widget Editor+ IntelliSense test bench: ES2021 class Script Include.
+ * In the widget&apos;s server script (check 16):
+ *  - after &quot;greeter.&quot; expect greet, count and name;
+ *  - after &quot;WEPlusTestES6.&quot; expect VERSION and create;
+ *  - hover greet for its description and greet(punctuation?: string): string.
+ */
+class WEPlusTestES6 {
+    /**
+     * Creates a greeter.
+     * @param {string} name - Person to greet
+     */
+    constructor(name) {
+        /** Person to greet. */
+        this.name = name;
+        /** Number of greetings built. */
+        this.count = 0;
+    }
+
+    /**
+     * Creates a greeter for the world.
+     * @returns {WEPlusTestES6} New greeter
+     */
+    static create() {
+        return new WEPlusTestES6(&apos;world&apos;);
+    }
+
+    /**
+     * Builds a greeting.
+     * @param {string} [punctuation=&apos;!&apos;] - Trailing punctuation
+     * @returns {string} The greeting
+     */
+    greet(punctuation = &apos;!&apos;) {
+        this.count++;
+        return &apos;Hello &apos; + this.name + punctuation;
+    }
+}
+
+/** Library version. */
+WEPlusTestES6.VERSION = &apos;1.0&apos;;
+</script><sys_class_name>sys_script_include</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-11-01 07:25:13</sys_created_on><sys_id>44995fd572858db08ef08dac40171f21</sys_id><sys_mod_count>0</sys_mod_count><sys_name>WEPlusTestES6</sys_name><sys_package display_value="Global" source="global">global</sys_package><sys_policy/><sys_scope display_value="Global">global</sys_scope><sys_update_name>sys_script_include_44995fd572858db08ef08dac40171f21</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-11-01 07:25:13</sys_updated_on></sys_script_include></record_update>]]></payload>
+<payload_hash>-122650446</payload_hash>
+<remote_update_set display_value="Widget Editor+ IntelliSense test bench">4ab8c4318394d3108ae69d60ceaad388</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-11-02 06:46:36</sys_created_on>
+<sys_id>0ab8c4318394d3108ae69d60ceaad38c</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a19602b72f0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-11-02 06:46:36</sys_updated_on>
+<table>sys_script_include</table>
+<target_name>WEPlusTestES6</target_name>
+<type>Script Include</type>
+<update_domain>global</update_domain>
+<update_guid/>
+<update_guid_history/>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="Global">global</application>
+<category>customer</category>
+<comments/>
+<name>sp_angular_provider_72e89de7cad85f09d0c35f9d3d3d2ba2</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_angular_provider"><sp_angular_provider action="INSERT_OR_UPDATE"><name>wePlusTestService</name><script>function () {
+    /*
+     * Widget Editor+ IntelliSense test bench: service provider.
+     * In the widget&apos;s client controller (check 19), after &quot;wePlusTestService.&quot; expect
+     * total, add and reset — not lastAdded, which is assigned inside add().
+     */
+
+    /** Running total. */
+    this.total = 0;
+
+    /**
+     * Adds to the total.
+     * @param {number} amount - Amount to add
+     */
+    this.add = function (amount) {
+        this.total += amount;
+        this.lastAdded = function () {
+            return amount;
+        };
+    };
+
+    /** Clears the total. */
+    this.reset = () =&gt; {
+        this.total = 0;
+    };
+}
+</script><sys_class_name>sp_angular_provider</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-11-01 07:25:13</sys_created_on><sys_id>72e89de7cad85f09d0c35f9d3d3d2ba2</sys_id><sys_mod_count>0</sys_mod_count><sys_name>wePlusTestService</sys_name><sys_package display_value="Global" source="global">global</sys_package><sys_policy/><sys_scope display_value="Global">global</sys_scope><sys_update_name>sp_angular_provider_72e89de7cad85f09d0c35f9d3d3d2ba2</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-11-01 07:25:13</sys_updated_on><type>service</type></sp_angular_provider></record_update>]]></payload>
+<payload_hash>-1351350841</payload_hash>
+<remote_update_set display_value="Widget Editor+ IntelliSense test bench">4ab8c4318394d3108ae69d60ceaad388</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-11-02 06:46:36</sys_created_on>
+<sys_id>46b8c4318394d3108ae69d60ceaad38a</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a19602b70a0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-11-02 06:46:36</sys_updated_on>
+<table>sp_angular_provider</table>
+<target_name>wePlusTestService</target_name>
+<type>Angular Provider</type>
+<update_domain>global</update_domain>
+<update_guid/>
+<update_guid_history/>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="Global">global</application>
+<category>customer</category>
+<comments/>
+<name>sys_es_latest_script_53ea6078e89af70655aa36fa9b056d3f</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_es_latest_script"><sys_es_latest_script action="INSERT_OR_UPDATE"><id>d8ea7a4c08719ed05f1cc7774ba45031</id><sys_created_by>admin</sys_created_by><sys_created_on>2026-11-01 07:25:13</sys_created_on><sys_id>53ea6078e89af70655aa36fa9b056d3f</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-11-01 07:25:13</sys_updated_on><table>sys_script_include</table><use_es_latest>true</use_es_latest></sys_es_latest_script></record_update>]]></payload>
+<payload_hash>-1792454305</payload_hash>
+<remote_update_set display_value="Widget Editor+ IntelliSense test bench">4ab8c4318394d3108ae69d60ceaad388</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-11-02 06:46:36</sys_created_on>
+<sys_id>4ab8c4318394d3108ae69d60ceaad38b</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a19602b7290000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-11-02 06:46:36</sys_updated_on>
+<table>sys_es_latest_script</table>
+<target_name>WEPlusTestUtils</target_name>
+<type>ES Latest Script</type>
+<update_domain>global</update_domain>
+<update_guid/>
+<update_guid_history/>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="Global">global</application>
+<category>customer</category>
+<comments/>
+<name>sys_script_include_9156dfa33b7b270ce4bff30d441e7ca6</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include"><sys_script_include action="INSERT_OR_UPDATE"><access>package_private</access><active>true</active><api_name>global.WEPlusTestConstants</api_name><caller_access/><client_callable>false</client_callable><description>Widget Editor+ IntelliSense test bench: constants-only Script Include.</description><mobile_callable>false</mobile_callable><name>WEPlusTestConstants</name><sandbox_callable>false</sandbox_callable><script>/*
+ * Widget Editor+ IntelliSense test bench: Script Include with constants only.
+ * In the widget&apos;s server script, after &quot;WEPlusTestConstants.&quot; expect STATE_APPROVED,
+ * MAX_RETRIES and LABELS (check 15).
+ */
+var WEPlusTestConstants = Class.create();
+
+/** State value for approved records. */
+WEPlusTestConstants.STATE_APPROVED = &apos;approved&apos;;
+
+/** Maximum retry attempts. */
+WEPlusTestConstants.MAX_RETRIES = 3;
+
+/** Display labels by state. */
+WEPlusTestConstants.LABELS = { open: &apos;Open&apos;, closed: &apos;Closed&apos; };
+
+WEPlusTestConstants.prototype = {
+    type: &apos;WEPlusTestConstants&apos;,
+};
+</script><sys_class_name>sys_script_include</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-11-01 07:25:13</sys_created_on><sys_id>9156dfa33b7b270ce4bff30d441e7ca6</sys_id><sys_mod_count>0</sys_mod_count><sys_name>WEPlusTestConstants</sys_name><sys_package display_value="Global" source="global">global</sys_package><sys_policy/><sys_scope display_value="Global">global</sys_scope><sys_update_name>sys_script_include_9156dfa33b7b270ce4bff30d441e7ca6</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-11-01 07:25:13</sys_updated_on></sys_script_include></record_update>]]></payload>
+<payload_hash>-204827726</payload_hash>
+<remote_update_set display_value="Widget Editor+ IntelliSense test bench">4ab8c4318394d3108ae69d60ceaad388</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-11-02 06:46:36</sys_created_on>
+<sys_id>4eb8c4318394d3108ae69d60ceaad38c</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a19602b7160000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-11-02 06:46:36</sys_updated_on>
+<table>sys_script_include</table>
+<target_name>WEPlusTestConstants</target_name>
+<type>Script Include</type>
+<update_domain>global</update_domain>
+<update_guid/>
+<update_guid_history/>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="Global">global</application>
+<category>customer</category>
+<comments/>
+<name>sys_script_include_d8ea7a4c08719ed05f1cc7774ba45031</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include"><sys_script_include action="INSERT_OR_UPDATE"><access>package_private</access><active>true</active><api_name>global.WEPlusTestUtils</api_name><caller_access/><client_callable>false</client_callable><description>Widget Editor+ IntelliSense test bench: prototype Script Include.</description><mobile_callable>false</mobile_callable><name>WEPlusTestUtils</name><sandbox_callable>false</sandbox_callable><script>/*
+ * Widget Editor+ IntelliSense test bench: Script Include with prototype members.
+ * Used by the &quot;Widget Editor+ IntelliSense test bench&quot; widget (checks 9–14).
+ *
+ * Checks inside this Script Include (open it in Widget Editor+):
+ *  A. Inside a method, &quot;this.&quot; lists countActive, lookup, format, describe, double, half,
+ *     getFieldValue, config, defaultTable, scope and cache — not retries, timeout, onError or onDone.
+ *  B. Hover &quot;this.countActive&quot; in describe() for its signature and description.
+ *  C. After &quot;WEPlusTestUtils.&quot; expect DEFAULT_LIMIT, FIELD_GROUPS and SEPARATOR.
+ *  D. Save a change here (for example add a method), then type &quot;utils.&quot; in the widget&apos;s
+ *     server script: the new member appears without reloading the page.
+ */
+var WEPlusTestUtils = Class.create();
+
+/** Default number of records to return. */
+WEPlusTestUtils.DEFAULT_LIMIT = 50;
+
+/** Field groups by table. The nested keys must not appear as members. */
+WEPlusTestUtils.FIELD_GROUPS = {
+    user: { primary: &apos;user_name&apos;, secondary: &apos;email&apos; },
+    task: [&apos;number&apos;, &apos;short_description&apos;],
+};
+
+/** Separator text that contains a semicolon. */
+WEPlusTestUtils.SEPARATOR = &apos;a;b&apos;;
+
+WEPlusTestUtils.prototype = {
+    /**
+     * Lookup settings. Its nested keys (retries, timeout, onError) must not appear as members.
+     * @type {Object}
+     */
+    config: {
+        retries: 3,
+        timeout: 10,
+        onError: function (err) {
+            gs.error(err);
+        },
+    },
+
+    /** @type {string} Table used when none is given. */
+    defaultTable: &apos;incident&apos;,
+
+    /**
+     * Creates the utility.
+     * @param {string} [scope=&apos;global&apos;] - Application scope
+     */
+    initialize: function (scope = &apos;global&apos;) {
+        this.scope = scope;
+        this.cache = {};
+    },
+
+    /**
+     * Counts active records in a table.
+     * @param {string} table - Table name
+     * @param {string} [field=&apos;active&apos;] - True/false field to filter on
+     * @returns {number} Number of matching records
+     */
+    countActive: function (table, field = &apos;active&apos;) {
+        var ga = new GlideAggregate(table);
+        ga.addQuery(field, true);
+        ga.addAggregate(&apos;COUNT&apos;);
+        ga.query();
+        // onDone is a local callback and must not appear as a member.
+        var callbacks = {
+            onDone: function (count) {
+                return count;
+            },
+        };
+        return callbacks.onDone(ga.next() ? parseInt(ga.getAggregate(&apos;COUNT&apos;), 10) : 0);
+    },
+
+    /**
+     * Reads one field from the first matching records.
+     * @param {Object} options - Lookup options
+     * @param {string} options.table - Table name
+     * @param {string} options.field - Field to read
+     * @param {number} [options.limit] - Maximum number of records
+     * @returns {string[]} Field values
+     */
+    lookup: function (options) {
+        var values = [];
+        var gr = new GlideRecord(options.table);
+        gr.setLimit(options.limit || WEPlusTestUtils.DEFAULT_LIMIT);
+        gr.query();
+        while (gr.next()) {
+            values.push(gr.getValue(options.field));
+        }
+        return values;
+    },
+
+    /**
+     * Joins values after a prefix.
+     * @param {string} prefix - Text placed first
+     * @param {...string} values - Values to join
+     * @returns {string} Formatted text
+     */
+    format: function (prefix, ...values) {
+        return prefix + &apos;: &apos; + values.join(&apos;, &apos;);
+    },
+
+    /**
+     * Describes a record using a destructured options object.
+     * @param {GlideRecord} record - Record to describe
+     * @returns {string} Description
+     */
+    describe: function (record, { verbose = false, label = &apos;Record&apos; } = {}) {
+        var text = label + &apos; &apos; + record.getDisplayValue();
+        return verbose ? text + &apos; (&apos; + this.countActive(record.getTableName()) + &apos; active)&apos; : text;
+    },
+
+    /** Doubles a number (arrow function member). */
+    double: (n) =&gt; n * 2,
+
+    /** Halves a number (shorthand method). */
+    half(n) {
+        return n / 2;
+    },
+
+    /**
+     * Reads a field from one record.
+     * @param {string} table - Table name
+     * @param {string} sysId - Record sys_id
+     * @param {string} field - Field name
+     * @returns {string} Field value
+     */
+    getFieldValue: function (table, sysId, field) {
+        var gr = new GlideRecord(table);
+        return gr.get(sysId) ? gr.getValue(field) : &apos;&apos;;
+    },
+
+    type: &apos;WEPlusTestUtils&apos;,
+};
+</script><sys_class_name>sys_script_include</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-11-01 07:25:13</sys_created_on><sys_id>d8ea7a4c08719ed05f1cc7774ba45031</sys_id><sys_mod_count>0</sys_mod_count><sys_name>WEPlusTestUtils</sys_name><sys_package display_value="Global" source="global">global</sys_package><sys_policy/><sys_scope display_value="Global">global</sys_scope><sys_update_name>sys_script_include_d8ea7a4c08719ed05f1cc7774ba45031</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-11-01 07:25:13</sys_updated_on></sys_script_include></record_update>]]></payload>
+<payload_hash>-624061439</payload_hash>
+<remote_update_set display_value="Widget Editor+ IntelliSense test bench">4ab8c4318394d3108ae69d60ceaad388</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-11-02 06:46:36</sys_created_on>
+<sys_id>82b8c4318394d3108ae69d60ceaad38d</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a19602b70f0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-11-02 06:46:36</sys_updated_on>
+<table>sys_script_include</table>
+<target_name>WEPlusTestUtils</target_name>
+<type>Script Include</type>
+<update_domain>global</update_domain>
+<update_guid/>
+<update_guid_history/>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="Global">global</application>
+<category>customer</category>
+<comments/>
+<name>sp_angular_provider_b04204701288ecd5d4f061f5db81a58b</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_angular_provider"><sp_angular_provider action="INSERT_OR_UPDATE"><name>wePlusTestFactory</name><script>function ($http) {
+    /*
+     * Widget Editor+ IntelliSense test bench: factory provider.
+     * In the widget&apos;s client controller (check 18), after &quot;wePlusTestFactory.&quot; expect
+     * load, save and pageSize; hover load for its description and parameters.
+     */
+
+    /**
+     * Loads records from a table.
+     * @param {string} table - Table name
+     * @param {Object} [params={}] - Extra query parameters
+     * @returns {Promise&lt;Object&gt;} Response promise
+     */
+    function load(table, params = {}) {
+        return $http.get(&apos;/api/now/table/&apos; + table, { params: params });
+    }
+
+    /**
+     * Updates a record.
+     * @param {string} table - Table name
+     * @param {Object} record - Record values, including sys_id
+     * @returns {Promise&lt;Object&gt;} Response promise
+     */
+    var save = function (table, record) {
+        return $http.patch(&apos;/api/now/table/&apos; + table + &apos;/&apos; + record.sys_id, record);
+    };
+
+    return { load, save: save, pageSize: 20 };
+}
+</script><sys_class_name>sp_angular_provider</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-11-01 07:25:13</sys_created_on><sys_id>b04204701288ecd5d4f061f5db81a58b</sys_id><sys_mod_count>0</sys_mod_count><sys_name>wePlusTestFactory</sys_name><sys_package display_value="Global" source="global">global</sys_package><sys_policy/><sys_scope display_value="Global">global</sys_scope><sys_update_name>sp_angular_provider_b04204701288ecd5d4f061f5db81a58b</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-11-01 07:25:13</sys_updated_on><type>factory</type></sp_angular_provider></record_update>]]></payload>
+<payload_hash>194037106</payload_hash>
+<remote_update_set display_value="Widget Editor+ IntelliSense test bench">4ab8c4318394d3108ae69d60ceaad388</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-11-02 06:46:36</sys_created_on>
+<sys_id>8ab8c4318394d3108ae69d60ceaad38a</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a19602b7230000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-11-02 06:46:36</sys_updated_on>
+<table>sp_angular_provider</table>
+<target_name>wePlusTestFactory</target_name>
+<type>Angular Provider</type>
+<update_domain>global</update_domain>
+<update_guid/>
+<update_guid_history/>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="Global">global</application>
+<category>customer</category>
+<comments/>
+<name>sys_es_latest_script_e1cb5f87b1dd40618a58fab9123d6d0d</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_es_latest_script"><sys_es_latest_script action="INSERT_OR_UPDATE"><id>ffdf3417f457eaaeacf87aac54095ff6</id><sys_created_by>admin</sys_created_by><sys_created_on>2026-11-01 07:25:13</sys_created_on><sys_id>e1cb5f87b1dd40618a58fab9123d6d0d</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-11-01 07:25:13</sys_updated_on><table>sp_widget</table><use_es_latest>true</use_es_latest></sys_es_latest_script></record_update>]]></payload>
+<payload_hash>-811553134</payload_hash>
+<remote_update_set display_value="Widget Editor+ IntelliSense test bench">4ab8c4318394d3108ae69d60ceaad388</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-11-02 06:46:36</sys_created_on>
+<sys_id>8eb8c4318394d3108ae69d60ceaad38b</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a19602b73e0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-11-02 06:46:36</sys_updated_on>
+<table>sys_es_latest_script</table>
+<target_name>Widget Editor+ IntelliSense test bench</target_name>
+<type>ES Latest Script</type>
+<update_domain>global</update_domain>
+<update_guid/>
+<update_guid_history/>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="Global">global</application>
+<category>customer</category>
+<comments/>
+<name>sys_es_latest_script_e740745ff72d8be7fb0d85b1efbb54d2</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_es_latest_script"><sys_es_latest_script action="INSERT_OR_UPDATE"><id>44995fd572858db08ef08dac40171f21</id><sys_created_by>admin</sys_created_by><sys_created_on>2026-11-01 07:25:13</sys_created_on><sys_id>e740745ff72d8be7fb0d85b1efbb54d2</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-11-01 07:25:13</sys_updated_on><table>sys_script_include</table><use_es_latest>true</use_es_latest></sys_es_latest_script></record_update>]]></payload>
+<payload_hash>1468215253</payload_hash>
+<remote_update_set display_value="Widget Editor+ IntelliSense test bench">4ab8c4318394d3108ae69d60ceaad388</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-11-02 06:46:36</sys_created_on>
+<sys_id>c2b8c4318394d3108ae69d60ceaad38c</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a19602b6db0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-11-02 06:46:36</sys_updated_on>
+<table>sys_es_latest_script</table>
+<target_name>WEPlusTestES6</target_name>
+<type>ES Latest Script</type>
+<update_domain>global</update_domain>
+<update_guid/>
+<update_guid_history/>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="Global">global</application>
+<category>customer</category>
+<comments/>
+<name>sp_widget_ffdf3417f457eaaeacf87aac54095ff6</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget"><sp_widget action="INSERT_OR_UPDATE"><category>custom</category><client_script>api.controller = function ($scope, wePlusTestFactory, wePlusTestService) {
+    /*
+     * Widget Editor+ IntelliSense test bench (client controller).
+     */
+    var c = this;
+
+    // 18. Factory provider: &quot;wePlusTestFactory.&quot; lists load, save and pageSize;
+    //     hover load for load(table: string, params?: object) and its description.
+    c.loading = true;
+    wePlusTestFactory.load(&apos;incident&apos;, { sysparm_limit: 1 }).then(function () {
+        c.loading = false;
+    });
+
+    // 19. Service provider: &quot;wePlusTestService.&quot; lists total, add and reset — not lastAdded.
+    wePlusTestService.add(2);
+    c.total = wePlusTestService.total;
+
+    // 20. Server and client APIs: click between this pane and the server script;
+    //     here &quot;spUtil.&quot; completes, and in the server script &quot;gs.&quot; completes.
+
+    // 23. Server response data: c.server.get returns the server script&apos;s new data, so reading
+    //     resp.data.refreshedTotal counts as using data.refreshedTotal (no &quot;never used&quot; hint there).
+    c.server.get({ action: &apos;refreshTotal&apos; }).then((resp) =&gt; {
+        c.refreshedTotal = resp.data.refreshedTotal;
+    });
+};
+</client_script><controller_as>c</controller_as><css>/* 23. SCSS: type &quot;$&quot; for variables from monaco.plus.scss.variables, and &quot;var(--&quot; for CSS variables. */
+.we-plus-test {
+  pre {
+    max-height: 20rem;
+    overflow: auto;
+  }
+}
+</css><data_table>sp_instance</data_table><demo_data/><description>Numbered checks for Widget Editor+ IntelliSense. Open it in Widget Editor+ and follow the comments.</description><docs/><field_list/><has_preview>true</has_preview><id>we-plus-intellisense-test</id><internal>false</internal><link/><name>Widget Editor+ IntelliSense test bench</name><option_schema/><public>false</public><roles/><script>(function () {
+    /*
+     * Widget Editor+ IntelliSense test bench (server script).
+     * Each numbered check says where to place the cursor and what to expect.
+     * Press Ctrl+Space for suggestions and hover with the mouse for documentation.
+     */
+
+    // 1. Field completion: type &quot;gr.&quot; on a new line below this one; expect incident fields such as caller_id.
+    var gr = new GlideRecord(&apos;incident&apos;);
+    gr.addQuery(&apos;active&apos;, true);
+
+    // 2. Field-name strings: clear the first argument below and press Ctrl+Space for incident fields;
+    //    type &quot;caller_id.&quot; to dot-walk into sys_user fields.
+    gr.addQuery(&apos;caller_id.department&apos;, &apos;!=&apos;, &apos;&apos;);
+    gr.query();
+
+    // 3. Field hover: hover &quot;department&quot; in the string above for its label, type and referenced table.
+
+    // 4. GlideAggregate: &quot;ga.&quot; lists problem fields; the second argument of addAggregate suggests fields.
+    var ga = new GlideAggregate(&apos;problem&apos;);
+    ga.addAggregate(&apos;COUNT&apos;, &apos;priority&apos;);
+    ga.groupBy(&apos;state&apos;);
+
+    // 5. Query conditions: the first argument of addOrCondition suggests incident fields.
+    var qc = gr.addQuery(&apos;priority&apos;, 1);
+    qc.addOrCondition(&apos;priority&apos;, 2);
+
+    // 6. Nearest declaration: gr now holds sys_user, so &quot;gr.&quot; below this line lists sys_user fields.
+    gr = new GlideRecordSecure(&apos;sys_user&apos;);
+    gr.addQuery(&apos;user_name&apos;, &apos;admin&apos;);
+
+    // 7. Similar names: &quot;subgr&quot; must not change what &quot;gr&quot; resolves to.
+    var subgr = new GlideRecord(&apos;cmn_location&apos;);
+    subgr.addQuery(&apos;city&apos;, &apos;Sydney&apos;);
+
+    // 8. Table names: clear the string below and type &quot;sys_us&quot;; rotation shards such as syslog0001 are hidden.
+    var tableCheck = new GlideRecord(&apos;sys_user_group&apos;);
+
+    // 9. Script Include members: &quot;utils.&quot; lists countActive, lookup, format, describe, double, half,
+    //    getFieldValue, config and defaultTable — not retries, timeout, onError or onDone.
+    var utils = new WEPlusTestUtils(&apos;global&apos;);
+
+    // 10. Signature help: place the cursor after &quot;&apos;active&apos;&quot; on the second line of this call;
+    //     the hint shows countActive with &quot;field&quot; highlighted.
+    var activeCount = utils.countActive(gr.getTableName(),
+        &apos;active&apos;);
+
+    // 11. Hover: hover countActive above; expect one block with its description, @param and @returns text.
+
+    // 12. Parameters: hover lookup, format and describe. lookup&apos;s options type lists table, field and
+    //     an optional limit; format ends with ...values: string[]; describe&apos;s second parameter is the
+    //     optional param1 (a destructured object).
+    var values = utils.lookup({ table: &apos;incident&apos;, field: &apos;number&apos;, limit: 5 });
+    var line = utils.format(&apos;Values&apos;, values.join(&apos;, &apos;));
+    var description = utils.describe(gr, { verbose: true });
+
+    // 13. Table and field arguments: clear the third argument below for incident fields;
+    //     the first argument suggests table names.
+    var number = utils.getFieldValue(&apos;incident&apos;, gr.getUniqueValue(), &apos;number&apos;);
+
+    // 14. Static members: &quot;WEPlusTestUtils.&quot; lists DEFAULT_LIMIT, FIELD_GROUPS and SEPARATOR.
+    var limit = WEPlusTestUtils.DEFAULT_LIMIT;
+
+    // 15. Constants-only Script Include: &quot;WEPlusTestConstants.&quot; lists STATE_APPROVED, MAX_RETRIES and LABELS.
+    var approved = WEPlusTestConstants.STATE_APPROVED;
+
+    // 16. ES2021 class: &quot;greeter.&quot; lists greet, count and name; &quot;WEPlusTestES6.&quot; lists VERSION and create.
+    var greeter = new WEPlusTestES6(&apos;Ada&apos;);
+    var greeting = greeter.greet(&apos;?&apos;);
+    var version = WEPlusTestES6.VERSION;
+
+    // 17. Built-ins: typing &quot;JSON.&quot; or &quot;Math.&quot; sends no Script Include lookup (check the browser&apos;s Network tab).
+    data.summary = JSON.stringify(
+        {
+            activeCount: activeCount,
+            approved: approved,
+            description: description,
+            greeting: greeting,
+            limit: limit,
+            line: line,
+            number: number,
+            table: tableCheck.getTableName(),
+            version: version,
+        },
+        null,
+        2
+    );
+
+    // 23. Server response data: refreshedTotal is only read from the c.server.get response in the
+    //     client script; it must not show a &quot;never used&quot; hint.
+    if (input &amp;&amp; input.action == &apos;refreshTotal&apos;) {
+        data.refreshedTotal = activeCount;
+    }
+})();
+</script><servicenow>false</servicenow><sys_class_name>sp_widget</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-11-01 07:25:13</sys_created_on><sys_id>ffdf3417f457eaaeacf87aac54095ff6</sys_id><sys_mod_count>0</sys_mod_count><sys_name>Widget Editor+ IntelliSense test bench</sys_name><sys_package display_value="Global" source="global">global</sys_package><sys_policy/><sys_scope display_value="Global">global</sys_scope><sys_update_name>sp_widget_ffdf3417f457eaaeacf87aac54095ff6</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-11-01 07:25:13</sys_updated_on><template>&lt;div class=&quot;panel panel-default we-plus-test&quot;&gt;
+  &lt;div class=&quot;panel-heading&quot;&gt;
+    &lt;h3 class=&quot;panel-title&quot;&gt;Widget Editor+ IntelliSense test bench&lt;/h3&gt;
+  &lt;/div&gt;
+  &lt;div class=&quot;panel-body&quot;&gt;
+    &lt;!-- 21. Attributes: inside a tag, type &quot;ng-&quot; for AngularJS directive suggestions. --&gt;
+    &lt;!-- 22. Classes: inside class=&quot;&quot;, press Ctrl+Space for classes from the chosen portal theme. --&gt;
+    &lt;p&gt;Client total: {{c.total}}&lt;/p&gt;
+    &lt;p ng-if=&quot;c.loading&quot;&gt;Loading…&lt;/p&gt;
+    &lt;pre ng-if=&quot;data.summary&quot;&gt;{{data.summary}}&lt;/pre&gt;
+  &lt;/div&gt;
+&lt;/div&gt;
+</template></sp_widget></record_update>]]></payload>
+<payload_hash>-881283638</payload_hash>
+<remote_update_set display_value="Widget Editor+ IntelliSense test bench">4ab8c4318394d3108ae69d60ceaad388</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-11-02 06:46:36</sys_created_on>
+<sys_id>ceb8c4318394d3108ae69d60ceaad38a</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a19602b71d0000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-11-02 06:46:36</sys_updated_on>
+<table>sp_widget</table>
+<target_name>Widget Editor+ IntelliSense test bench</target_name>
+<type>Widget</type>
+<update_domain>global</update_domain>
+<update_guid/>
+<update_guid_history/>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="Global">global</application>
+<category>customer</category>
+<comments/>
+<name>sp_page_767ccb7312a54e4f93bb3399b6c7907f</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_page"><sp_page action="INSERT_OR_UPDATE"><category>custom</category><css/><draft>false</draft><dynamic_title_structure/><human_readable_url_structure/><id>we_plus_test_bench</id><internal>false</internal><omit_watcher>false</omit_watcher><public>false</public><roles/><seo_script/><short_description>Manual test page for Widget Editor+: shows the IntelliSense test bench widget with the Debug Context Menu embedded.</short_description><title>Widget Editor+ IntelliSense test bench</title><use_seo_script>false</use_seo_script><sys_scope display_value="Global">global</sys_scope><sys_id>767ccb7312a54e4f93bb3399b6c7907f</sys_id><sys_update_name>sp_page_767ccb7312a54e4f93bb3399b6c7907f</sys_update_name></sp_page></record_update>]]></payload>
+<payload_hash>-876828810</payload_hash>
+<remote_update_set display_value="Widget Editor+ IntelliSense test bench">4ab8c4318394d3108ae69d60ceaad388</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-11-02 06:46:36</sys_created_on>
+<sys_id>377ec9b3ad12457db66635f027460c4b</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a19602b7400000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-11-02 06:46:36</sys_updated_on>
+<table>sp_page</table>
+<target_name>we_plus_test_bench</target_name>
+<type>Page</type>
+<update_domain>global</update_domain>
+<update_guid/>
+<update_guid_history/>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="Global">global</application>
+<category>customer</category>
+<comments/>
+<name>sp_container_497ed6141c0442e08efa280b05bc97bf</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_container"><sp_container action="INSERT_OR_UPDATE"><background_color/><background_image/><background_style>default</background_style><bootstrap_alt>false</bootstrap_alt><class_name/><container_class_name/><name>Widget Editor+ IntelliSense test bench - Container 1</name><order>1</order><semantic_tag/><sp_page id="we_plus_test_bench">767ccb7312a54e4f93bb3399b6c7907f</sp_page><subheader>false</subheader><title/><width>container</width><sys_scope display_value="Global">global</sys_scope><sys_id>497ed6141c0442e08efa280b05bc97bf</sys_id><sys_update_name>sp_container_497ed6141c0442e08efa280b05bc97bf</sys_update_name></sp_container></record_update>]]></payload>
+<payload_hash>1818380941</payload_hash>
+<remote_update_set display_value="Widget Editor+ IntelliSense test bench">4ab8c4318394d3108ae69d60ceaad388</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-11-02 06:46:36</sys_created_on>
+<sys_id>f2cca4c681c54481be1d691d48521623</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a19602b7410000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-11-02 06:46:36</sys_updated_on>
+<table>sp_container</table>
+<target_name>Widget Editor+ IntelliSense test bench - Container 1</target_name>
+<type>Container</type>
+<update_domain>global</update_domain>
+<update_guid/>
+<update_guid_history/>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="Global">global</application>
+<category>customer</category>
+<comments/>
+<name>sp_row_558f8a6f6e3b4d769a8dadd47217fea7</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_row"><sp_row action="INSERT_OR_UPDATE"><class_name/><order>1</order><semantic_tag/><sp_column/><sp_container>497ed6141c0442e08efa280b05bc97bf</sp_container><sys_scope display_value="Global">global</sys_scope><sys_id>558f8a6f6e3b4d769a8dadd47217fea7</sys_id><sys_update_name>sp_row_558f8a6f6e3b4d769a8dadd47217fea7</sys_update_name></sp_row></record_update>]]></payload>
+<payload_hash>824136083</payload_hash>
+<remote_update_set display_value="Widget Editor+ IntelliSense test bench">4ab8c4318394d3108ae69d60ceaad388</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-11-02 06:46:36</sys_created_on>
+<sys_id>e5a716ca15cc450bb0cce61e2fb57a42</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a19602b7420000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-11-02 06:46:36</sys_updated_on>
+<table>sp_row</table>
+<target_name>558f8a6f6e3b4d769a8dadd47217fea7</target_name>
+<type>Row</type>
+<update_domain>global</update_domain>
+<update_guid/>
+<update_guid_history/>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="Global">global</application>
+<category>customer</category>
+<comments/>
+<name>sp_column_a11c46db41424060bc5bf1f4094331f8</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_column"><sp_column action="INSERT_OR_UPDATE"><class_name/><order>1</order><semantic_tag/><size>12</size><size_lg/><size_sm/><size_xs/><sp_row>558f8a6f6e3b4d769a8dadd47217fea7</sp_row><sys_scope display_value="Global">global</sys_scope><sys_id>a11c46db41424060bc5bf1f4094331f8</sys_id><sys_update_name>sp_column_a11c46db41424060bc5bf1f4094331f8</sys_update_name></sp_column></record_update>]]></payload>
+<payload_hash>1214172385</payload_hash>
+<remote_update_set display_value="Widget Editor+ IntelliSense test bench">4ab8c4318394d3108ae69d60ceaad388</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-11-02 06:46:36</sys_created_on>
+<sys_id>d2261c5d725d4b8ab3e4853450d84ce1</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a19602b7430000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-11-02 06:46:36</sys_updated_on>
+<table>sp_column</table>
+<target_name>a11c46db41424060bc5bf1f4094331f8</target_name>
+<type>Column</type>
+<update_domain>global</update_domain>
+<update_guid/>
+<update_guid_history/>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="Global">global</application>
+<category>customer</category>
+<comments/>
+<name>sp_instance_6fcb0c9500434e62abfa69caeecf42e4</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_instance"><sp_instance action="INSERT_OR_UPDATE"><active>true</active><async_load>false</async_load><class_name/><color>default</color><css/><glyph/><id/><order>1</order><roles/><short_description/><size>md</size><sp_column>a11c46db41424060bc5bf1f4094331f8</sp_column><sp_widget>ffdf3417f457eaaeacf87aac54095ff6</sp_widget><title>IntelliSense test bench instance</title><url/><widget_parameters/><sys_scope display_value="Global">global</sys_scope><sys_id>6fcb0c9500434e62abfa69caeecf42e4</sys_id><sys_update_name>sp_instance_6fcb0c9500434e62abfa69caeecf42e4</sys_update_name></sp_instance></record_update>]]></payload>
+<payload_hash>-270066351</payload_hash>
+<remote_update_set display_value="Widget Editor+ IntelliSense test bench">4ab8c4318394d3108ae69d60ceaad388</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-11-02 06:46:36</sys_created_on>
+<sys_id>d6fce3d64551463b84fb18ecf4538191</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a19602b7440000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-11-02 06:46:36</sys_updated_on>
+<table>sp_instance</table>
+<target_name>IntelliSense test bench instance</target_name>
+<type>Instance</type>
+<update_domain>global</update_domain>
+<update_guid/>
+<update_guid_history/>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="Global">global</application>
+<category>customer</category>
+<comments/>
+<name>sp_instance_bf51e2ba6ab74d19978f2056a5edb518</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_instance"><sp_instance action="INSERT_OR_UPDATE"><active>true</active><async_load>false</async_load><class_name/><color>default</color><css/><glyph/><id/><order>2</order><roles/><short_description/><size>md</size><sp_column>a11c46db41424060bc5bf1f4094331f8</sp_column><sp_widget>d7ad6f7083f7be1070b8b5dfeeaad39d</sp_widget><title>Debug Menu instance</title><url/><widget_parameters/><sys_scope display_value="Global">global</sys_scope><sys_id>bf51e2ba6ab74d19978f2056a5edb518</sys_id><sys_update_name>sp_instance_bf51e2ba6ab74d19978f2056a5edb518</sys_update_name></sp_instance></record_update>]]></payload>
+<payload_hash>1651881914</payload_hash>
+<remote_update_set display_value="Widget Editor+ IntelliSense test bench">4ab8c4318394d3108ae69d60ceaad388</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-11-02 06:46:36</sys_created_on>
+<sys_id>d6a405e648284577b8633b60bca594ed</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a19602b7450000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-11-02 06:46:36</sys_updated_on>
+<table>sp_instance</table>
+<target_name>Debug Menu instance</target_name>
+<type>Instance</type>
+<update_domain>global</update_domain>
+<update_guid/>
+<update_guid_history/>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+</unload>

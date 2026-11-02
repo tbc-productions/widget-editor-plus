@@ -4617,6 +4617,36 @@
                         }
                         return text.length;
                     }
+                    // Server data read from a c.server.get/update/refresh response, e.g. .then((resp) => resp.data.x).
+                    function responseRefs(source) {
+                        var text = _blankComments(source, false, true);
+                        var refs = [];
+                        scan(/\.\s*server\s*\.\s*(?:get|update|refresh)\s*\(/g, text, function (m) {
+                            var callEnd = closingParen(text, m.index + m[0].length);
+                            var then = new RegExp(
+                                '^\\)\\s*\\.\\s*then\\s*\\(\\s*(?:function\\s*[\\w$]*\\s*\\(\\s*(' +
+                                    ID +
+                                    ')[^)]*\\)|\\(\\s*(' +
+                                    ID +
+                                    ')[^)]*\\)\\s*=>|(' +
+                                    ID +
+                                    ')\\s*=>)'
+                            ).exec(text.slice(callEnd));
+                            if (!then) return;
+                            var start = callEnd + then[0].length;
+                            var body = source.slice(start, scopeEnd(text, start));
+                            var name = escapeRe(then[1] || then[2] || then[3]);
+                            refs = refs.concat(keyRefs('(?<![\\w$.])' + name + '\\s*\\.\\s*data', body));
+                        });
+                        return refs;
+                    }
+                    function closingParen(text, from) {
+                        for (var depth = 0, i = from; i < text.length; i++) {
+                            if ('({['.indexOf(text[i]) !== -1) depth++;
+                            else if (')}]'.indexOf(text[i]) !== -1 && --depth < 0) return i;
+                        }
+                        return text.length;
+                    }
                     function wholeUse(prefix, text) {
                         return new RegExp(prefix + '(?!\\s*(?:\\.\\s*' + ID + '|\\[\\s*[\'"]))', 'g').test(text);
                     }
@@ -4661,6 +4691,7 @@
                         Object.assign(clientWrites, keySet(entry.refs, true));
                         clientReplaced = clientReplaced || new RegExp(entry.prefix + '\\s*=(?!=)').test(entry.text);
                         clientWhole = clientWhole || wholeUse(entry.prefix, entry.text);
+                        entry.responseRefs = responseRefs(entry.text);
                     });
 
                     // Angular templates share the widget scope, including ones not open in the editor.
@@ -4714,7 +4745,7 @@
                     if (!clientWhole) {
                         var used = keySet(
                             scripts.concat(templates).reduce(function (refs, entry) {
-                                return refs.concat(entry.refs);
+                                return refs.concat(entry.refs, entry.responseRefs || []);
                             }, [])
                         );
                         var serverReads = {};
