@@ -279,6 +279,7 @@ export const editorTableConfigSysScriptEmailProperty = Property({
   "primaryField": "name",
   "icon": "icon-envelope-subscribe",
   "allowCreate": true,
+  "supportsEs12": true,
   "scriptFields": [
     {
       "name": "script",
@@ -320,6 +321,7 @@ export const editorTableConfigSysScriptFixProperty = Property({
   "primaryField": "name",
   "icon": "icon-document-code",
   "allowCreate": true,
+  "supportsEs12": true,
   "scriptFields": [
     {
       "name": "script",

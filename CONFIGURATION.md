@@ -40,7 +40,7 @@ The header shows Active where available. **More fields** includes descriptions, 
 
 Fix Scripts show **Name** and **Rollback** in the header, with **Description**, **Unloadable** and **Before** in **More fields**.
 
-Editor visibility and order preferences apply only to widgets; other types start with all code panes visible. ES12 controls are available for widget server scripts, Script Includes and UI Page processing scripts. Widget-specific actions, related lists, live presence, real-time updates and SN Utils integration are limited to widgets. Other types retain version comparison, Assistant, XML and native-form access. History and drafts distinguish record types.
+Editor visibility and order preferences apply only to widgets; other types start with all code panes visible. ES12 controls are available for widget server scripts, Script Includes, UI Page processing scripts, Email Scripts and Fix Scripts. Widget-specific actions, related lists, live presence, real-time updates and SN Utils integration are limited to widgets. Other types retain version comparison, Assistant, XML and native-form access. History and drafts distinguish record types.
 
 Existing `widget_id` links remain supported. Other records use `record_table` and `record_sys_id`, for example:
 

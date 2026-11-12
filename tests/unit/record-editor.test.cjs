@@ -588,7 +588,7 @@ test('Script Include more fields expose Mobile callable and the read-only protec
 
 test('ES12 loads and saves for server-script types and rejects unsupported or inaccessible records', () => {
     for (const table of supported.slice(1)) {
-        const supported = ['sys_script_include', 'sys_ui_page'].includes(table);
+        const supported = ['sys_script_email', 'sys_script_fix', 'sys_script_include', 'sys_ui_page'].includes(table);
         for (const value of ['1', 'true', '0', 'false']) {
             const result = serverHarness(table, { es12: { use_es_latest: value } }).api.getWidget();
             assert.equal(result.widget.es12_supported, supported, table);
