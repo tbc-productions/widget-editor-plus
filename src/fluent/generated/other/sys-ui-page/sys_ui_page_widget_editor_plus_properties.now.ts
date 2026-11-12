@@ -139,6 +139,7 @@ UiPage({
 
     /* Native feature buttons, arranged horizontally. */
     .wep-nav-container { margin-bottom: 1.25rem; }
+    .wep-instance-warning { margin: 0 0 1.25rem; }
     .wep-nav {
       display: flex;
       flex-wrap: wrap;
@@ -508,6 +509,7 @@ UiPage({
       </div>
     </header>
     <main class="container-fluid wep-app">
+      <div id="wep-instance-warning" class="alert alert-warning wep-instance-warning" role="note">These properties affect all Widget Editor+ users on this instance.</div>
       ${Now.include('./widget_editor_properties_loading.html')}
       <div id="wep-content" hidden="hidden">
       <div class="wep-nav-container">
