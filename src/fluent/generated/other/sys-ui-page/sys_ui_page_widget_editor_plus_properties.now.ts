@@ -41,7 +41,7 @@ UiPage({
     .dc-header {
         position: sticky;
         top: 0;
-        background: rgb(var(--now-color_chrome--brand-5,var(--now-color--primary-0,221,237,233)));
+        background: rgb(var(--now-unified-nav_header--background-color, var(--now-color_chrome--brand-5,var(--now-color--primary-0,221,237,233))));
         flex-shrink: 0;
         z-index: 10;
         margin: 0;
@@ -56,7 +56,7 @@ UiPage({
     .dc-title {
         font-size: var(--now-font-size--lg, 18px);
         font-weight: 600;
-        color: rgb(var(--now-color--neutral-0, var(--now-color_text--primary, 38, 50, 56)));
+        color: rgb(var(--now-unified-nav_header--color, var(--now-color--neutral-0, var(--now-color_text--primary, 38, 50, 56))));
         display: flex;
         align-items: center;
         gap: 0.5rem;
