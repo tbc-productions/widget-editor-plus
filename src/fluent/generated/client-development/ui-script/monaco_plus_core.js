@@ -40,7 +40,7 @@
     };
     var _pollIntervalMs = 200;
     var _maxWaitMs = 10000;
-    var _v = '2026-11-01T20:00';
+    var _v = '2026-11-12T10:00';
     var _definitionUrl = 'monaco_language_server.jsdbx?sysparm_substitute=false&v=' + _v;
     var _clientDefinitionUrl = 'monaco_language_client.jsdbx?sysparm_substitute=false&v=' + _v;
     var _codeActionsUrl = 'monaco_code_actions.jsdbx?sysparm_substitute=false&v=' + _v;

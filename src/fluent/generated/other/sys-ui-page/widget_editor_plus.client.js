@@ -3559,7 +3559,7 @@
                 var _jsFormattingProviderRegistered = {};
 
                 function _removeLeadingCssRuleGaps(formatted) {
-                    var lines = formatted.split('\n');
+                    var lines = formatted.split(/\r?\n/);
                     for (var i = 0; i < lines.length - 2; i++) {
                         if (!/\{[ \t]*$/.test(lines[i])) {
                             continue;
@@ -3591,7 +3591,7 @@
 
                 function _restoreInlineCssComments(before, after) {
                     var sourceLines = before.split(/\r?\n/);
-                    var lines = after.split('\n');
+                    var lines = after.split(/\r?\n/);
                     var searchFrom = 0;
                     sourceLines.forEach(function (sourceLine) {
                         var inline = sourceLine.match(/^(.*\S)[ \t]+(\/\*[^\n]*?\*\/)[ \t]*$/);
@@ -3619,9 +3619,15 @@
                     return lines.join('\n');
                 }
 
-                function _applyCssFormattingEdit(editor, model, before, after) {
+                /**
+                 * Finds the narrowest single edit that turns one text into another.
+                 * @param {string} before - Current text with LF line endings.
+                 * @param {string} after - Wanted text with LF line endings.
+                 * @returns {?{range: Object, text: string}} The edit, or null when the texts match.
+                 */
+                function _minimalFormattingEdit(before, after) {
                     if (before === after) {
-                        return;
+                        return null;
                     }
                     var start = 0;
                     while (
@@ -3641,14 +3647,24 @@
                         beforeEnd--;
                         afterEnd--;
                     }
-                    var from = model.getPositionAt(start);
-                    var to = model.getPositionAt(beforeEnd);
-                    editor.executeEdits('cssFormattingSpacing', [
-                        {
-                            range: new monaco.Range(from.lineNumber, from.column, to.lineNumber, to.column),
-                            text: after.substring(start, afterEnd),
-                        },
-                    ]);
+                    // Lines and columns are counted here because model offsets differ when its line endings are CRLF.
+                    function position(offset) {
+                        var head = before.substring(0, offset);
+                        return { column: offset - head.lastIndexOf('\n'), lineNumber: head.split('\n').length };
+                    }
+                    var from = position(start);
+                    var to = position(beforeEnd);
+                    return {
+                        range: new monaco.Range(from.lineNumber, from.column, to.lineNumber, to.column),
+                        text: after.substring(start, afterEnd),
+                    };
+                }
+
+                function _applyCssFormattingEdit(editor, before, after) {
+                    var edit = _minimalFormattingEdit(before, after);
+                    if (edit) {
+                        editor.executeEdits('cssFormattingSpacing', [edit]);
+                    }
                 }
 
                 // Calls the TypeScript worker directly, forwarding user prefs as format options; more reliable than the removed setFormattingOptions.
@@ -3660,6 +3676,34 @@
                         !monaco.languages.typescript.getJavaScriptWorker
                     ) {
                         return Promise.resolve();
+                    }
+
+                    function _formatSettings(monacoOptions) {
+                        var spaceBeforeParen = !!$scope.userPrefs.insertSpaceBeforeFuncParen;
+                        return {
+                            baseIndentSize: 0,
+                            indentSize: $scope.userPrefs.tabSize,
+                            tabSize: $scope.userPrefs.tabSize,
+                            convertTabsToSpaces: monacoOptions.insertSpaces,
+                            insertSpaces: monacoOptions.insertSpaces,
+                            newLineCharacter: '\n',
+                            indentStyle: 2, // Smart
+                            insertSpaceAfterCommaDelimiter: true,
+                            insertSpaceAfterConstructor: false,
+                            insertSpaceAfterSemicolonInForStatements: true,
+                            insertSpaceBeforeAndAfterBinaryOperators: true,
+                            insertSpaceAfterKeywordsInControlFlowStatements: true,
+                            insertSpaceAfterFunctionKeywordForAnonymousFunctions: spaceBeforeParen,
+                            insertSpaceBeforeFunctionParenthesis: spaceBeforeParen,
+                            insertSpaceAfterOpeningAndBeforeClosingNonemptyParenthesis: false,
+                            insertSpaceAfterOpeningAndBeforeClosingNonemptyBrackets: false,
+                            insertSpaceAfterOpeningAndBeforeClosingNonemptyBraces: true,
+                            insertSpaceAfterOpeningAndBeforeClosingEmptyBraces: false,
+                            insertSpaceAfterOpeningAndBeforeClosingTemplateStringBraces: false,
+                            insertSpaceAfterOpeningAndBeforeClosingJsxExpressionBraces: false,
+                            trimTrailingWhitespace: true,
+                            semicolons: 'ignore',
+                        };
                     }
 
                     function _buildFmtProvider(getWorker) {
@@ -3678,31 +3722,7 @@
                                       column: range.endColumn,
                                   })
                                 : before.length;
-                            var options = {
-                                baseIndentSize: 0,
-                                indentSize: $scope.userPrefs.tabSize,
-                                tabSize: $scope.userPrefs.tabSize,
-                                convertTabsToSpaces: monacoOptions.insertSpaces,
-                                insertSpaces: monacoOptions.insertSpaces,
-                                newLineCharacter: '\n',
-                                indentStyle: 2, // Smart
-                                insertSpaceAfterCommaDelimiter: true,
-                                insertSpaceAfterConstructor: false,
-                                insertSpaceAfterSemicolonInForStatements: true,
-                                insertSpaceBeforeAndAfterBinaryOperators: true,
-                                insertSpaceAfterKeywordsInControlFlowStatements: true,
-                                insertSpaceAfterFunctionKeywordForAnonymousFunctions:
-                                    !!$scope.userPrefs.insertSpaceBeforeFuncParen,
-                                insertSpaceBeforeFunctionParenthesis: !!$scope.userPrefs.insertSpaceBeforeFuncParen,
-                                insertSpaceAfterOpeningAndBeforeClosingNonemptyParenthesis: false,
-                                insertSpaceAfterOpeningAndBeforeClosingNonemptyBrackets: false,
-                                insertSpaceAfterOpeningAndBeforeClosingNonemptyBraces: true,
-                                insertSpaceAfterOpeningAndBeforeClosingEmptyBraces: false,
-                                insertSpaceAfterOpeningAndBeforeClosingTemplateStringBraces: false,
-                                insertSpaceAfterOpeningAndBeforeClosingJsxExpressionBraces: false,
-                                trimTrailingWhitespace: true,
-                                semicolons: 'ignore',
-                            };
+                            var options = _formatSettings(monacoOptions);
                             return getWorker()
                                 .then(function (factory) {
                                     return factory(model.uri);
@@ -3726,11 +3746,15 @@
                                                 edit.newText +
                                                 after.substring(edit.span.start + edit.span.length);
                                         });
+                                    // Worker offsets follow the model's line endings; everything after this works on LF text.
+                                    after = after.replace(/\r\n?/g, '\n');
                                     // Tokenise the whole document so comment-like text in strings is left alone.
                                     var lines = after.split('\n');
                                     var tokens = monaco.editor.tokenize(after, model.getLanguageId());
                                     var firstLine = range ? range.startLineNumber - 1 : 0;
-                                    var lastLine = range ? range.endLineNumber - 1 : lines.length - 1;
+                                    var lastLine = range
+                                        ? Math.min(range.endLineNumber, lines.length) - 1
+                                        : lines.length - 1;
                                     function isComment(line, column) {
                                         var list = tokens[line] || [];
                                         for (var t = list.length - 1; t >= 0; t--) {
@@ -3753,10 +3777,12 @@
                                         const body = [];
                                         let j = i + 1;
                                         for (; j <= lastLine; j++) {
-                                            const parts = /^([ \t]*)(.*)$/.exec(lines[j]);
+                                            const parts = /^([ \t]*)([\s\S]*)$/.exec(lines[j]);
                                             body.push({ indent: parts[1], line: j, text: parts[2] });
                                             if (lines[j].indexOf('*/') !== -1) break;
                                         }
+                                        // A comment running past the selection is left for a later format.
+                                        if (range && j > lastLine) break;
                                         const starred = body.some((item) => item.text.charAt(0) === '*');
                                         const plain = body.filter(
                                             (item) => item.text.trim() && item.text.charAt(0) !== '*'
@@ -3775,46 +3801,50 @@
                                         }
                                         i = j;
                                     }
-                                    after = lines.join('\n');
-                                    if (after === before) return [];
-                                    var prefix = 0;
-                                    while (
-                                        prefix < before.length &&
-                                        prefix < after.length &&
-                                        before.charAt(prefix) === after.charAt(prefix)
-                                    )
-                                        prefix++;
-                                    var beforeEnd = before.length,
-                                        afterEnd = after.length;
-                                    while (
-                                        beforeEnd > prefix &&
-                                        afterEnd > prefix &&
-                                        before.charAt(beforeEnd - 1) === after.charAt(afterEnd - 1)
-                                    ) {
-                                        beforeEnd--;
-                                        afterEnd--;
-                                    }
-                                    var from = model.getPositionAt(prefix),
-                                        to = model.getPositionAt(beforeEnd);
-                                    return [
-                                        {
-                                            range: new monaco.Range(
-                                                from.lineNumber,
-                                                from.column,
-                                                to.lineNumber,
-                                                to.column
-                                            ),
-                                            text: after.substring(prefix, afterEnd),
-                                        },
-                                    ];
+                                    var edit = _minimalFormattingEdit(before.replace(/\r\n?/g, '\n'), lines.join('\n'));
+                                    return edit ? [edit] : [];
                                 });
                         }
                         return {
+                            // Monaco's own on-type formatter ignores the function spacing preference, which undoes Format Document.
+                            autoFormatTriggerCharacters: [';', '}', '\n'],
                             provideDocumentFormattingEdits: function (model, options) {
                                 return format(model, options);
                             },
                             provideDocumentRangeFormattingEdits: function (model, range, options) {
                                 return format(model, options, range);
+                            },
+                            provideOnTypeFormattingEdits: function (model, position, ch, monacoOptions) {
+                                var version = model.getVersionId();
+                                var offset = model.getOffsetAt(position);
+                                return getWorker()
+                                    .then(function (factory) {
+                                        return factory(model.uri);
+                                    })
+                                    .then(function (worker) {
+                                        return worker.getFormattingEditsAfterKeystroke(
+                                            model.uri.toString(),
+                                            offset,
+                                            ch,
+                                            _formatSettings(monacoOptions)
+                                        );
+                                    })
+                                    .then(function (edits) {
+                                        if (model.isDisposed() || model.getVersionId() !== version) return [];
+                                        return (edits || []).map(function (edit) {
+                                            var from = model.getPositionAt(edit.span.start);
+                                            var to = model.getPositionAt(edit.span.start + edit.span.length);
+                                            return {
+                                                range: new monaco.Range(
+                                                    from.lineNumber,
+                                                    from.column,
+                                                    to.lineNumber,
+                                                    to.column
+                                                ),
+                                                text: edit.newText,
+                                            };
+                                        });
+                                    });
                             },
                         };
                     }
@@ -3829,6 +3859,9 @@
                                 var provider = _buildFmtProvider(getWorker);
                                 monaco.languages.registerDocumentFormattingEditProvider(language, provider);
                                 monaco.languages.registerDocumentRangeFormattingEditProvider(language, provider);
+                                if (monaco.languages.registerOnTypeFormattingEditProvider) {
+                                    monaco.languages.registerOnTypeFormattingEditProvider(language, provider);
+                                }
                             },
                             function () {
                                 _jsFormattingProviderRegistered[language] = false;
@@ -4064,12 +4097,12 @@
                                     if (result && result.then) {
                                         result.then(function () {
                                             if (_cssSource !== null && _fmtModel && !_fmtModel.isDisposed()) {
-                                                var formatted = _fmtModel.getValue();
+                                                var formatted = _fmtModel.getValue().replace(/\r\n?/g, '\n');
                                                 var restored = _restoreInlineCssComments(
                                                     _cssSource,
                                                     _removeLeadingCssRuleGaps(formatted)
                                                 );
-                                                _applyCssFormattingEdit(ed, _fmtModel, formatted, restored);
+                                                _applyCssFormattingEdit(ed, formatted, restored);
                                             }
                                             _resetIndent();
                                         }, _resetIndent);
@@ -4372,6 +4405,15 @@
                                         $scope.$apply(function () {
                                             _handleCtrlS(pane);
                                         });
+                                    },
+                                });
+                                // Routes the shortcut through the same path as the toolbar button, which also tidies CSS output.
+                                ed.addAction({
+                                    id: 'we.formatDocument',
+                                    keybindings: [monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF],
+                                    label: 'Format Document',
+                                    run: function () {
+                                        $scope.formatDocument(pane);
                                     },
                                 });
                             }
