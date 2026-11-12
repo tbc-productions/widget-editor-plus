@@ -1390,6 +1390,7 @@
 
                 $scope.nameInvalid = false;
                 $scope.visiblePaneCount = 0;
+                $scope.maximisedPaneKey = null;
                 $scope.prefDragKey = null;
 
                 // Link provider modal state
@@ -2912,6 +2913,10 @@
                     });
 
                     $scope.visiblePaneCount = panes.length;
+                    $scope.switchableEditors = $scope.isVersionView
+                        ? panes
+                        : $scope.coreEditorDefs.map(getOrCreateCorePaneObj).concat(extraPanes);
+                    _reconcileMaximisedPane(panes);
 
                     var items = [];
                     panes.forEach(function (p, i) {
@@ -2926,6 +2931,119 @@
                     $scope.visibleItems = items;
                     _isInitialPaneBuild = false;
                 }
+
+                // Maximise follows a newly opened pane and ends when its pane closes.
+                function _reconcileMaximisedPane(panes) {
+                    const current = $scope.maximisedPaneKey;
+                    if (!current) {
+                        return;
+                    }
+                    const previousKeys = ($scope.visibleItems || []).map((item) => item.key);
+                    const opened = panes.find((p) => !previousKeys.includes(p.key));
+                    let next = opened ? opened.key : current;
+                    if (panes.length < 2 || !panes.some((p) => p.key === next)) {
+                        next = null;
+                    }
+                    if (next !== current) {
+                        $scope.maximisedPaneKey = next;
+                        if (!next) {
+                            _maximiseShownKeys = [];
+                        }
+                        $timeout(layoutAllEditors, 0);
+                    }
+                }
+
+                // Core editors shown only while maximised; hidden again on restore.
+                let _maximiseShownKeys = [];
+
+                function _hiddenCoreDef(key) {
+                    return $scope.coreEditorDefs.find((def) => def.key === key && !def.visible);
+                }
+
+                function _focusPaneWhenReady(key) {
+                    $timeout(() => {
+                        layoutAllEditors();
+                        const editor = monacoEditors[key];
+                        if (editor && editor.focus) {
+                            editor.focus();
+                        }
+                    }, 120);
+                }
+
+                function _setMaximisedPane(key, focusKey) {
+                    if ($scope.maximisedPaneKey === key) {
+                        return;
+                    }
+                    $scope.maximisedPaneKey = key;
+                    $timeout(() => {
+                        layoutAllEditors();
+                        const editor = monacoEditors[focusKey || key];
+                        if (editor && editor.focus) {
+                            editor.focus();
+                        }
+                    }, 0);
+                }
+
+                $scope.maximisePane = function (pane) {
+                    if (!pane || !pane.key || $scope.visiblePaneCount < 2) {
+                        return;
+                    }
+                    const hiddenDef = $scope.maximisedPaneKey && _hiddenCoreDef(pane.key);
+                    if (!hiddenDef) {
+                        _setMaximisedPane(pane.key);
+                        return;
+                    }
+                    hiddenDef.visible = true;
+                    _maximiseShownKeys.push(pane.key);
+                    $scope.maximisedPaneKey = pane.key;
+                    buildVisibleItems();
+                    $timeout(initAllEditors, 50);
+                    _focusPaneWhenReady(pane.key);
+                };
+
+                $scope.restorePanes = function () {
+                    const previousKey = $scope.maximisedPaneKey;
+                    if (!_maximiseShownKeys.length) {
+                        _setMaximisedPane(null, previousKey);
+                        return;
+                    }
+                    for (const def of $scope.coreEditorDefs) {
+                        if (!_maximiseShownKeys.includes(def.key)) {
+                            continue;
+                        }
+                        def.visible = false;
+                        if (monacoEditors[def.key]) {
+                            $scope.widget[def.field] = monacoEditors[def.key].getValue();
+                            disposeEditor(def.key);
+                        }
+                    }
+                    const focusKey = _maximiseShownKeys.includes(previousKey) ? null : previousKey;
+                    _maximiseShownKeys = [];
+                    $scope.maximisedPaneKey = null;
+                    buildVisibleItems();
+                    const firstPane = $scope.visibleItems.find((item) => item.type === 'pane');
+                    _focusPaneWhenReady(focusKey || (firstPane && firstPane.key));
+                };
+
+                $scope.toggleMaximisePane = function (pane) {
+                    if (pane && $scope.maximisedPaneKey === pane.key) {
+                        $scope.restorePanes();
+                    } else {
+                        $scope.maximisePane(pane);
+                    }
+                };
+
+                $scope.onPaneHeaderDblClick = function (pane, $event) {
+                    const target = $event && $event.target;
+                    if (
+                        target &&
+                        target.closest &&
+                        target.closest('button, input, label, select, a, [role="button"]')
+                    ) {
+                        return;
+                    }
+                    $scope.toggleMaximisePane(pane);
+                };
 
                 $scope.reorderPrefEditors = function (fromKey, toKey) {
                     var arr = $scope.userPrefsEdit.editors;
@@ -4203,6 +4321,17 @@
                                     },
                                 });
                             }
+
+                            ed.addAction({
+                                id: 'we.toggleMaximise',
+                                keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.KeyM],
+                                label: 'Maximise or Restore Editor',
+                                run: () => {
+                                    _safeApply(() => {
+                                        $scope.toggleMaximisePane(pane);
+                                    });
+                                },
+                            });
 
                             if (!readOnly) {
                                 ed.addAction({
@@ -6789,6 +6918,7 @@
                     if (!pane || !pane.key) {
                         return;
                     }
+                    _revealPane(pane);
                     $timeout(function () {
                         var editor = monacoEditors[pane.key];
                         if (editor && editor.focus) {
@@ -6807,7 +6937,15 @@
                     }, 0);
                 }
 
+                // Keeps a pane that is being focused from staying hidden behind a maximised one.
+                function _revealPane(pane) {
+                    if ($scope.maximisedPaneKey && pane && pane.key && $scope.maximisedPaneKey !== pane.key) {
+                        _setMaximisedPane(pane.key);
+                    }
+                }
+
                 function flashOpenExtraPane(existingPane) {
+                    _revealPane(existingPane);
                     if (!existingPane || !existingPane.key || !$scope.userPrefs.flashOnEditorOpen) {
                         return;
                     }
@@ -8490,6 +8628,22 @@
                             e.preventDefault();
                             return;
                         }
+                    }
+
+                    // Escape or Alt+M outside an editor restores the maximised layout.
+                    const isRestoreKey =
+                        key === 'Escape' ||
+                        keyCode === 27 ||
+                        (e.altKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyM');
+                    if (
+                        isRestoreKey &&
+                        $scope.maximisedPaneKey &&
+                        !$scope.openDropdown &&
+                        !(e.target && e.target.closest && e.target.closest('.monaco-editor'))
+                    ) {
+                        e.preventDefault();
+                        _safeApply($scope.restorePanes);
+                        return;
                     }
 
                     if ((key === 'Tab' || keyCode === 9) && $scope.openDropdown) {
