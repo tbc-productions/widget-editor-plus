@@ -35,6 +35,7 @@ vm.runInContext(
     html.slice(html.indexOf('    /* HTML Formatting'), html.indexOf('    // LinkedEditingRangeProvider')),
     htmlContext
 );
+vm.runInContext('this.INLINE_ELEMENTS = INLINE_ELEMENTS; this.VOID_ELEMENTS = VOID_ELEMENTS;', htmlContext);
 
 test('HTML formatting preserves textarea and pre content and is stable', () => {
     for (const [source, expected] of [
@@ -70,6 +71,84 @@ test('HTML formatting preserves quoted values, raw bodies and inline text', () =
     const nestedInline = htmlContext._formatHtml('<span>Go <a href="x"\n title="test">here</a></span>', {});
     assert.match(nestedInline, /\n {12}title="test">here<\/a><\/span>/);
     assert.equal(htmlContext._formatHtml(nestedInline, {}), nestedInline);
+});
+
+test('HTML formatting indents block content inside inline elements and keeps tag structure', () => {
+    const options = { tabSize: 4, insertSpaces: true };
+    for (const [source, expected] of [
+        ['<a href="#"><div>card</div></a>', '<a href="#">\n    <div>card</div>\n</a>\n'],
+        ['<span><script>x()</script></span>', '<span>\n    <script>x()</script>\n</span>\n'],
+        ['<div><input type="text"></input><p>x</p></div>', '<div>\n    <input type="text"></input>\n    <p>x</p>\n</div>\n'],
+        ['<ul><li>a<li>b</ul>', '<ul>\n    <li>\n        a\n    <li>\n        b\n</ul>\n'],
+        ['<div><p>x</p></section></div>', '<div>\n    <p>x</p>\n    </section>\n</div>\n'],
+        ['<div class="a"\n     id="b"\n>\n</div>', '<div class="a"\n     id="b">\n</div>\n'],
+        ['<input type="text"\n   ng-model="c.x"\n   />', '<input type="text"\n       ng-model="c.x" />\n'],
+        ['<div><script>\n  run();\n</script></div>', '<div>\n    <script>\n  run();\n    </script>\n</div>\n'],
+        ['<div>\r\n  <pre>a\r\nb</pre>\r\n</div>\r\n', '<div>\n    <pre>a\nb</pre>\n</div>\n'],
+        ['<![CDATA[ a > b ]]><p>x</p>', '<![CDATA[ a > b ]]>\n<p>x</p>\n']
+    ]) {
+        const once = htmlContext._formatHtml(source, options);
+        assert.equal(once, expected);
+        assert.equal(htmlContext._formatHtml(once, options), expected);
+    }
+});
+
+test('HTML formatting keeps comment layout, Angular expressions and rendered spacing', () => {
+    const options = { tabSize: 4, insertSpaces: true };
+    for (const [source, expected] of [
+        ['<div>\n<!--\n<ul>\n    <li>old</li>\n\n</ul>\n-->\n</div>', '<div>\n    <!--\n    <ul>\n        <li>old</li>\n\n    </ul>\n    -->\n</div>\n'],
+        ['  <!-- first\n       second -->', '<!-- first\n     second -->\n'],
+        ['<p>{{ c.count <c.limit }} of {{ c.total>0 }}</p>', '<p>{{ c.count <c.limit }} of {{ c.total>0 }}</p>\n'],
+        ['<p>{{ c.pad  +  \'a  b\' }}   text</p>', '<p>{{ c.pad  +  \'a  b\' }} text</p>\n'],
+        ['<p>one<span>\ntwo</span>three</p>', '<p>\n    one<span>\n        two</span>three\n</p>\n'],
+        ['<div>\n\n    text\n</div>', '<div>\n\n    text\n</div>\n']
+    ]) {
+        const once = htmlContext._formatHtml(source, options);
+        assert.equal(once, expected);
+        assert.equal(htmlContext._formatHtml(once, options), expected);
+    }
+});
+
+test('HTML formatting of generated markup is stable and never changes content or inline spacing', () => {
+    let seed = 20261112;
+    const random = limit => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % limit; };
+    const pick = list => list[random(list.length)];
+    const gap = () => pick(['', '', '', ' ', '\n', '\n\n', '  \n  ', '\t', '\r\n']);
+    const attributes = () => pick(['', '', ' class="a b"', ' ng-if="c.x > 1"', ' class="a"\n   id="b"',
+        '\n  ng-class="{\n \'a\': b,\n   \'c\': d\n}"', ' title=\'x "y"\'', ' disabled', ' ng-repeat="i in c.list"\n ng-click="c.go(i)"\n']);
+    function node(depth) {
+        const kind = random(20);
+        if (depth > 5 || kind < 5) return pick(['text', 'two  words', '{{c.x}}', '{{ a < b }}', '&nbsp;', 'a\nb', 'x > y', '1 < 2']);
+        if (kind < 6) return '<' + pick(['br', 'input', 'img', 'hr']) + attributes() + pick(['>', '/>', ' />']);
+        if (kind < 7) return pick(['<!-- c -->', '<!--\n  multi\n    line\n-->', '<!-- a\n     b -->']);
+        if (kind < 8) return pick(['<pre>  a\n   b </pre>', '<textarea>\n t </textarea>', '<script>\n  var a = "<div>";\n</script>', '<style>.a{b:c}</style>']);
+        const name = kind < 14 ? pick(['div', 'p', 'ul', 'li', 'section', 'table', 'tr', 'td', 'my-el', 'option'])
+            : pick(['span', 'a', 'b', 'i', 'button', 'label']);
+        let markup = '<' + name + attributes() + '>';
+        for (let child = random(4); child > 0; child--) markup += gap() + node(depth + 1);
+        return markup + gap() + (random(12) ? '</' + name + '>' : '');
+    }
+    const inlineFlow = token => token.type === 'text' || (token.type === 'tag' &&
+        (htmlContext.INLINE_ELEMENTS[token.tagName] || htmlContext.VOID_ELEMENTS[token.tagName]));
+    const tokens = text => htmlContext._tokenizeHtmlForFormat(text, 4).filter(token => token.type !== 'preserved');
+    for (let sample = 0; sample < 1500; sample++) {
+        let source = '';
+        for (let roots = 1 + random(3); roots > 0; roots--) source += node(0) + gap();
+        for (const insertSpaces of [true, false]) {
+            const options = { tabSize: 4, insertSpaces };
+            const once = htmlContext._formatHtml(source, options);
+            assert.equal(htmlContext._formatHtml(once, options), once, 'stable: ' + JSON.stringify(source));
+            assert.equal(once.replace(/\s+/g, ''), source.replace(/\s+/g, ''), 'content: ' + JSON.stringify(source));
+            assert.ok(!once.includes('\r'), 'line endings: ' + JSON.stringify(source));
+            const before = tokens(source.replace(/\r\n?/g, '\n')), after = tokens(once);
+            assert.equal(after.length, before.length, 'structure: ' + JSON.stringify(source));
+            for (let i = 1; i < before.length; i++) {
+                if (inlineFlow(before[i]) && inlineFlow(before[i - 1])) {
+                    assert.equal(!!after[i].hadSpace, !!before[i].hadSpace, 'spacing: ' + JSON.stringify(source));
+                }
+            }
+        }
+    }
 });
 
 test('HTML closing tags follow typing offsets and ignore self-closing tags and quoted text', () => {
@@ -177,6 +256,10 @@ test('HTML formatter returns no edit for stable text and a narrow edit for chang
     assert.equal(edits[0].range.startColumn, 22);
     assert.equal(edits[0].range.endColumn, 22);
     assert.equal(edits[0].text, '\n');
+    assert.equal(provider.provideDocumentFormattingEdits(model('<div>\r\n    <p>a</p>\r\n</div>\r\n'), {}).length, 0);
+    const windows = provider.provideDocumentFormattingEdits(model('<div>\r\n<p>a</p>\r\n</div>\r\n'), {});
+    assert.deepEqual({ ...windows[0].range }, { startLineNumber: 2, startColumn: 1, endLineNumber: 2, endColumn: 1 });
+    assert.equal(windows[0].text, '    ');
 });
 
 test('HTML Enter aligns attributes and following siblings when handlers attach after editor creation', () => {
@@ -303,17 +386,23 @@ test('CSS and SCSS formatting keeps existing same-line block comments', () => {
 test('CSS post-format correction edits only the changed span', () => {
     const before = 'ul {\n\n    li {\n        color: red;\n    }\n}';
     const after = cssContext._removeLeadingCssRuleGaps(before);
-    const model = { getPositionAt(offset) {
-        const prefix = before.slice(0, offset).split('\n');
-        return { lineNumber: prefix.length, column: prefix.at(-1).length + 1 };
-    } };
     let edit;
-    cssContext._applyCssFormattingEdit({ executeEdits(source, edits) {
-        edit = edits[0];
-    } }, model, before, after);
+    const editor = { executeEdits(source, edits) { edit = edits[0]; } };
+    cssContext._applyCssFormattingEdit(editor, before, after);
     assert.equal(edit.range.startLineNumber, 2);
     assert.equal(edit.range.endLineNumber, 3);
     assert.equal(edit.text, '');
+    edit = undefined;
+    cssContext._applyCssFormattingEdit(editor, after, after);
+    assert.equal(edit, undefined);
+});
+
+test('CSS post-format corrections handle Windows line endings', () => {
+    assert.equal(cssContext._removeLeadingCssRuleGaps('ul {\r\n\r\n    li {\r\n        color: red;\r\n    }\r\n}'),
+        'ul {\n    li {\n        color: red;\n    }\n}');
+    const restored = cssContext._restoreInlineCssComments('a {\r\n  color:red; /* colour */\r\n}',
+        'a {\r\n    color: red;\r\n    /* colour */\r\n}');
+    assert.equal(restored, 'a {\n    color: red; /* colour */\n}');
 });
 
 test('JavaScript document and paste formatting align block comments without changing literals', async () => {
@@ -331,29 +420,34 @@ test('JavaScript document and paste formatting align block comments without chan
         languages: {
             typescript: { getJavaScriptWorker: () => Promise.resolve(() => service) },
             registerDocumentFormattingEditProvider: (language, provider) => { providers.document = provider; },
-            registerDocumentRangeFormattingEditProvider: (language, provider) => { providers.range = provider; }
+            registerDocumentRangeFormattingEditProvider: (language, provider) => { providers.range = provider; },
+            registerOnTypeFormattingEditProvider: (language, provider) => { providers.type = provider; }
         },
         editor: { tokenize(text) {
-            const temp = ts.createLanguageService({ ...host, getScriptSnapshot: file => file === 'test.js' ? ts.ScriptSnapshot.fromString(text) : undefined });
-            const comments = temp.getSyntacticClassifications('test.js', { start: 0, length: text.length }).filter(item => item.classificationType === 'comment');
+            const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.Standard, text);
+            const comments = [];
+            for (let kind = scanner.scan(); kind !== ts.SyntaxKind.EndOfFileToken; kind = scanner.scan()) {
+                if (kind === ts.SyntaxKind.MultiLineCommentTrivia || kind === ts.SyntaxKind.SingleLineCommentTrivia) {
+                    comments.push({ start: scanner.getTokenStart(), end: scanner.getTokenEnd() });
+                }
+            }
             let offset = 0;
-            const result = text.split('\n').map(line => {
+            return text.split('\n').map(line => {
                 const tokens = [{ offset: 0, type: '' }];
                 for (const comment of comments) {
-                    const start = Math.max(offset, comment.textSpan.start);
-                    const end = Math.min(offset + line.length, comment.textSpan.start + comment.textSpan.length);
+                    const start = Math.max(offset, comment.start);
+                    const end = Math.min(offset + line.length, comment.end);
                     if (start < end) tokens.push({ offset: start - offset, type: 'comment.js' }, { offset: end - offset, type: '' });
                 }
                 offset += line.length + 1;
                 return tokens.sort((a, b) => a.offset - b.offset);
             });
-            temp.dispose();
-            return result;
         } }
     };
-    const context = vm.createContext({ window: { monaco }, monaco, $scope: { userPrefs: { tabSize: 4, insertSpaceBeforeFuncParen: false } }, _jsFormattingProviderRegistered: false });
-    vm.runInContext(page.slice(page.indexOf('                function _registerJsFormattingProvider'), page.indexOf('                function initEditorForPane')), context);
-    context._registerJsFormattingProvider();
+    const userPrefs = { tabSize: 4, insertSpaceBeforeFuncParen: false };
+    const context = vm.createContext({ window: { monaco }, monaco, $scope: { userPrefs }, _jsFormattingProviderRegistered: {} });
+    vm.runInContext(page.slice(page.indexOf('                function _minimalFormattingEdit'), page.indexOf('                function initEditorForPane')), context);
+    await context._registerJsFormattingProvider();
     function model() {
         return {
             uri: { toString: () => 'test.js' }, getValue: () => value, getVersionId: () => 1, isDisposed: () => false,
@@ -394,6 +488,23 @@ test('JavaScript document and paste formatting align block comments without chan
             assert.equal((await format()).length, 0, 'block comment alignment is stable');
         }
     }
+    const pasted = {
+        '/**\n         * Does a thing.\n\n         * @param {string} a - A.\n         */\nfunction inner(a) {}':
+            '    /**\n     * Does a thing.\n\n     * @param {string} a - A.\n     */\n    function inner(a) {}',
+        '/** Does a thing.\n         * @param {string} a - A.\n         */\nfunction inner(a) {}':
+            '    /** Does a thing.\n     * @param {string} a - A.\n     */\n    function inner(a) {}',
+        '/*\n         Does a thing.\n           Detail.\n         */\nfunction inner(a) {}':
+            '    /*\n       Does a thing.\n         Detail.\n     */\n    function inner(a) {}'
+    };
+    for (const [clip, expected] of Object.entries(pasted)) {
+        for (const column of [1, 5]) {
+            value = 'function outer() {\n' + ' '.repeat(column - 1) + clip + '\n}';
+            const lines = value.split('\n');
+            await format({ startLineNumber: 2, startColumn: column, endLineNumber: lines.length - 1, endColumn: lines.at(-2).length + 1 });
+            assert.equal(value, 'function outer() {\n' + expected + '\n}');
+            assert.equal((await format()).length, 0, 'pasted block comment alignment is stable');
+        }
+    }
     value = 'function example() {\n\t/*\n\t* description\n\t*/\n\treturn "a\tb";\n}';
     await format();
     assert.equal(value, 'function example() {\n    /*\n     * description\n     */\n    return "a\tb";\n}');
@@ -404,6 +515,35 @@ test('JavaScript document and paste formatting align block comments without chan
     value = 'function example() {\n    return 1;\n}';
     await format(undefined, false);
     assert.match(value, /\n\treturn 1;/, 'tab indentation remains available when spaces are disabled');
+
+    value = 'function example() {\r\n/*\r\n* description\r\n*/\r\nreturn  1;\r\n}\r\n';
+    const windowsEdits = await format();
+    value = value.replace(/\r?\n/g, '\r\n');
+    assert.equal(value, 'function example() {\r\n    /*\r\n     * description\r\n     */\r\n    return 1;\r\n}\r\n');
+    assert.ok(!windowsEdits[0].text.includes('\r'));
+    assert.equal((await format()).length, 0, 'Windows line endings are stable');
+
+    value = 'function example() {\n    /*\n        * runs past the selection\n        */\n    return 1;\n}';
+    await format({ startLineNumber: 2, startColumn: 1, endLineNumber: 3, endColumn: 30 });
+    assert.match(value, /\n        \* runs past the selection\n        \*\//);
+
+    assert.deepEqual([...providers.type.autoFormatTriggerCharacters], [';', '}', '\n']);
+    async function type(source) {
+        value = source;
+        service = ts.createLanguageService(host);
+        const m = model();
+        const position = m.getPositionAt(value.length);
+        const edits = await providers.type.provideOnTypeFormattingEdits(m, position, value.at(-1), { insertSpaces: true });
+        for (const edit of [...edits].reverse()) value = value.slice(0, m.getOffsetAt({ lineNumber: edit.range.startLineNumber, column: edit.range.startColumn })) + edit.text + value.slice(m.getOffsetAt({ lineNumber: edit.range.endLineNumber, column: edit.range.endColumn }));
+        service.dispose();
+    }
+    await type('var run = function() {\nreturn  1;\n}');
+    assert.equal(value, 'var run = function() {\n    return 1;\n}', 'typing matches Format Document');
+    await format();
+    assert.equal(value, 'var run = function() {\n    return 1;\n}');
+    userPrefs.insertSpaceBeforeFuncParen = true;
+    await type('var run = function() {\nreturn  1;\n}');
+    assert.equal(value, 'var run = function () {\n    return 1;\n}');
 });
 
 test('editor creation, preference updates and formatting keep editor and model indentation consistent', async () => {

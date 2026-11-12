@@ -49,7 +49,7 @@
         we-app-drawer .we-app-drawer-trigger {
             all: unset; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center;
             width: 32px; height: 32px; border: 1px solid color-mix(in srgb, currentColor 35%, transparent); border-radius: 4px;
-            color: rgb(var(--now-color--neutral-0, var(--now-color--neutral-12, 38, 50, 56))); cursor: pointer;
+            color: rgb(var(--now-unified-nav_header--color, var(--now-color--neutral-0, var(--now-color--neutral-12, 38, 50, 56)))); cursor: pointer;
         }
         we-app-drawer .we-app-drawer-trigger i { font-size: 18px; line-height: 1; }
         we-app-drawer .we-app-drawer-trigger:hover,

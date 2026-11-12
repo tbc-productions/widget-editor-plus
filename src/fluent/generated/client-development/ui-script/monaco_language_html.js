@@ -3334,8 +3334,31 @@
         if (part) {
             parts.push(part);
         }
+        var last = parts.length - 1;
+        if (last > 0 && (parts[last] === '>' || parts[last] === '/>')) {
+            parts[last - 1] += (parts[last] === '>' ? '' : ' ') + parts.pop();
+        }
         return parts;
     }
+
+    /* Collapses runs of spaces and tabs, leaving single-line {{ }} expressions untouched. */
+    function _collapseHtmlText(value) {
+        return value.replace(/\{\{[^\n]*?\}\}|[ \t]+/g, function (match) {
+            return match.charAt(0) === '{' ? match : ' ';
+        });
+    }
+
+    /* Elements whose end tag is implied when one of the listed siblings opens. */
+    var IMPLIED_END_TAGS = {
+        dd: { dd: 1, dt: 1 },
+        dt: { dd: 1, dt: 1 },
+        li: { li: 1 },
+        option: { option: 1 },
+        p: { p: 1 },
+        td: { td: 1, th: 1 },
+        th: { td: 1, th: 1 },
+        tr: { tr: 1 },
+    };
 
     function _normaliseHtmlTag(raw) {
         return _htmlTagParts(raw).join(' ');
@@ -3371,7 +3394,7 @@
         return out;
     }
 
-    function _tokenizeHtmlForFormat(text) {
+    function _tokenizeHtmlForFormat(text, tabSize) {
         var tokens = [];
         var i = 0;
         var len = text.length;
@@ -3393,8 +3416,10 @@
                 /* HTML comment */
                 var cEnd = text.indexOf('-->', i + 4);
                 cEnd = cEnd === -1 ? len : cEnd + 3;
+                var lineStart = text.lastIndexOf('\n', i - 1) + 1;
                 tokens.push({
                     type: 'comment',
+                    column: _htmlVisualWidth(text.substring(lineStart, i), tabSize || 4),
                     value: text.substring(i, cEnd),
                     hadSpace: hadSpace,
                     hadNewline: hadNewline,
@@ -3402,10 +3427,12 @@
                 });
                 i = cEnd;
             } else if (text.substr(i, 2) === '<!') {
-                var declarationEnd = text.indexOf('>', i + 2);
-                declarationEnd = declarationEnd === -1 ? len : declarationEnd + 1;
+                var isCdata = text.substr(i, 9) === '<![CDATA[';
+                var declarationEnd = text.indexOf(isCdata ? ']]>' : '>', i + 2);
+                declarationEnd = declarationEnd === -1 ? len : declarationEnd + (isCdata ? 3 : 1);
                 tokens.push({
                     type: 'comment',
+                    verbatim: true,
                     value: text.substring(i, declarationEnd),
                     hadSpace: hadSpace,
                     hadNewline: hadNewline,
@@ -3473,6 +3500,15 @@
                         (text[i + 1] === '/' || text[i + 1] === '!' || /[a-zA-Z]/.test(text[i + 1]))
                     )
                 ) {
+                    /* A < inside a single-line {{ }} expression is an operator, not a tag. */
+                    if (text[i] === '{' && text[i + 1] === '{') {
+                        var exprEnd = text.indexOf('}}', i + 2);
+                        var exprLine = text.indexOf('\n', i + 2);
+                        if (exprEnd !== -1 && (exprLine === -1 || exprEnd < exprLine)) {
+                            i = exprEnd + 2;
+                            continue;
+                        }
+                    }
                     i++;
                 }
                 /* Back up past trailing whitespace so the outer loop can see
@@ -3490,17 +3526,17 @@
                 if (rawTxt.indexOf('\n') === -1) {
                     tokens.push({
                         type: 'text',
-                        value: rawTxt.replace(/[ \t]+/g, ' '),
+                        value: _collapseHtmlText(rawTxt),
                         hadSpace: hadSpace,
                         hadNewline: hadNewline,
                         hadBlankLine: hadBlankLine,
                     });
                 } else {
-                    var lineArr = rawTxt.split(/\r?\n/);
+                    var lineArr = rawTxt.split('\n');
                     var firstEmitted = false;
                     var blankAccum = 0;
                     for (var li = 0; li < lineArr.length; li++) {
-                        var piece = lineArr[li].replace(/[ \t]+/g, ' ').trim();
+                        var piece = _collapseHtmlText(lineArr[li]).trim();
                         if (!piece) {
                             if (firstEmitted) blankAccum++;
                             continue;
@@ -3527,10 +3563,11 @@
             return text;
         }
 
+        text = text.replace(/\r\n?/g, '\n');
         var tabSize = (options && options.tabSize) || 4;
         var useTabs = options && options.insertSpaces === false;
         var tab = useTabs ? '\t' : new Array(tabSize + 1).join(' ');
-        var tokens = _tokenizeHtmlForFormat(text);
+        var tokens = _tokenizeHtmlForFormat(text, tabSize);
         var lines = [];
         var indent = 0;
 
@@ -3547,10 +3584,9 @@
         }
 
         function appendInline(value, hadSpace, hadNewline, hadBlankLine) {
-            if (hadNewline && inlineBuf) {
-                lines.push(_makeIndent(indent, tab) + inlineBuf);
-                inlineBuf = '';
-                if (hadBlankLine) {
+            if (hadNewline) {
+                flushInline();
+                if (hadBlankLine && lines.length) {
                     lines.push('');
                 }
             }
@@ -3616,6 +3652,51 @@
             return null;
         }
 
+        /* Tag text for the inline flow, with wrapped attributes aligned to where the tag will sit. */
+        function inlineTagText(tok, startsLine) {
+            if (_htmlTagParts(tok.value).length <= 1) {
+                return _normaliseHtmlTag(tok.value);
+            }
+            var indentStr = _makeIndent(indent, tab);
+            var width = 0;
+            if (inlineBuf && !tok.hadNewline && !startsLine) {
+                var pending = _formatAngularAttributes(indentStr + inlineBuf, tabSize);
+                width =
+                    _htmlVisualWidth(pending.substring(pending.lastIndexOf('\n') + 1), tabSize) +
+                    (tok.hadSpace ? 1 : 0) -
+                    indent * tabSize;
+            }
+            return _formatTagLine(tok, indent, tab, tabSize, width).substring(indentStr.length);
+        }
+
+        /* True when the formatted output starts this tag on a new line. */
+        function startsOwnLine(idx) {
+            var tk = tokens[idx];
+            if (!tk || tk.type !== 'tag' || tk.isClosing) {
+                return false;
+            }
+            if (tk.isSelfClosing || VOID_ELEMENTS[tk.tagName]) {
+                return tk.hadSpace && _htmlTagParts(tk.value).length > 1;
+            }
+            return !INLINE_ELEMENTS[tk.tagName] || (tk.hadSpace && breaksAfterOpening(idx));
+        }
+
+        /* True when an inline element's content begins on the line after its opening tag. */
+        function breaksAfterOpening(idx) {
+            var following = tokens[idx + 1];
+            return !!following && (following.hadNewline || startsOwnLine(idx + 1));
+        }
+
+        /* Leaves the innermost open block element, along with any inline elements indented inside it. */
+        function closeBlockFrame() {
+            for (var si = 0; si < inlineStack.length; si++) {
+                if (inlineStack[si].indented) indent--;
+            }
+            var closed = blockFrames.pop();
+            inlineStack = closed ? closed.inlineStack : [];
+            indent = Math.max(0, indent - 1);
+        }
+
         for (var t = 0; t < tokens.length; t++) {
             var tok = tokens[t];
 
@@ -3623,17 +3704,16 @@
                 var isInline = !!INLINE_ELEMENTS[tok.tagName];
 
                 if (isInline && !tok.isSelfClosing && !tok.isClosing) {
-                    var next = tokens[t + 1];
-                    var multilineAttrs = _htmlTagParts(tok.value).length > 1;
-                    var blockLike = next && next.hadNewline;
-                    if (blockLike) {
-                        if (inlineBuf) {
+                    if (breaksAfterOpening(t)) {
+                        /* Content touching the tag stays on its line; a break there would render as a space. */
+                        if (!inlineBuf || tok.hadSpace) {
                             flushInline();
+                            if (tok.hadBlankLine && lines.length) {
+                                lines.push('');
+                            }
                         }
-                        if (tok.hadBlankLine && lines.length) {
-                            lines.push('');
-                        }
-                        lines.push(_formatTagLine(tok, indent, tab, tabSize));
+                        inlineBuf += inlineTagText(tok);
+                        flushInline();
                         inlineStack.push({ name: tok.tagName, indented: true });
                         indent++;
                     } else {
@@ -3641,14 +3721,7 @@
                             name: tok.tagName,
                             indented: false,
                         });
-                        var preceding = !tok.hadNewline ? inlineBuf.substring(inlineBuf.lastIndexOf('\n') + 1) : '';
-                        var precedingWidth = preceding.length + (preceding && tok.hadSpace ? 1 : 0);
-                        var inlineTag = multilineAttrs
-                            ? _formatTagLine(tok, indent, tab, tabSize, precedingWidth).substring(
-                                  _makeIndent(indent, tab).length
-                              )
-                            : _normaliseHtmlTag(tok.value);
-                        appendInline(inlineTag, tok.hadSpace, tok.hadNewline, tok.hadBlankLine);
+                        appendInline(inlineTagText(tok), tok.hadSpace, tok.hadNewline, tok.hadBlankLine);
                     }
                 } else if (
                     isInline &&
@@ -3658,41 +3731,43 @@
                 ) {
                     var frame = inlineStack.pop();
                     if (frame.indented) {
-                        flushInline();
-                        if (tok.hadBlankLine && lines.length) {
-                            lines.push('');
+                        var touching = inlineBuf && !tok.hadSpace;
+                        if (!touching) {
+                            flushInline();
+                            if (tok.hadBlankLine && lines.length) {
+                                lines.push('');
+                            }
                         }
                         indent = Math.max(0, indent - 1);
-                        lines.push(_formatTagLine(tok, indent, tab, tabSize));
+                        /* The buffer stays open so content touching the closing tag is not split from it. */
+                        inlineBuf = (touching ? tab + inlineBuf : '') + _normaliseHtmlTag(tok.value);
                     } else {
                         appendInline(_normaliseHtmlTag(tok.value), tok.hadSpace, tok.hadNewline, tok.hadBlankLine);
                     }
-                } else if (isInline || tok.isSelfClosing) {
-                    if (_htmlTagParts(tok.value).length > 1) {
-                        flushInline();
-                        if (tok.hadBlankLine && lines.length) {
-                            lines.push('');
-                        }
-                        lines.push(_formatTagLine(tok, indent, tab, tabSize));
-                    } else {
-                        appendInline(_normaliseHtmlTag(tok.value), tok.hadSpace, tok.hadNewline, tok.hadBlankLine);
-                    }
+                } else if (isInline || tok.isSelfClosing || VOID_ELEMENTS[tok.tagName]) {
+                    var ownLine = tok.hadNewline || (tok.hadSpace && _htmlTagParts(tok.value).length > 1);
+                    appendInline(inlineTagText(tok, ownLine), tok.hadSpace, ownLine, tok.hadBlankLine);
                 } else if (tok.isClosing) {
                     flushInline();
                     if (tok.hadBlankLine && lines.length) {
                         lines.push('');
                     }
-                    var indentedCount = 0;
-                    for (var si = 0; si < inlineStack.length; si++) {
-                        if (inlineStack[si].indented) indentedCount++;
+                    var frameIdx = blockFrames.length - 1;
+                    while (frameIdx >= 0 && blockFrames[frameIdx].name !== tok.tagName) {
+                        frameIdx--;
                     }
-                    indent = Math.max(0, indent - indentedCount);
-                    inlineStack = blockFrames.pop() || [];
-                    indent = Math.max(0, indent - 1);
+                    /* An unmatched closing tag leaves the indentation of the open elements alone. */
+                    while (frameIdx !== -1 && blockFrames.length > frameIdx) {
+                        closeBlockFrame();
+                    }
                     lines.push(_formatTagLine(tok, indent, tab, tabSize));
                 } else {
                     /* Block opening tag — try to collapse short content */
                     flushInline();
+                    var openFrame = blockFrames[blockFrames.length - 1];
+                    if (openFrame && IMPLIED_END_TAGS[tok.tagName] && IMPLIED_END_TAGS[tok.tagName][openFrame.name]) {
+                        closeBlockFrame();
+                    }
                     if (tok.hadBlankLine && lines.length) {
                         lines.push('');
                     }
@@ -3702,10 +3777,15 @@
                         var close = tokens[t + 2];
                         var hasClose =
                             close && close.type === 'tag' && close.isClosing && close.tagName === tok.tagName;
+                        var literal = tokens[t + 1].value;
+                        if (hasClose && (tok.tagName === 'script' || tok.tagName === 'style')) {
+                            /* Whitespace before these closing tags is not content, so the tag can align with its opener. */
+                            literal = literal.replace(/\n[ \t]*$/, '\n' + _makeIndent(indent, tab));
+                        }
                         lines.push(
                             _formatTagLine(tok, indent, tab, tabSize) +
-                                tokens[t + 1].value +
-                                (hasClose ? close.value.trim() : '')
+                                literal +
+                                (hasClose ? _normaliseHtmlTag(close.value) : '')
                         );
                         t += hasClose ? 2 : 1;
                         continue;
@@ -3717,7 +3797,7 @@
                         continue;
                     }
                     lines.push(_formatTagLine(tok, indent, tab, tabSize));
-                    blockFrames.push(inlineStack);
+                    blockFrames.push({ inlineStack: inlineStack, name: tok.tagName });
                     inlineStack = [];
                     indent++;
                 }
@@ -3732,12 +3812,20 @@
                 if (tok.hadBlankLine && lines.length) {
                     lines.push('');
                 }
+                /* Continuation lines keep their offset from the comment's opening column. */
                 var commentLines = tok.value.split('\n');
                 for (var cl = 0; cl < commentLines.length; cl++) {
                     var ctrim = commentLines[cl].trim();
-                    if (ctrim) {
-                        lines.push(_makeIndent(indent, tab) + ctrim);
+                    if (!ctrim) {
+                        lines.push('');
+                        continue;
                     }
+                    var offset = 0;
+                    if (cl && !tok.verbatim) {
+                        var lead = commentLines[cl].match(/^[ \t]*/)[0];
+                        offset = Math.max(0, _htmlVisualWidth(lead, tabSize) - tok.column);
+                    }
+                    lines.push(_makeIndent(indent, tab) + new Array(offset + 1).join(' ') + ctrim);
                 }
             }
         }
@@ -4347,7 +4435,8 @@
         function _registerFormattingProvider(monaco) {
             monaco.languages.registerDocumentFormattingEditProvider('html', {
                 provideDocumentFormattingEdits: function (model, options) {
-                    var original = model.getValue();
+                    /* Lines and columns are counted on LF text because model offsets differ when its line endings are CRLF. */
+                    var original = model.getValue().replace(/\r\n?/g, '\n');
                     var formatted = _formatHtml(original, options);
                     if (formatted == null || formatted === original) {
                         return [];
@@ -4370,8 +4459,12 @@
                         originalEnd--;
                         formattedEnd--;
                     }
-                    var from = model.getPositionAt(start);
-                    var to = model.getPositionAt(originalEnd);
+                    function position(offset) {
+                        var head = original.substring(0, offset);
+                        return { column: offset - head.lastIndexOf('\n'), lineNumber: head.split('\n').length };
+                    }
+                    var from = position(start);
+                    var to = position(originalEnd);
                     return [
                         {
                             range: new monaco.Range(from.lineNumber, from.column, to.lineNumber, to.column),
