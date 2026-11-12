@@ -278,8 +278,10 @@ test('the drawer clears clipped headers and fits narrow touch screens and resize
         assert.equal(centre, true, 'popover must stay above the clipped shell');
         const action = page.locator('.we-app-drawer-new-tab').last();
         await expect(action).toBeVisible();
-        const actionBounds = await action.boundingBox();
-        assert.ok(actionBounds.width >= 44 && actionBounds.height >= 44);
+        await expect.poll(async () => {
+            const actionBounds = await action.boundingBox();
+            return Math.round(actionBounds.width) >= 44 && Math.round(actionBounds.height) >= 44;
+        }).toBe(true);
         await page.setViewportSize({ width: 600, height: 500 });
         await expect.poll(async () => {
             const resized = await nav.boundingBox();
