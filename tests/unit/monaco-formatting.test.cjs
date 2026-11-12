@@ -334,26 +334,29 @@ test('JavaScript document and paste formatting align block comments without chan
             registerDocumentRangeFormattingEditProvider: (language, provider) => { providers.range = provider; }
         },
         editor: { tokenize(text) {
-            const temp = ts.createLanguageService({ ...host, getScriptSnapshot: file => file === 'test.js' ? ts.ScriptSnapshot.fromString(text) : undefined });
-            const comments = temp.getSyntacticClassifications('test.js', { start: 0, length: text.length }).filter(item => item.classificationType === 'comment');
+            const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.Standard, text);
+            const comments = [];
+            for (let kind = scanner.scan(); kind !== ts.SyntaxKind.EndOfFileToken; kind = scanner.scan()) {
+                if (kind === ts.SyntaxKind.MultiLineCommentTrivia || kind === ts.SyntaxKind.SingleLineCommentTrivia) {
+                    comments.push({ start: scanner.getTokenStart(), end: scanner.getTokenEnd() });
+                }
+            }
             let offset = 0;
-            const result = text.split('\n').map(line => {
+            return text.split('\n').map(line => {
                 const tokens = [{ offset: 0, type: '' }];
                 for (const comment of comments) {
-                    const start = Math.max(offset, comment.textSpan.start);
-                    const end = Math.min(offset + line.length, comment.textSpan.start + comment.textSpan.length);
+                    const start = Math.max(offset, comment.start);
+                    const end = Math.min(offset + line.length, comment.end);
                     if (start < end) tokens.push({ offset: start - offset, type: 'comment.js' }, { offset: end - offset, type: '' });
                 }
                 offset += line.length + 1;
                 return tokens.sort((a, b) => a.offset - b.offset);
             });
-            temp.dispose();
-            return result;
         } }
     };
-    const context = vm.createContext({ window: { monaco }, monaco, $scope: { userPrefs: { tabSize: 4, insertSpaceBeforeFuncParen: false } }, _jsFormattingProviderRegistered: false });
+    const context = vm.createContext({ window: { monaco }, monaco, $scope: { userPrefs: { tabSize: 4, insertSpaceBeforeFuncParen: false } }, _jsFormattingProviderRegistered: {} });
     vm.runInContext(page.slice(page.indexOf('                function _registerJsFormattingProvider'), page.indexOf('                function initEditorForPane')), context);
-    context._registerJsFormattingProvider();
+    await context._registerJsFormattingProvider();
     function model() {
         return {
             uri: { toString: () => 'test.js' }, getValue: () => value, getVersionId: () => 1, isDisposed: () => false,
@@ -392,6 +395,23 @@ test('JavaScript document and paste formatting align block comments without chan
             await format();
             assert.equal(value, opening + '\n * description' + (closing ? '\n */' : ''));
             assert.equal((await format()).length, 0, 'block comment alignment is stable');
+        }
+    }
+    const pasted = {
+        '/**\n         * Does a thing.\n\n         * @param {string} a - A.\n         */\nfunction inner(a) {}':
+            '    /**\n     * Does a thing.\n\n     * @param {string} a - A.\n     */\n    function inner(a) {}',
+        '/** Does a thing.\n         * @param {string} a - A.\n         */\nfunction inner(a) {}':
+            '    /** Does a thing.\n     * @param {string} a - A.\n     */\n    function inner(a) {}',
+        '/*\n         Does a thing.\n           Detail.\n         */\nfunction inner(a) {}':
+            '    /*\n       Does a thing.\n         Detail.\n     */\n    function inner(a) {}'
+    };
+    for (const [clip, expected] of Object.entries(pasted)) {
+        for (const column of [1, 5]) {
+            value = 'function outer() {\n' + ' '.repeat(column - 1) + clip + '\n}';
+            const lines = value.split('\n');
+            await format({ startLineNumber: 2, startColumn: column, endLineNumber: lines.length - 1, endColumn: lines.at(-2).length + 1 });
+            assert.equal(value, 'function outer() {\n' + expected + '\n}');
+            assert.equal((await format()).length, 0, 'pasted block comment alignment is stable');
         }
     }
     value = 'function example() {\n\t/*\n\t* description\n\t*/\n\treturn "a\tb";\n}';

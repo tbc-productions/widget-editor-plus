@@ -3556,7 +3556,7 @@
                     }
                 }
 
-                var _jsFormattingProviderRegistered = false;
+                var _jsFormattingProviderRegistered = {};
 
                 function _removeLeadingCssRuleGaps(formatted) {
                     var lines = formatted.split('\n');
@@ -3653,17 +3653,14 @@
 
                 // Calls the TypeScript worker directly, forwarding user prefs as format options; more reliable than the removed setFormattingOptions.
                 function _registerJsFormattingProvider() {
-                    if (_jsFormattingProviderRegistered || !window.monaco) {
-                        return;
-                    }
                     if (
+                        !window.monaco ||
                         !monaco.languages ||
                         !monaco.languages.typescript ||
                         !monaco.languages.typescript.getJavaScriptWorker
                     ) {
-                        return;
+                        return Promise.resolve();
                     }
-                    _jsFormattingProviderRegistered = true;
 
                     function _buildFmtProvider(getWorker) {
                         function format(model, monacoOptions, range) {
@@ -3741,24 +3738,41 @@
                                         }
                                         return false;
                                     }
-                                    for (var i = firstLine; i <= lastLine; i++) {
-                                        var opening = /^([ \t]*)\/\*\*?[ \t]*\r?$/.exec(lines[i]);
-                                        if (!opening || !isComment(i, opening[1].length)) continue;
-                                        var j = i + 1;
-                                        var body = [];
-                                        for (; j <= lastLine; j++) {
-                                            var marker = /^([ \t]*)\*(.*)$/.exec(lines[j]);
-                                            if (!marker || !isComment(j, marker[1].length)) break;
-                                            body.push({
-                                                line: j,
-                                                rest: '*' + marker[2],
-                                            });
-                                            if (/^\/[ \t]*\r?$/.test(marker[2])) break;
+                                    const indentUnit = monacoOptions.insertSpaces
+                                        ? ' '.repeat($scope.userPrefs.tabSize)
+                                        : '\t';
+                                    for (let i = firstLine; i <= lastLine; i++) {
+                                        const opening = /^([ \t]*)\/\*/.exec(lines[i]);
+                                        if (
+                                            !opening ||
+                                            !isComment(i, opening[1].length) ||
+                                            lines[i].indexOf('*/', opening[0].length) !== -1
+                                        ) {
+                                            continue;
                                         }
-                                        if (!body.length) continue;
-                                        body.forEach(function (item) {
-                                            lines[item.line] = opening[1] + ' ' + item.rest;
-                                        });
+                                        const body = [];
+                                        let j = i + 1;
+                                        for (; j <= lastLine; j++) {
+                                            const parts = /^([ \t]*)(.*)$/.exec(lines[j]);
+                                            body.push({ indent: parts[1], line: j, text: parts[2] });
+                                            if (lines[j].indexOf('*/') !== -1) break;
+                                        }
+                                        const starred = body.some((item) => item.text.charAt(0) === '*');
+                                        const plain = body.filter(
+                                            (item) => item.text.trim() && item.text.charAt(0) !== '*'
+                                        );
+                                        const plainIndent = opening[1] + (starred ? '   ' : indentUnit);
+                                        const minPlain = Math.min(...plain.map((item) => item.indent.length));
+                                        for (const item of body) {
+                                            if (!item.text.trim()) {
+                                                lines[item.line] = '';
+                                            } else if (item.text.charAt(0) === '*') {
+                                                lines[item.line] = opening[1] + ' ' + item.text;
+                                            } else {
+                                                lines[item.line] =
+                                                    plainIndent + item.indent.slice(minPlain) + item.text;
+                                            }
+                                        }
                                         i = j;
                                     }
                                     after = lines.join('\n');
@@ -3804,15 +3818,29 @@
                             },
                         };
                     }
+                    // Monaco prefers the newest provider, so wait for the worker, which exists only after the built-in TypeScript providers are registered.
                     function register(language, getWorker) {
-                        var provider = _buildFmtProvider(getWorker);
-                        monaco.languages.registerDocumentFormattingEditProvider(language, provider);
-                        monaco.languages.registerDocumentRangeFormattingEditProvider(language, provider);
+                        if (_jsFormattingProviderRegistered[language]) {
+                            return Promise.resolve();
+                        }
+                        _jsFormattingProviderRegistered[language] = true;
+                        return getWorker().then(
+                            function () {
+                                var provider = _buildFmtProvider(getWorker);
+                                monaco.languages.registerDocumentFormattingEditProvider(language, provider);
+                                monaco.languages.registerDocumentRangeFormattingEditProvider(language, provider);
+                            },
+                            function () {
+                                _jsFormattingProviderRegistered[language] = false;
+                            }
+                        );
                     }
-                    register('javascript', monaco.languages.typescript.getJavaScriptWorker);
-                    if (monaco.languages.typescript.getTypeScriptWorker) {
-                        register('typescript', monaco.languages.typescript.getTypeScriptWorker);
-                    }
+                    return Promise.all([
+                        register('javascript', monaco.languages.typescript.getJavaScriptWorker),
+                        monaco.languages.typescript.getTypeScriptWorker
+                            ? register('typescript', monaco.languages.typescript.getTypeScriptWorker)
+                            : null,
+                    ]);
                 }
 
                 function initEditorForPane(pane) {
@@ -3906,6 +3934,8 @@
                                     enabled: !!$scope.userPrefs.stickyScroll,
                                 },
                             });
+                            // Format on paste is created lazily and misses formatters registered before it exists.
+                            ed.getContribution('editor.contrib.formatOnPaste');
 
                             _registerJsFormattingProvider();
                             _applyJsFormatOptions();
