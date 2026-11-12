@@ -3853,20 +3853,40 @@
                         if (_jsFormattingProviderRegistered[language]) {
                             return Promise.resolve();
                         }
+                        // The worker cannot exist before an editor uses the language, and asking early would load it for nothing.
+                        function inUse() {
+                            return monaco.editor.getModels().some(function (model) {
+                                return model.getLanguageId() === language;
+                            });
+                        }
+                        if (!inUse()) {
+                            return Promise.resolve();
+                        }
                         _jsFormattingProviderRegistered[language] = true;
-                        return getWorker().then(
-                            function () {
-                                var provider = _buildFmtProvider(getWorker);
-                                monaco.languages.registerDocumentFormattingEditProvider(language, provider);
-                                monaco.languages.registerDocumentRangeFormattingEditProvider(language, provider);
-                                if (monaco.languages.registerOnTypeFormattingEditProvider) {
-                                    monaco.languages.registerOnTypeFormattingEditProvider(language, provider);
+                        // The worker is briefly unavailable while the language loads, so a single refusal must not be final.
+                        function attempt(remaining) {
+                            return getWorker().then(
+                                function () {
+                                    var provider = _buildFmtProvider(getWorker);
+                                    monaco.languages.registerDocumentFormattingEditProvider(language, provider);
+                                    monaco.languages.registerDocumentRangeFormattingEditProvider(language, provider);
+                                    if (monaco.languages.registerOnTypeFormattingEditProvider) {
+                                        monaco.languages.registerOnTypeFormattingEditProvider(language, provider);
+                                    }
+                                },
+                                function () {
+                                    if (remaining > 0 && inUse()) {
+                                        return new Promise(function (resolve) {
+                                            setTimeout(resolve, 200);
+                                        }).then(function () {
+                                            return attempt(remaining - 1);
+                                        });
+                                    }
+                                    _jsFormattingProviderRegistered[language] = false;
                                 }
-                            },
-                            function () {
-                                _jsFormattingProviderRegistered[language] = false;
-                            }
-                        );
+                            );
+                        }
+                        return attempt(50);
                     }
                     return Promise.all([
                         register('javascript', monaco.languages.typescript.getJavaScriptWorker),

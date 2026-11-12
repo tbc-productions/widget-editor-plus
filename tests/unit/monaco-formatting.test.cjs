@@ -414,16 +414,17 @@ test('JavaScript document and paste formatting align block comments without chan
         getCurrentDirectory: () => '', getCompilationSettings: () => ({ allowJs: true }),
         getDefaultLibFileName: () => '', fileExists: () => true, readFile: () => '', readDirectory: () => []
     };
-    let service;
+    let service, workerRequests = 0, models = [];
     const monaco = {
         Range: class { constructor(a, b, c, d) { Object.assign(this, { startLineNumber: a, startColumn: b, endLineNumber: c, endColumn: d }); } },
         languages: {
-            typescript: { getJavaScriptWorker: () => Promise.resolve(() => service) },
+            // The first refusal mirrors a worker that is still loading when the editor is created.
+            typescript: { getJavaScriptWorker: () => workerRequests++ ? Promise.resolve(() => service) : Promise.reject(new Error('JavaScript not registered!')) },
             registerDocumentFormattingEditProvider: (language, provider) => { providers.document = provider; },
             registerDocumentRangeFormattingEditProvider: (language, provider) => { providers.range = provider; },
             registerOnTypeFormattingEditProvider: (language, provider) => { providers.type = provider; }
         },
-        editor: { tokenize(text) {
+        editor: { getModels: () => models, tokenize(text) {
             const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.Standard, text);
             const comments = [];
             for (let kind = scanner.scan(); kind !== ts.SyntaxKind.EndOfFileToken; kind = scanner.scan()) {
@@ -445,9 +446,14 @@ test('JavaScript document and paste formatting align block comments without chan
         } }
     };
     const userPrefs = { tabSize: 4, insertSpaceBeforeFuncParen: false };
-    const context = vm.createContext({ window: { monaco }, monaco, $scope: { userPrefs }, _jsFormattingProviderRegistered: {} });
+    const context = vm.createContext({ window: { monaco }, monaco, $scope: { userPrefs }, _jsFormattingProviderRegistered: {}, setTimeout: callback => setImmediate(callback) });
     vm.runInContext(page.slice(page.indexOf('                function _minimalFormattingEdit'), page.indexOf('                function initEditorForPane')), context);
     await context._registerJsFormattingProvider();
+    assert.equal(workerRequests, 0, 'the worker is not requested before a JavaScript editor exists');
+    assert.equal(providers.document, undefined);
+    models = [{ getLanguageId: () => 'javascript' }];
+    await context._registerJsFormattingProvider();
+    assert.ok(providers.document, 'registration survives a worker that is not ready yet');
     function model() {
         return {
             uri: { toString: () => 'test.js' }, getValue: () => value, getVersionId: () => 1, isDisposed: () => false,
