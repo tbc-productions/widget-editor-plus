@@ -3558,6 +3558,31 @@
 
                 var _jsFormattingProviderRegistered = {};
 
+                // Monaco's SCSS formatter reads a declaration after a nested rule as a pseudo-class selector and leaves it unspaced.
+                function _spaceCssDeclarations(formatted) {
+                    var inComment = false;
+                    return formatted
+                        .split(/\r?\n/)
+                        .map(function (line) {
+                            var starts = inComment;
+                            var close = line.lastIndexOf('*/');
+                            var open = line.lastIndexOf('/*');
+                            if (open > close) {
+                                inComment = true;
+                            } else if (close !== -1) {
+                                inComment = false;
+                            }
+                            if (starts) {
+                                return line;
+                            }
+                            return line.replace(
+                                /^([ \t]*[a-zA-Z-][\w-]*):(?=[^\s:])([^{}]*;[ \t]*(?:\/\*.*\*\/[ \t]*)?)$/,
+                                '$1: $2'
+                            );
+                        })
+                        .join('\n');
+                }
+
                 function _removeLeadingCssRuleGaps(formatted) {
                     var lines = formatted.split(/\r?\n/);
                     for (var i = 0; i < lines.length - 2; i++) {
@@ -4120,7 +4145,7 @@
                                                 var formatted = _fmtModel.getValue().replace(/\r\n?/g, '\n');
                                                 var restored = _restoreInlineCssComments(
                                                     _cssSource,
-                                                    _removeLeadingCssRuleGaps(formatted)
+                                                    _removeLeadingCssRuleGaps(_spaceCssDeclarations(formatted))
                                                 );
                                                 _applyCssFormattingEdit(ed, formatted, restored);
                                             }
