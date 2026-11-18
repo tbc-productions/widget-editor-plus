@@ -136,7 +136,7 @@ Resource scripts (`sys_ws_operation`) receive `request` and `response`.
 ```javascript
 /**
  * Returns an incident's state by number.
- * @param {RESTAPIRequest} request Reads the `number` path parameter.
+ * @param {RESTAPIRequest} request - Reads the `number` path parameter.
  * @param {RESTAPIResponse} response
  */
 (function process(request, response) {
@@ -190,11 +190,11 @@ Email scripts (`sys_script_email`) run inside a notification, called with `${mai
 ```javascript
 /**
  * Prints the incident's caller and their manager.
- * @param {GlideRecord} current `incident` record
- * @param {TemplatePrinter} template Email body printer.
- * @param {GlideEmailOutbound} email Outbound email.
- * @param {GlideRecord} email_action `sysevent_email_action` record
- * @param {GlideRecord} event `sysevent` record
+ * @param {GlideRecord} current - `incident` record
+ * @param {TemplatePrinter} template - Email body printer.
+ * @param {GlideEmailOutbound} email - Outbound email.
+ * @param {GlideRecord} email_action - `sysevent_email_action` record
+ * @param {GlideRecord} event - `sysevent` record
  */
 (function runMailScript(current, template, email, email_action, event) {
     template.print(`Caller: ${current.caller_id.getDisplayValue()}<br>`);

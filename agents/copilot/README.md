@@ -7,6 +7,17 @@ A Microsoft 365 Copilot agent and skills for ServiceNow development and Widget E
 1. In the Microsoft 365 Copilot app, create an agent named **ServiceNow Developer**, using the `description` from the top of [`servicenow-developer.agent.md`](.github/agents/servicenow-developer.agent.md).
 2. Paste the rest of that file, from `# ServiceNow Developer` onwards, into the agent's **Instructions**.
 3. Add each `SKILL.md` file under [`.github/skills/`](.github/skills/) to the agent.
+4. Add these suggested prompts:
+
+   | Title | Prompt |
+   |---|---|
+   | Peer review | Peer review the attached export. Focus on what changed in the update set. |
+   | Debug code | The code isn't working as expected. Find the problem and explain how I can fix it. |
+   | Refactor code | Refactor the code for readability and performance without changing what it does. |
+   | Check accessibility | Check HTML for accessibility problems and suggest fixes. |
+   | Write JSDoc | Write JSDoc comments for each function in the code. |
+
+5. Optionally, attach a stylesheet as knowledge. The agent uses its classes and variables in templates and CSS.
 
 Keep the instructions short enough for the app's instruction limit. Put new detail in the skill files instead.
 

@@ -123,7 +123,7 @@ Neither function documents its parameters or return value.
 /**
  * Returns active tasks assigned to a user.
  * @param {Object} params
- * @param {string} params.userId `task.assigned_to`
+ * @param {string} params.userId - `task.assigned_to`
  * @returns {{assignee: string, number: string}[]} Matching tasks.
  */
 ```

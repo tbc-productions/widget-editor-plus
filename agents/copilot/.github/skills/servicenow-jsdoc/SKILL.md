@@ -10,7 +10,7 @@ Every function gets a JSDoc block. Keep it short: a description, then `@param` a
 ## Rules
 
 - First line: one sentence in the present tense saying what the function does, ending with a full stop.
-- `@param {Type} name Description` for every parameter. Mark optional parameters as `[name]` and defaults as `[name=default]`.
+- `@param {Type} name - Description`, with a hyphen between the name and the description, for every parameter. Mark optional parameters as `[name]` and defaults as `[name=default]`.
 - `@returns {Type} Description.` when the function returns a value. Omit it for `void`. When the function returns early for missing input, say what it returns.
 - Use `@throws` only when the function deliberately throws.
 - Use `@private` for Script Include methods prefixed with `_`.
@@ -61,10 +61,10 @@ Script Include with a destructured parameter and a `@typedef`:
 ```javascript
 /**
  * @typedef {Object} GroupSummary
- * @property {string} sys_id `sys_user_group.sys_id`.
- * @property {string} name Group name.
- * @property {{sys_id: string, name: string}} manager Group manager.
- * @property {{number: string, short_description: string}[]} incidents Active incidents assigned to the group.
+ * @property {string} sys_id - `sys_user_group.sys_id`.
+ * @property {string} name - Group name.
+ * @property {{sys_id: string, name: string}} manager - Group manager.
+ * @property {{number: string, short_description: string}[]} incidents - Active incidents assigned to the group.
  */
 
 /**
@@ -81,8 +81,8 @@ GroupUtils.prototype = {
     /**
      * Returns a group with its manager and active incidents.
      * @param {Object} params
-     * @param {string} params.groupId `incident.assignment_group`
-     * @param {number} [params.limit=50] Maximum number of incidents to return.
+     * @param {string} params.groupId - `incident.assignment_group`
+     * @param {number} [params.limit=50] - Maximum number of incidents to return.
      * @returns {GroupSummary|null} Group summary, or null if the group is missing or not found.
      */
     getGroupSummary: function ({ groupId, limit = 50 }) {
@@ -117,7 +117,7 @@ GroupUtils.prototype = {
     /**
      * Returns whether a user is active.
      * @param {Object} params
-     * @param {string} params.userId `sys_user.sys_id`
+     * @param {string} params.userId - `sys_user.sys_id`
      * @returns {{sys_id: string, is_active: boolean}|null} User status, or null if the user is missing or not found.
      */
     getUserStatus: function ({ userId }) {
@@ -139,7 +139,7 @@ Private helper taking a record:
  * Returns the caller's manager for an incident.
  * @private
  * @param {Object} params
- * @param {GlideRecordSecure} params.incident `incident` record
+ * @param {GlideRecordSecure} params.incident - `incident` record
  * @returns {string} `sys_user.manager`, or an empty string if none is set.
  */
 _getCallerManager: function ({ incident }) {
@@ -153,7 +153,7 @@ ES5 equivalent for widget server scripts and scripts without ES12:
 /**
  * Returns the number of open tasks assigned to a user.
  * @param {Object} params
- * @param {string} params.userId `task.assigned_to`
+ * @param {string} params.userId - `task.assigned_to`
  * @returns {number} Open task count, or 0 if no user is given.
  */
 function getOpenTaskCount(params) {
@@ -193,8 +193,8 @@ Business rule:
 ```javascript
 /**
  * Copies the caller's location to the incident when none is set.
- * @param {GlideRecord} current `incident` record
- * @param {GlideRecord} previous `incident` record before the save
+ * @param {GlideRecord} current - `incident` record
+ * @param {GlideRecord} previous - `incident` record before the save
  */
 (function executeRule(current, previous) {
     if (current.location.nil()) {

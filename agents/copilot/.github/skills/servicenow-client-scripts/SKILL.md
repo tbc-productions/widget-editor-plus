@@ -35,10 +35,10 @@ Always call asynchronously with `getXMLAnswer()`. Never use `getXMLWait()`; it b
 ```javascript
 /**
  * Shows how many open child tasks the parent has.
- * @param {HTMLElement} control Field element.
- * @param {string} oldValue `task.parent` before the change.
- * @param {string} newValue `task.parent`
- * @param {boolean} isLoading True while the form loads.
+ * @param {HTMLElement} control - Field element.
+ * @param {string} oldValue - `task.parent` before the change.
+ * @param {string} newValue - `task.parent`
+ * @param {boolean} isLoading - True while the form loads.
  */
 function onChange(control, oldValue, newValue, isLoading) {
     if (isLoading || newValue === '') {

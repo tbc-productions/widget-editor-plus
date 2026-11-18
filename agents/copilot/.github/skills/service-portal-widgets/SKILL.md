@@ -59,7 +59,7 @@ api.controller = function ($scope) {
     /**
      * Closes a task and refreshes the list.
      * @param {Object} params
-     * @param {string} params.sysId `task.sys_id`
+     * @param {string} params.sysId - `task.sys_id`
      */
     c.close = function ({ sysId }) {
         c.server.get({ action: 'close', sysId }).then((response) => {
@@ -90,6 +90,7 @@ api.controller = function ($scope) {
 - Prefer native HTML elements (`<button>`, `<a>`, `<label>`, `<table>`) over `role` attributes on generic elements.
 - Keep form labels, `alt` text, `aria-*` attributes where needed, and keyboard access for anything clickable.
 - Bootstrap grid classes (`container`, `row`, `col-*`) are fine for layout. Do not add Bootstrap component classes (`alert`, `form-group`, `form-control`, `btn`, `list-group`, `panel`, `help-block` and so on) unless the user asks for them. Style with the widget's own `css` instead.
+- If a stylesheet is attached as knowledge, read it before writing a template or CSS. Use its classes and variables instead of writing new styles, and never invent classes it does not define. Write widget `css` only for what the stylesheet does not cover.
 - Write plain text in templates. Do not use `${…}` message tags or `gs.getMessage()` for template text unless asked.
 - Use `<sp-widget widget="c.data.embedded">` with `$sp.getWidget()` to embed widgets.
 
