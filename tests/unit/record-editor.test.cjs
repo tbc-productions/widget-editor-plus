@@ -142,6 +142,7 @@ function serverHarness(table = 'sys_ui_page', options = {}) {
             }[field] ?? field),
             canRead: () => !(options.noRead || []).includes(field),
             canWrite: () => !(options.noWrite || []).includes(field),
+            canCreate: () => !(options.noCreate || []).includes(field),
             isMandatory: () => (options.mandatory || []).includes(field),
             getED: () => ({
                 getReference: () => options.dictionary?.[field]?.reference || (field === 'sp_widget' ? 'sp_widget' : ''),
@@ -768,7 +769,7 @@ test('new record saves accept wrapped request strings without requiring an exist
 test('new records enforce create and field permissions and reject missing required values', () => {
     for (const options of [
         { canCreate: false },
-        { noWrite: ['html'] },
+        { noCreate: ['html'] },
         { params: { data: JSON.stringify({ html: 'code' }) } },
         { params: { data: JSON.stringify({ name: 'New', sys_scope: 'other' }) } },
         { params: { new_record: '' } },
@@ -780,6 +781,15 @@ test('new records enforce create and field permissions and reject missing requir
         assert.equal(h.api.saveWidget().success, false, JSON.stringify(options));
         assert.deepEqual(h.writes, []);
     }
+    const created = serverHarness('sys_ui_page', { noWrite: ['html'], params: {
+        sys_id: '', new_record: 'true', data: JSON.stringify({ name: 'New', html: 'code' }),
+    } });
+    assert.equal(created.api.saveWidget().success, true);
+    const noCreate = serverHarness('sys_ui_page', { noCreate: ['html'], params: {
+        sys_id: '', new_record: 'true', data: JSON.stringify({ name: 'New', html: 'code' }),
+    } });
+    assert.equal(noCreate.api.saveWidget().success, false);
+    assert.deepEqual(noCreate.writes, []);
     const denied = serverHarness('sys_ui_page', { canCreate: false });
     assert.equal(denied.api.getWidgetDefaults().success, false);
     assert.deepEqual(denied.writes, []);
@@ -2032,4 +2042,14 @@ test('Style Sheet SCSS compilation is a permission-aware More field', () => {
     assert.equal(field.canWrite, false);
     const hidden = serverHarness('sp_css', { row: { turn_off_scss_compilation: '0' }, noRead: ['turn_off_scss_compilation'] }).api.getWidget();
     assert.equal(hidden.additional_widget_fields.some(def => def.name === 'turn_off_scss_compilation'), false);
+});
+
+test('new widget defaults resolve additional field create ACLs instead of write ACLs', () => {
+    const h = serverHarness('sp_widget');
+    const element = { canCreate: () => true, canWrite: () => false };
+    const probe = { isValidField: () => true, getElement: () => element };
+    assert.equal(h.api._canWriteWidgetField(probe, 'u_active', true), true);
+    assert.equal(h.api._canWriteWidgetField(probe, 'u_active', false), false);
+    element.canCreate = () => false;
+    assert.equal(h.api._canWriteWidgetField(probe, 'u_active', true), false);
 });

@@ -219,7 +219,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         return choices;
     },
 
-    _getEditorFieldDefs: function (gr, profile) {
+    _getEditorFieldDefs: function (gr, profile, isNew) {
         var defs = [];
         for (var i = 0; i < profile.fields.length; i++) {
             var source = profile.fields[i];
@@ -244,7 +244,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             if (element.isMandatory && element.isMandatory()) def.required = true;
             if (def.multiline === undefined && !def.language && def.type === 'string')
                 def.multiline = Number(descriptor.getLength()) > 255;
-            def.canWrite = !def.readOnly && element.canWrite();
+            def.canWrite = !def.readOnly && this._canEditElement(element, isNew);
             if (def.type === 'choice') def.choices = this._getEditorChoices(gr.getTableName(), def.name);
             defs.push(def);
         }
@@ -288,7 +288,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                     throw new Error('Record creation is not allowed.');
             }
             var name = String(this.getParameter('field') || '');
-            var def = this._getEditorFieldDefs(record, profiles[table]).filter(function (field) {
+            var def = this._getEditorFieldDefs(record, profiles[table], !sysId).filter(function (field) {
                 return field.name === name && field.type === 'reference';
             })[0];
             if (!def) throw new Error('Reference field is not available.');
@@ -436,7 +436,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     },
 
     _editorRecordData: function (gr, profile, sysId, isNew) {
-        var defs = this._getEditorFieldDefs(gr, profile);
+        var defs = this._getEditorFieldDefs(gr, profile, isNew);
         var values = {
             sys_id: sysId,
             name: '',
@@ -549,7 +549,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 throw new Error('Record not found or write access denied.');
             if (gr.isValidField('sys_policy') && gr.getValue('sys_policy'))
                 throw new Error('This record is protected.');
-            var defs = this._getEditorFieldDefs(gr, profiles[table]);
+            var defs = this._getEditorFieldDefs(gr, profiles[table], isNew);
             if (
                 !defs.some(function (def) {
                     return def.name === profiles[table].primary;
@@ -4288,7 +4288,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             defaults: defaults,
             application: appName,
             application_sys_id: appSysId || '',
-            additional_widget_fields: this._getAdditionalWidgetFieldDefs(this._buildWidgetFieldAccessProbe()),
+            additional_widget_fields: this._getAdditionalWidgetFieldDefs(this._buildWidgetFieldAccessProbe(), true),
         });
     },
 
@@ -4792,9 +4792,10 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     /**
      * Returns dictionary metadata for configured additional sp_widget fields.
      * @param {GlideRecord} accessGr - Optional sp_widget GlideRecord used to resolve field ACLs.
+     * @param {boolean} isNew - True to resolve field create ACLs instead of write ACLs.
      * @returns {Array.<{name: string, label: string, type: string, canWrite: boolean}>} Field definitions.
      */
-    _getAdditionalWidgetFieldDefs: function (accessGr) {
+    _getAdditionalWidgetFieldDefs: function (accessGr, isNew) {
         var names = this._getConfiguredAdditionalWidgetFields();
         if (!names.length) {
             return [];
@@ -4814,7 +4815,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 name: element,
                 label: gr.getValue('column_label') || element,
                 type: gr.getValue('internal_type') || 'string',
-                canWrite: this._canWriteWidgetField(accessGr, element),
+                canWrite: this._canWriteWidgetField(accessGr, element, isNew),
             };
         }
 
@@ -4867,9 +4868,10 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
      * Returns whether the current user can write a specific widget field.
      * @param {GlideRecord} gr - sp_widget record or initialised probe.
      * @param {string} fieldName - Field element name.
+     * @param {boolean} isNew - True to resolve the field create ACL instead of the write ACL.
      * @returns {boolean} True if the field is writable.
      */
-    _canWriteWidgetField: function (gr, fieldName) {
+    _canWriteWidgetField: function (gr, fieldName, isNew) {
         if (!gr || !fieldName) {
             return false;
         }
@@ -4877,11 +4879,22 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             if (!gr.isValidField(fieldName)) {
                 return false;
             }
-            var element = gr.getElement(fieldName);
-            return !!(element && element.canWrite && element.canWrite());
+            return this._canEditElement(gr.getElement(fieldName), isNew);
         } catch (e) {
             return false;
         }
+    },
+
+    /**
+     * Returns whether a field can be edited, using create ACLs for unsaved records.
+     * @param {GlideElement} element - Field element.
+     * @param {boolean} isNew - True when the record has not been inserted.
+     * @returns {boolean} True if the field is editable.
+     */
+    _canEditElement: function (element, isNew) {
+        if (!element) return false;
+        if (isNew && typeof element.canCreate === 'function') return !!element.canCreate();
+        return !!(element.canWrite && element.canWrite());
     },
 
     /**
