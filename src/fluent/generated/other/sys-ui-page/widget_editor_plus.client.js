@@ -1391,6 +1391,9 @@
                 $scope.nameInvalid = false;
                 $scope.visiblePaneCount = 0;
                 $scope.maximisedPaneKey = null;
+                $scope.maximiseShortcut = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
+                    ? '⌥M'
+                    : 'Alt+M';
                 $scope.prefDragKey = null;
 
                 // Link provider modal state
@@ -3023,6 +3026,12 @@
                     buildVisibleItems();
                     const firstPane = $scope.visibleItems.find((item) => item.type === 'pane');
                     _focusPaneWhenReady(focusKey || (firstPane && firstPane.key));
+                };
+
+                // Templates and providers are named by record; untitled ones fall back to their type.
+                $scope.maxChipLabel = function (pane) {
+                    const name = pane.hasIdInput && pane.recordId ? pane.recordId.trim() : '';
+                    return name || pane.label;
                 };
 
                 $scope.toggleMaximisePane = function (pane) {
