@@ -901,6 +901,72 @@
             },
         ])
 
+        // Directive: we-header-fit — Moves wide-only header items into the compact menu only when they would wrap.
+        .directive('weHeaderFit', [
+            function () {
+                return {
+                    restrict: 'A',
+                    link: function (scope, element) {
+                        const el = element[0];
+                        let frame = 0;
+                        let mo = null;
+                        let ro = null;
+
+                        function wraps() {
+                            let maxTop = -Infinity;
+                            let minBottom = Infinity;
+                            for (const child of el.children) {
+                                const rect = child.getBoundingClientRect();
+                                if (!rect.height) {
+                                    continue;
+                                }
+                                maxTop = Math.max(maxTop, rect.top);
+                                minBottom = Math.min(minBottom, rect.bottom);
+                            }
+                            return maxTop >= minBottom;
+                        }
+
+                        function check() {
+                            frame = 0;
+                            el.classList.remove('we-header--compact');
+                            if (wraps()) {
+                                el.classList.add('we-header--compact');
+                            }
+                        }
+
+                        function schedule() {
+                            if (!frame) {
+                                frame = window.requestAnimationFrame(check);
+                            }
+                        }
+
+                        schedule();
+
+                        if (window.ResizeObserver) {
+                            ro = new ResizeObserver(schedule);
+                            ro.observe(el);
+                        }
+                        if (window.MutationObserver) {
+                            mo = new MutationObserver(schedule);
+                            mo.observe(el, { characterData: true, childList: true, subtree: true });
+                        }
+
+                        scope.$on('$destroy', function () {
+                            if (frame) {
+                                window.cancelAnimationFrame(frame);
+                            }
+                            if (mo) {
+                                mo.disconnect();
+                            }
+                            if (ro) {
+                                ro.disconnect();
+                            }
+                        });
+                    },
+                };
+            },
+        ])
+
         // Directive: we-file-change="handler($file)" — invokes handler with the selected File on a file input's change event.
         .directive('weFileChange', [
             function () {

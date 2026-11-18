@@ -1155,7 +1155,7 @@
             top: -0.0625rem;
         }
 
-        /* Compact menu (viewport less than 1200px) */
+        /* Compact menu (header items would wrap) */
         .we-compact-menu { display: none; }
         .we-compact-menu-panel { min-width: max(14rem, 25vw); width: 25rem; max-width: 95vw; max-height: 80vh; overflow-y: auto; }
         .we-compact-submenu-trigger {
@@ -1188,10 +1188,8 @@
         .we-compact-submenu-panel .we-version-col-uset,
         .we-compact-submenu-panel .we-version-col-user { white-space: normal; }
         .we-dropdown-item.disabled { opacity: 0.45; cursor: default; pointer-events: none; }
-        @media (max-width: 1199px) {
-            .we-header-wide-only { display: none !important; }
-            .we-compact-menu { display: block; }
-        }
+        .we-header--compact .we-header-wide-only { display: none !important; }
+        .we-header--compact .we-compact-menu { display: block; }
 
         /* Body */
         .we-body {
@@ -1572,11 +1570,11 @@
         .we-related-modal .tabs2_tab { cursor: pointer; }
         .we-related-modal .we-related-nav { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; min-height: 45px; margin: 0; padding: 6px 10px; border-radius: 0; border-width: 0 0 1px; }
         .we-related-modal .we-related-nav .navbar-btn { margin: 0; width: 32px; height: 32px; padding: 0; background: rgb(var(--now-color_background--primary)); border: 1px solid rgb(var(--now-color_border--secondary)); border-radius: var(--now-button--border-radius, 4px); }
-        .we-related-modal .we-related-search { display: flex; flex-wrap: nowrap; width: 22rem; max-width: 100%; }
-        .we-related-modal .we-related-search .input-group-select { position: relative; width: auto; padding: 0; border-right: 0; }
-        .we-related-modal .we-related-search select.form-control { width: 7.5rem; padding-right: 1.5rem; appearance: none; -webkit-appearance: none; border-top-right-radius: 0; border-bottom-right-radius: 0; }
-        .we-related-modal .we-related-search .select-indicator { position: absolute; right: 0.5rem; top: 50%; transform: translateY(-50%); pointer-events: none; font-size: 0.75rem; }
-        .we-related-modal .we-related-search input.form-control { flex: 1; min-width: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+        .we-related-modal .we-related-search { display: flex; flex-wrap: nowrap; align-items: stretch; flex: 0 1 30rem; width: auto; min-width: 16rem; height: 32px; }
+        .we-related-modal .we-related-search .input-group-select { position: relative; flex: 0 0 auto; width: auto; min-width: 0; padding: 0; border-right: 0; }
+        .we-related-modal .we-related-search select.form-control { width: 8rem; min-width: 0; height: 32px; padding: 0 1.5rem 0 0.5rem; line-height: 30px; appearance: none; -webkit-appearance: none; text-overflow: ellipsis; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+        .we-related-modal .we-related-search .select-indicator { position: absolute; top: 0; right: 0.5rem; bottom: 0; display: flex; align-items: center; margin: 0; pointer-events: none; font-size: 0.625rem; line-height: 1; }
+        .we-related-modal .we-related-search input.form-control { flex: 1 1 auto; width: auto; min-width: 0; height: 32px; border-top-left-radius: 0; border-bottom-left-radius: 0; }
         .we-related-modal .we-related-breadcrumbs { flex-shrink: 0; padding: 6px 10px; background: rgb(var(--now-color_background--secondary)); }
         .we-related-modal .we-related-breadcrumbs .breadcrumb_list { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; margin: 0; padding: 0; list-style: none; }
         .we-related-modal .we-related-breadcrumbs li { display: inline-flex; align-items: center; gap: 0.25rem; }
@@ -3293,7 +3291,7 @@
 
 
             <!--  Header -->
-            <div class="we-header" ng-class="{'we-header--deprecated': widget.deprecated}" ng-if="!loading &amp;&amp; !loadError &amp;&amp; !showPicker">
+            <div class="we-header" ng-class="{'we-header--deprecated': widget.deprecated}" ng-if="!loading &amp;&amp; !loadError &amp;&amp; !showPicker" we-header-fit="we-header-fit">
 
                 <!-- Open widget -->
                 <button class="btn btn-default" ng-click="openWidgetPickerModal()" title="Open another {{isWidgetRecord ? 'widget' : 'record'}}">Open…</button>
@@ -3517,7 +3515,7 @@
                     </div>
                 </div>
 
-                <!-- Compact menu (viewport < 1200px): replaces individual dropdowns -->
+                <!-- Compact menu (header items would wrap): replaces individual dropdowns -->
                 <div class="we-compact-menu we-dropdown">
                     <button class="btn btn-default" ng-click="toggleDropdown('compactMenu')" title="{{isWidgetRecord ? 'Widget options' : 'Record options'}}" aria-label="{{isWidgetRecord ? 'Widget options' : 'Record options'}}">{{isWidgetRecord ? 'Lists' : 'More'}} <span class="caret" ng-class="{'we-caret--open': openDropdown === 'compactMenu'}"></span></button>
                     <div class="we-dropdown-menu we-compact-menu-panel" ng-show="openDropdown === 'compactMenu'" we-dropdown-auto-pos="we-dropdown-auto-pos">
