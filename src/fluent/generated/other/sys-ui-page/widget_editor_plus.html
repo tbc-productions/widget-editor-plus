@@ -1155,7 +1155,7 @@
             top: -0.0625rem;
         }
 
-        /* Compact menu (viewport less than 1200px) */
+        /* Compact menu (header items would wrap) */
         .we-compact-menu { display: none; }
         .we-compact-menu-panel { min-width: max(14rem, 25vw); width: 25rem; max-width: 95vw; max-height: 80vh; overflow-y: auto; }
         .we-compact-submenu-trigger {
@@ -1188,10 +1188,8 @@
         .we-compact-submenu-panel .we-version-col-uset,
         .we-compact-submenu-panel .we-version-col-user { white-space: normal; }
         .we-dropdown-item.disabled { opacity: 0.45; cursor: default; pointer-events: none; }
-        @media (max-width: 1199px) {
-            .we-header-wide-only { display: none !important; }
-            .we-compact-menu { display: block; }
-        }
+        .we-header--compact .we-header-wide-only { display: none !important; }
+        .we-header--compact .we-compact-menu { display: block; }
 
         /* Body */
         .we-body {
@@ -1566,14 +1564,59 @@
         .we-icon-ellipsis { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 640 640'%3E%3Ccircle cx='320' cy='320' r='64'/%3E%3Ccircle cx='96' cy='320' r='64'/%3E%3Ccircle cx='544' cy='320' r='64'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 640 640'%3E%3Ccircle cx='320' cy='320' r='64'/%3E%3Ccircle cx='96' cy='320' r='64'/%3E%3Ccircle cx='544' cy='320' r='64'/%3E%3C/svg%3E"); }
 
         /* Related Lists Modal */
-        .we-related-modal { width: 96vw !important; max-width: 100rem !important; height: 88vh; display: flex; flex-direction: column; }
-        .we-related-body  { flex: 1; overflow: auto; width: calc(100% - var(--now-global-space--xl, 20px)); margin: 0 auto; }
-        .we-related-modal .data_list_table { width: 100%; border-collapse: collapse; }
-        .we-related-modal .data_list_table thead th { padding: 0.625rem 0.75rem; text-align: left; font-weight: 600; border-bottom: 1px solid rgba(var(--now-color--neutral-0), 0.12); background: rgb(var(--now-color_background--primary)); color: rgb(var(--now-color_text--secondary)); white-space: nowrap; }
-        .we-related-modal .data_list_table tbody td { padding: 0.625rem 0.75rem; border-bottom: 1px solid rgba(var(--now-color--neutral-0), 0.07); vertical-align: top; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 20rem; }
+        .we-related-modal { position: relative; width: 96vw !important; max-width: 100rem !important; height: 88vh; display: flex; flex-direction: column; }
+        .we-related-body  { flex: 1; overflow: auto; width: calc(100% - var(--now-global-space--xl, 20px)); margin: 0 auto; display: flex; flex-direction: column; }
+        .we-related-modal .tabs2_strip { padding-top: 0; }
+        .we-related-modal .tabs2_tab { cursor: pointer; }
+        .we-related-modal .we-related-nav { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; min-height: 45px; margin: 0; padding: 6px 10px; border-radius: 0; border-width: 0 0 1px; }
+        .we-related-modal .we-related-nav .navbar-btn { margin: 0; width: 32px; height: 32px; padding: 0; background: rgb(var(--now-color_background--primary)); border: 1px solid rgb(var(--now-color_border--secondary)); border-radius: var(--now-button--border-radius, 4px); }
+        .we-related-modal .we-related-search { display: flex; flex-wrap: nowrap; align-items: stretch; flex: 0 1 30rem; width: auto; min-width: 16rem; height: 32px; }
+        .we-related-modal .we-related-search .input-group-select { position: relative; flex: 0 0 auto; width: auto; min-width: 0; padding: 0; border-right: 0; }
+        .we-related-modal .we-related-search select.form-control { width: 8rem; min-width: 0; height: 32px; padding: 0 1.5rem 0 0.5rem; line-height: 30px; appearance: none; -webkit-appearance: none; text-overflow: ellipsis; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+        .we-related-modal .we-related-search.input-group .input-group-addon.input-group-select .select-indicator { position: absolute; top: 0; right: 0.5rem; bottom: 0; height: auto; display: flex; align-items: center; margin: 0; pointer-events: none; font-size: 0.625rem; line-height: 1; }
+        .we-related-modal .we-related-search input.form-control { flex: 1 1 auto; width: auto; min-width: 0; height: 32px; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+        .we-related-modal .we-related-breadcrumbs { flex-shrink: 0; padding: 6px 10px; background: rgb(var(--now-color_background--secondary)); }
+        .we-related-modal .we-related-breadcrumbs .breadcrumb_list { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; margin: 0; padding: 0; list-style: none; }
+        .we-related-modal .we-related-breadcrumbs li { display: inline-flex; align-items: center; gap: 0.25rem; }
+        .we-related-modal .we-related-breadcrumbs .breadcrumb_link { padding: 0; border: 0; background: none; color: rgb(var(--now-color_text--secondary)); cursor: pointer; }
+        .we-related-modal .we-related-breadcrumbs .breadcrumb_link:hover { color: rgb(var(--now-color--primary-1)); text-decoration: underline; }
+        .we-related-modal .we-related-breadcrumbs li:last-child .breadcrumb_link { font-weight: 700; }
+        .we-related-crumb-separator { color: rgb(var(--now-color_text--tertiary)); }
+        .we-related-modal .data_list_table { width: 100%; border-collapse: collapse; margin: 0; }
+        .we-related-modal .data_list_table thead th { padding: 4px 10px; text-align: left; font-weight: 700; white-space: nowrap; border: 0; background: rgb(var(--now-color_background--primary)); color: rgb(var(--now-color_text--primary)); }
+        .we-related-modal .data_list_table thead th.col-control { width: 2.5rem; padding: 4px; text-align: center; }
+        .we-related-modal .data_list_table tbody td { padding: 6px 10px; border: 0; vertical-align: top; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 20rem; }
+        .we-related-modal .data_list_table tbody td.list_decoration_cell { width: 2.5rem; padding: 3px 4px; text-align: center; }
+        .we-related-modal .data_list_table tbody tr.list_odd td { background: rgb(var(--now-color_background--primary)); }
+        .we-related-modal .data_list_table tbody tr.list_even td { background: rgb(var(--now-color_background--secondary)); }
         .we-related-modal .data_list_table tbody tr:hover td { background: RGBA(var(--now-color--primary-0, 221,237,233), 0.5); }
-        .we-related-modal .data_list_table td a { color: rgb(var(--now-color--primary-1)); text-decoration: none; }
-        .we-related-modal .data_list_table td a:hover { text-decoration: underline; }
+        .we-related-modal .data_list_table td a.linked { color: rgb(var(--now-color--primary-1)); text-decoration: none; }
+        .we-related-modal .data_list_table td a.linked:hover { text-decoration: underline; }
+        .we-related-modal .list_header_cell_container { display: inline-flex; align-items: center; gap: 0.25rem; }
+        .we-related-modal .column_head { color: inherit; text-decoration: none; cursor: pointer; }
+        .we-related-modal .we-related-sort-icon { font-size: 0.75rem; color: rgb(var(--now-color_text--secondary)); }
+        .we-related-modal .list_header_context { opacity: 0; cursor: pointer; padding: 0 0.125rem; }
+        .we-related-modal th:hover .list_header_context,
+        .we-related-modal th:focus-within .list_header_context { opacity: 1; }
+        .we-related-modal .list_popup { opacity: 0; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; color: rgb(var(--now-color--primary-1)); }
+        .we-related-modal tr:hover .list_popup,
+        .we-related-modal .list_popup:focus { opacity: 1; }
+        .we-related-modal .we-related-column-search td { position: relative; height: 36px; padding: 0; background: rgb(var(--now-color_background--primary)); }
+        .we-related-modal .we-related-column-search .form-control { position: absolute; top: 4px; right: 10px; left: 10px; width: auto; min-width: 0; height: 28px; padding: 2px 6px; }
+        .we-related-context-menu.context_menu { position: absolute; z-index: 30; display: block; visibility: visible; min-width: 150px; padding: 4px 0; background: rgb(var(--now-color_background--primary)); border: 1px solid rgb(var(--now-color_border--secondary)); border-radius: 6px; box-shadow: 0 4px 8px rgba(var(--now-color--neutral-18, 0,0,0), 0.25); }
+        .we-related-context-menu .context_item { padding: 2px 20px; line-height: 1.25; white-space: nowrap; cursor: pointer; color: rgb(var(--now-color_text--primary)); }
+        .we-related-context-menu .context_item:hover,
+        .we-related-context-menu .context_item:focus { outline: none; box-shadow: none; background: rgb(var(--now-dropdown-list_search--background-color--hover, var(--now-color_background--secondary))); }
+        .we-related-context-menu .context_item_hr { height: 0; margin: 4px 0; border-top: 1px solid rgb(var(--now-color_border--tertiary)); }
+        .we-related-preview { position: absolute; z-index: 30; width: 30rem; max-width: calc(100% - 16px); max-height: 60vh; display: flex; flex-direction: column; background: rgb(var(--now-color_background--primary)); border: 1px solid rgb(var(--now-color_border--secondary)); border-radius: 6px; box-shadow: 0 4px 8px rgba(var(--now-color--neutral-18, 0,0,0), 0.25); }
+        .we-related-preview-header { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.5rem 0.75rem; border-bottom: 1px solid rgb(var(--now-color_border--tertiary)); }
+        .we-related-preview-title { margin: 0; font-size: 1.125rem; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .we-related-preview-body { overflow: auto; padding: 0.5rem 0.75rem; }
+        .we-related-preview-status { padding: 1rem; text-align: center; color: rgb(var(--now-color_text--tertiary)); }
+        .we-related-preview-field { display: grid; grid-template-columns: 9rem 1fr; align-items: start; gap: 0.75rem; padding: 0.25rem 0; }
+        .we-related-preview-label { padding-top: 0.375rem; text-align: right; color: rgb(var(--now-color_text--secondary)); overflow-wrap: anywhere; }
+        .we-related-preview-value { min-height: 2rem; padding: 0.375rem 0.5rem; border-radius: var(--now-form-field--border-radius, 4px); background: rgb(var(--now-color_background--secondary)); white-space: pre-wrap; overflow-wrap: anywhere; }
+        .we-related-preview-value a.linked { color: rgb(var(--now-color--primary-1)); }
         .we-related-pagination { display: flex; align-items: center; justify-content: center; gap: 4px; padding: 6px 10px; border-top: 1px solid rgba(var(--now-color--neutral-0), 0.12); flex-shrink: 0; height: 44px; }
         .we-pg-btn.btn { height: 32px; width: 32px; padding: 0; display: inline-flex !important; align-items: center; justify-content: center; background: transparent !important; border: none !important; color: RGB(var(--now-color--primary-1)) !important; font-size: 1rem; }
         .we-pg-btn.btn:disabled { opacity: 0.25; pointer-events: none; }
@@ -1583,7 +1626,8 @@
         .list2_empty-state-list { display: grid; place-items: center; padding: 20px; }
         .we-related-empty { padding: 2rem 1rem; text-align: center; color: rgb(var(--now-color_text--tertiary)); }
         .we-related-loading-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem; background: rgb(var(--now-color_background--secondary)); z-index: 1; color: rgb(var(--now-color_text--tertiary)); }
-        .we-related-table-container { background: rgb(var(--now-color_background--primary)); height: 100%; }
+        .we-related-list-region { position: relative; flex: 1 0 auto; min-height: 12rem; display: flex; flex-direction: column; }
+        .we-related-table-container { background: rgb(var(--now-color_background--primary)); flex: 1 0 auto; }
 
         /* User Preferences modal */
         .we-modal-overlay {
@@ -1866,18 +1910,90 @@
         }
 
         .we-modal-pref {
-            width: min(48.75rem, 90vw);
+            width: min(56rem, 92vw);
         }
         .we-pref-columns {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
             gap: 0 1.75rem;
         }
-        .we-pref-col { display: flex; flex-direction: column; }
+        .we-pref-col { display: flex; flex-direction: column; min-width: 0; }
         .we-pref-col > .we-modal-section:first-child { margin-top: 0; }
         @media (max-width: 500px) {
-            .we-pref-columns { grid-template-columns: 1fr; }
+            .we-pref-columns { grid-template-columns: minmax(0, 1fr); }
         }
+        .we-pref-toolbar { padding: 0.75rem 1rem 0; flex-shrink: 0; }
+        .we-pref-filter { position: relative; }
+        .we-pref-filter .icon-search {
+            position: absolute;
+            left: 0.625rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: rgb(var(--now-color_text--tertiary));
+            pointer-events: none;
+        }
+        .we-pref-filter .form-control { padding-left: 2rem; }
+        .we-pref-empty { padding: 1.5rem 0; text-align: center; color: rgb(var(--now-color_text--secondary)); }
+        .we-pref-section-head { display: flex; align-items: center; gap: 0.5rem; min-height: 1.75rem; }
+        .we-pref-section-head .we-modal-section-title { margin-top: 0; }
+        .we-pref-section-head .we-pref-link,
+        .we-pref-section-head .we-pref-reset { margin-left: auto; }
+        .we-pref-option { position: relative; flex-wrap: wrap; margin-left: -0.5rem; padding-left: 0.5rem; }
+        .we-pref-option.we-pref-modified::before {
+            content: '';
+            position: absolute;
+            top: 0.5rem;
+            bottom: 0.5rem;
+            left: 0;
+            width: 2px;
+            background-color: rgb(var(--now-color--primary-1));
+        }
+        .we-pref-option .we-pref-reset { margin-left: auto; }
+        .we-pref-unit { font-size: var(--now-font-size--md); color: rgb(var(--now-color_text--secondary)); }
+        .we-pref-error {
+            flex-basis: 100%;
+            font-size: var(--now-font-size--sm);
+            color: rgb(var(--now-color_alert--critical-2));
+        }
+        .we-pref-option .we-pref-number[aria-invalid="true"] { color: rgb(var(--now-color_alert--critical-2)); }
+        .we-pref-move { display: inline-flex; gap: 0.125rem; margin-left: auto; }
+        button.we-pref-icon-btn {
+            all: unset;
+            box-sizing: border-box;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.75rem;
+            height: 1.75rem;
+            border-radius: var(--now-button--border-radius, var(--now-form-field--border-radius, 4px));
+            color: rgb(var(--now-actionable_icon--tertiary_bare--color, var(--now-color_text--secondary)));
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        button.we-pref-icon-btn:hover {
+            background-color: rgba(var(--now-color--neutral-15, var(--now-color_text--primary)), 0.1);
+            color: rgb(var(--now-color_text--primary));
+        }
+        button.we-pref-icon-btn:focus-visible {
+            outline: 2px solid rgb(var(--now-focus-ring--color, var(--now-color_focus--primary, var(--now-color--primary-2))));
+            outline-offset: 1px;
+        }
+        button.we-pref-icon-btn[disabled] { opacity: 0.35; cursor: default; background-color: transparent; }
+        button.we-spin-btn[disabled] { opacity: 0.35; cursor: default; }
+        .we-pref-preview {
+            box-sizing: border-box;
+            width: 100%;
+            margin: 0;
+            padding: 0.5rem 0.75rem;
+            border: 1px solid rgba(var(--now-color--neutral-0), 0.12);
+            border-radius: var(--now-form-field--border-radius, 4px);
+            line-height: 1.5;
+            white-space: pre;
+            overflow: hidden;
+        }
+        .we-pref-footer-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-right: auto; }
+        .we-pref-status { font-size: var(--now-font-size--sm); color: rgb(var(--now-color_text--secondary)); }
+        .we-pref-status--error { color: rgb(var(--now-color_alert--critical-2)); }
 
         /* Save / dirty indicators */
         .we-pane-save-btn {
@@ -1992,7 +2108,6 @@
             min-width: 0;
             overflow-x: auto;
             scrollbar-width: none;
-            margin-left: 0.375rem;
         }
         .we-pane-max-chip.btn {
             display: inline-flex;
@@ -2002,6 +2117,15 @@
             height: 1.5rem;
             padding: 0 0.5rem;
             font-size: var(--now-font-size--sm);
+        }
+
+        .we-pane-max-chip.we-pane-max-chip--active.btn,
+        .we-pane-max-chip.we-pane-max-chip--active.btn:hover {
+            background-color: rgba(var(--now-color--secondary-1, 1, 119, 142), 0.18);
+            border-color: rgb(var(--now-color--secondary-2, 1, 89, 107));
+            color: rgb(var(--now-color--secondary-2, 1, 89, 107));
+            cursor: default;
+            font-weight: 600;
         }
 
         .we-pane-max-chip.we-pane-max-chip--changed.btn,
@@ -3239,7 +3363,7 @@
 
 
             <!--  Header -->
-            <div class="we-header" ng-class="{'we-header--deprecated': widget.deprecated}" ng-if="!loading &amp;&amp; !loadError &amp;&amp; !showPicker">
+            <div class="we-header" ng-class="{'we-header--deprecated': widget.deprecated}" ng-if="!loading &amp;&amp; !loadError &amp;&amp; !showPicker" we-header-fit="we-header-fit">
 
                 <!-- Open widget -->
                 <button class="btn btn-default" ng-click="openWidgetPickerModal()" title="Open another {{isWidgetRecord ? 'widget' : 'record'}}">Open…</button>
@@ -3447,7 +3571,7 @@
                 </div>
 
                 <!-- Related Lists button -->
-                <button class="btn btn-default we-header-wide-only" ng-if="isWidgetRecord &amp;&amp; !isVersionView" ng-click="openRelatedModal()" ng-disabled="isNewWidget">Related Lists</button>
+                <button class="btn btn-default we-header-wide-only" ng-if="!isVersionView &amp;&amp; hasRelatedLists" ng-click="openRelatedModal()">Related Lists</button>
 
 
                 <!-- Editor visibility -->
@@ -3463,7 +3587,7 @@
                     </div>
                 </div>
 
-                <!-- Compact menu (viewport < 1200px): replaces individual dropdowns -->
+                <!-- Compact menu (header items would wrap): replaces individual dropdowns -->
                 <div class="we-compact-menu we-dropdown">
                     <button class="btn btn-default" ng-click="toggleDropdown('compactMenu')" title="{{isWidgetRecord ? 'Widget options' : 'Record options'}}" aria-label="{{isWidgetRecord ? 'Widget options' : 'Record options'}}">{{isWidgetRecord ? 'Lists' : 'More'}} <span class="caret" ng-class="{'we-caret--open': openDropdown === 'compactMenu'}"></span></button>
                     <div class="we-dropdown-menu we-compact-menu-panel" ng-show="openDropdown === 'compactMenu'" we-dropdown-auto-pos="we-dropdown-auto-pos">
@@ -3541,13 +3665,10 @@
                             </div>
                         </div>
 
-                        <div class="we-dropdown-divider--group" ng-if="!isVersionView"></div>
+                        <div class="we-dropdown-divider--group" ng-if="!isVersionView &amp;&amp; hasRelatedLists"></div>
 
                         <!-- Related Lists -->
-                            <div class="we-dropdown-item" ng-if="isWidgetRecord &amp;&amp; !isVersionView" ng-class="{'disabled': isNewWidget}" ng-click="openRelatedModal(); openDropdown = null">Related Lists</div>
-
-                        <!-- Assistant -->
-                        <div class="we-dropdown-item" ng-if="!isVersionView &amp;&amp; userPrefs.showAssistantButton !== true" ng-class="{'disabled': isNewWidget}" ng-click="openAssistantModal(); openDropdown = null">Assistant</div>
+                        <div class="we-dropdown-item" ng-if="!isVersionView &amp;&amp; hasRelatedLists" ng-click="openRelatedModal(); openDropdown = null">Related Lists</div>
 
                     </div>
                 </div>
@@ -3685,8 +3806,13 @@
                     <div class="we-pane-header" ng-class="{'we-pane-header--deprecated': widget.deprecated}" ng-if="item.type === 'pane'" ng-dblclick="onPaneHeaderDblClick(item, $event)">
 
                         <!-- Left: label, save button, status indicators -->
-                        <span class="we-pane-title" ng-bind="item.label" ng-attr-title="{{item.readOnly ? 'Read-only — no write access' : undefined}}"></span>
-                        <span class="we-pane-unsaved-dot" ng-if="item.dirty || item.idDirty" title="Unsaved changes"></span>
+                        <span class="we-pane-title" ng-if="maximisedPaneKey !== item.key" ng-bind="item.label" ng-attr-title="{{item.readOnly ? 'Read-only — no write access' : undefined}}"></span>
+                        <span class="we-pane-unsaved-dot" ng-if="(item.dirty || item.idDirty) &amp;&amp; maximisedPaneKey !== item.key" title="Unsaved changes"></span>
+
+                        <!-- Every editor in a fixed order while this pane is maximised; the shown one is marked active -->
+                        <span class="we-pane-max-strip" ng-if="maximisedPaneKey === item.key" role="group" aria-label="Maximised editor">
+                            <button class="btn btn-default we-pane-max-chip" ng-repeat="other in switchableEditors track by other.key" ng-click="maximisePane(other)" ng-class="{'we-pane-max-chip--active': other.key === item.key, 'we-pane-max-chip--changed': other.externalChange}" aria-pressed="{{other.key === item.key}}" title="{{(other.externalChange ? other.externalChange.user + ' has updated ' + maxChipLabel(other) + '. Switch to review.' : (other.key === item.key ? maxChipLabel(other) + (other.readOnly ? ' (read-only)' : '') : 'Switch to ' + maxChipLabel(other))) + (other.hasIdInput ? ' — ' + other.label : '')}}"><span class="icon-warning-circle" ng-if="other.externalChange" aria-hidden="true"></span><span ng-bind="maxChipLabel(other)"></span><span class="we-pane-unsaved-dot" ng-if="other.dirty || other.idDirty" title="Unsaved changes"></span></button>
+                        </span>
 
                         <button class="btn btn-default we-pane-save-btn" ng-if="(item.dirty || item.idDirty) &amp;&amp; !isVersionView &amp;&amp; canWriteWidget &amp;&amp; (!isNewWidget || item.hasIdInput) &amp;&amp; !item.readOnly" ng-click="savePaneField(item)" title="Save" aria-label="Save"><i class="icon-save" aria-hidden="true"></i></button>
                         <span class="we-pane-saved-text" ng-if="item.savedAt &amp;&amp; !item.dirty &amp;&amp; !item.idDirty" style="margin-left: 0.3125rem;" ng-bind="getPaneSavedLabel(item)"></span>
@@ -3695,11 +3821,6 @@
                         </span>
                         <span class="we-pane-viewers" ng-if="item.viewingUsers &amp;&amp; item.viewingUsers.length > 1" title="Viewing: {{viewersTitle(item)}}" aria-label="{{item.viewingUsers.length - 1}} other user(s) viewing">
                             <i class="icon-user-selected" aria-hidden="true"></i><span class="we-pane-viewers-count" ng-bind="item.viewingUsers.length - 1"></span>
-                        </span>
-
-                        <!-- Every other editor, shown while this pane is maximised -->
-                        <span class="we-pane-max-strip" ng-if="maximisedPaneKey === item.key">
-                            <button class="btn btn-default we-pane-max-chip" ng-repeat="other in switchableEditors track by other.key" ng-if="other.key !== item.key" ng-click="maximisePane(other)" ng-class="{'we-pane-max-chip--changed': other.externalChange}" title="{{other.externalChange ? other.externalChange.user + ' has updated ' + other.label + '. Switch to review.' : 'Switch to ' + other.label}}"><span class="icon-warning-circle" ng-if="other.externalChange" aria-hidden="true"></span><span ng-bind="other.label"></span><span class="we-pane-unsaved-dot" ng-if="other.dirty || other.idDirty" title="Unsaved changes"></span></button>
                         </span>
 
                         <!-- Spacer pushes right-side controls to the edge -->
@@ -3718,7 +3839,8 @@
                             <button class="btn btn-default we-pane-icon-btn" ng-click="openScriptDebugger()" ng-if="(item.scriptKind === 'server' || (isWidgetRecord &amp;&amp; item.key === 'script') || item.recordType === 'script_include') &amp;&amp; !isVersionView" title="Open Script Debugger" aria-label="Open Script Debugger"><span class="we-icon we-icon-debugger" aria-hidden="true"></span></button>
                             <button class="btn btn-default we-pane-icon-btn" ng-if="(item.hasIdInput || item.recordType === 'script_include') &amp;&amp; item.sys_id" ng-click="openExtraPaneInEditor(item)" title="Open in Editor+" aria-label="Open in Editor+"><span class="we-icon we-icon-ext-link" aria-hidden="true"></span></button>
                         </span>
-                        <button class="btn btn-default we-pane-icon-btn" ng-if="visiblePaneCount > 1" ng-click="toggleMaximisePane(item)" title="{{maximisedPaneKey === item.key ? 'Restore editors (Alt+M)' : 'Maximise editor (Alt+M)'}}" aria-label="{{maximisedPaneKey === item.key ? 'Restore editors' : 'Maximise editor'}}" aria-pressed="{{maximisedPaneKey === item.key}}"><span class="we-icon" ng-class="maximisedPaneKey === item.key ? 'we-icon-restore' : 'we-icon-maximise'" aria-hidden="true"></span></button>
+                        <button class="btn btn-default we-pane-icon-btn" ng-if="visiblePaneCount > 1 &amp;&amp; maximisedPaneKey !== item.key" ng-click="toggleMaximisePane(item)" title="Maximise editor ({{maximiseShortcut}})" aria-label="Maximise editor" aria-pressed="false"><span class="we-icon we-icon-maximise" aria-hidden="true"></span></button>
+                        <button class="btn btn-default we-pane-icon-btn" ng-if="visiblePaneCount > 1 &amp;&amp; maximisedPaneKey === item.key" ng-click="toggleMaximisePane(item)" title="Restore editors ({{maximiseShortcut}})" aria-label="Restore editors" aria-pressed="true"><span class="we-icon we-icon-restore" aria-hidden="true"></span></button>
                         <span class="we-pane-close" ng-if="!isVersionView &amp;&amp; visiblePaneCount > 1" ng-click="closePaneItem(item)" title="Close pane" aria-label="Close pane" role="button" tabindex="0"><span class="icon-connect-close"></span></span>
                     </div>
 
@@ -3782,60 +3904,56 @@
         </div><!-- /app -->
 
         <!-- User Preferences Modal -->
-        <dialog class="we-modal-backdrop" we-modal-dialog="showUserPrefsModal" we-dialog-cancel="cancelUserPrefsModal()" ng-click="cancelUserPrefsModal()">
+        <dialog class="we-modal-backdrop" we-modal-dialog="showUserPrefsModal" we-dialog-cancel="cancelUserPrefsModal()" ng-click="cancelUserPrefsModal()" aria-labelledby="we-pref-title">
             <div class="we-modal we-modal-pref" ng-click="$event.stopPropagation()">
                 <div class="we-modal-header" we-modal-draggable="we-modal-draggable">
-                    <span>User Preferences</span>
+                    <span id="we-pref-title">User preferences</span>
                     <button type="button" class="we-modal-close-btn" ng-click="cancelUserPrefsModal()" aria-label="Close"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M5 5L19 19M19 5L5 19" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
                 </div>
+                <div class="we-pref-toolbar">
+                    <div class="we-pref-filter">
+                        <i class="icon-search" aria-hidden="true"></i>
+                        <input type="search" class="form-control" id="pref-filter" ng-model="prefFilter.text" placeholder="Filter preferences" aria-label="Filter preferences" autocomplete="off" />
+                    </div>
+                </div>
                 <div class="we-modal-body">
-                    <div class="we-pref-columns">
-                        <!-- Left column: Default editors -->
-                        <div class="we-pref-col">
-                            <div class="we-modal-section" ng-if="isWidgetRecord">
-                                <div class="we-modal-section-title">Default editors</div>
-                                <div class="we-modal-option we-pref-editor-row" ng-repeat="e in userPrefsEdit.editors track by e.key" we-pref-draggable="{{e.key}}">
-                                    <span class="we-pref-drag-handle" draggable="true" title="Drag to reorder">
-                                        <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor">
-                                            <circle cx="3" cy="2.5" r="1.3"/><circle cx="7" cy="2.5" r="1.3"/>
-                                            <circle cx="3" cy="7" r="1.3"/><circle cx="7" cy="7" r="1.3"/>
-                                            <circle cx="3" cy="11.5" r="1.3"/><circle cx="7" cy="11.5" r="1.3"/>
-                                        </svg>
-                                    </span>
-                                    <span class="input-group-checkbox">
-                                        <input type="checkbox" class="checkbox" id="chk-pref-{{e.key}}" ng-model="e.visible" />
-                                        <label class="checkbox-label" for="chk-pref-{{e.key}}" ng-bind="e.label"></label>
-                                    </span>
+                    <div class="we-pref-empty" ng-if="prefNoMatches()" role="status" ng-bind-template="No preferences match “{{prefFilter.text}}”."></div>
+                    <div class="we-pref-columns" ng-hide="prefNoMatches()">
+                        <div class="we-pref-col" ng-repeat="column in prefColumns">
+                            <div class="we-modal-section" ng-repeat="section in column" ng-if="prefSectionShown(section)" role="group" aria-label="{{section.title}}">
+                                <div class="we-pref-section-head">
+                                    <div class="we-modal-section-title" ng-bind="section.title"></div>
+                                    <a class="we-pref-link" ng-if="section.link" ng-href="{{section.link.href}}" target="_blank" rel="noopener" ng-bind="section.link.label"></a>
+                                    <button type="button" class="we-pref-icon-btn we-pref-reset" ng-if="section.editors &amp;&amp; prefEditorsModified()" ng-click="resetPrefEditors()" aria-label="Reset default editors" we-tooltip-title="Restore the default editor order and visibility."><i class="icon-undo" aria-hidden="true"></i></button>
                                 </div>
-                                <div class="we-modal-option" style="margin-top: 0.5rem">
-                                    <span class="input-group-checkbox">
-                                        <input type="checkbox" class="checkbox" id="chk-always-show-link" ng-model="userPrefsEdit.alwaysShowLink" />
-                                        <label class="checkbox-label" for="chk-always-show-link">Always show Link editor if not empty</label>
-                                    </span>
-                                </div>
-                            </div>
-                            <div class="we-modal-section">
-                                <div class="we-modal-section-title">Editor</div>
-                                <div class="we-modal-option we-modal-option-row">
-                                    <label class="we-modal-option-label" for="pref-editor-theme">Theme</label>
-                                    <select class="form-control we-pref-select" id="pref-editor-theme" ng-model="userPrefsEdit.editorTheme">
-                                        <option value="auto">Auto (follow UI theme)</option>
-                                        <option value="dark">Dark</option>
-                                        <option value="light">Light</option>
-                                    </select>
-                                </div>
-                                <div class="we-modal-option we-modal-option-row">
-                                    <label class="we-modal-option-label" for="pref-font-size">Font size</label>
-                                    <div class="we-spin-wrap">
-                                        <button type="button" class="we-spin-btn we-spin-dec" ng-click="userPrefsEdit.fontSize = userPrefsEdit.fontSize > 8 ? userPrefsEdit.fontSize - 1 : 8" aria-label="Decrease font size"><i class="icon-subtract"></i></button>
-                                        <input type="number" class="we-pref-number" id="pref-font-size" ng-model="userPrefsEdit.fontSize" min="8" max="32" step="1" />
-                                        <button type="button" class="we-spin-btn we-spin-inc" ng-click="userPrefsEdit.fontSize = userPrefsEdit.fontSize &lt; 32 ? userPrefsEdit.fontSize + 1 : 32" aria-label="Increase font size">+</button>
+                                <div class="we-pref-editor-list" ng-if="section.editors">
+                                    <div class="we-modal-option we-pref-editor-row" ng-repeat="e in userPrefsEdit.editors | filter:prefEditorShown track by e.key" we-pref-draggable="{{e.key}}">
+                                        <span class="we-pref-drag-handle" draggable="true" title="Drag to reorder" aria-hidden="true">
+                                            <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor">
+                                                <circle cx="3" cy="2.5" r="1.3"/><circle cx="7" cy="2.5" r="1.3"/>
+                                                <circle cx="3" cy="7" r="1.3"/><circle cx="7" cy="7" r="1.3"/>
+                                                <circle cx="3" cy="11.5" r="1.3"/><circle cx="7" cy="11.5" r="1.3"/>
+                                            </svg>
+                                        </span>
+                                        <span class="input-group-checkbox">
+                                            <input type="checkbox" class="checkbox" id="chk-pref-{{e.key}}" ng-model="e.visible" />
+                                            <label class="checkbox-label" for="chk-pref-{{e.key}}" ng-bind="e.label"></label>
+                                        </span>
+                                        <span class="we-pref-move">
+                                            <button type="button" class="we-pref-icon-btn" id="pref-move-{{e.key}}-up" ng-click="movePrefEditor(e, -1)" ng-disabled="prefEditorIndex(e) === 0" aria-label="Move {{e.label}} up"><i class="icon-arrow-up" aria-hidden="true"></i></button>
+                                            <button type="button" class="we-pref-icon-btn" id="pref-move-{{e.key}}-down" ng-click="movePrefEditor(e, 1)" ng-disabled="prefEditorIndex(e) === userPrefsEdit.editors.length - 1" aria-label="Move {{e.label}} down"><i class="icon-arrow-down" aria-hidden="true"></i></button>
+                                        </span>
                                     </div>
-                                    <span style="font-size:var(--now-font-size--md);color:rgb(var(--now-color_text--secondary))">px</span>
+                                    <span class="sr-only" aria-live="polite" ng-bind="prefMoveStatus"></span>
                                 </div>
-                                <div class="we-modal-option we-modal-option-row">
-                                    <label class="we-modal-option-label" for="pref-font-family">Font family</label>
-                                    <select class="form-control we-pref-select" id="pref-font-family" ng-model="userPrefsEdit.fontFamily">
+                                <div class="we-modal-option we-pref-option" ng-repeat="option in section.options | filter:prefOptionShown track by option.key" ng-class="{'we-pref-modified': isPrefModified(option)}">
+                                    <span class="input-group-checkbox" ng-if="option.type === 'checkbox'">
+                                        <input type="checkbox" class="checkbox" id="pref-{{option.key}}" ng-model="userPrefsEdit[option.key]" />
+                                        <label class="checkbox-label" for="pref-{{option.key}}" we-tooltip-title="{{option.tooltip}}" ng-bind="option.label"></label>
+                                    </span>
+                                    <label class="we-modal-option-label" for="pref-{{option.key}}" ng-if="option.type !== 'checkbox'" we-tooltip-title="{{option.tooltip}}" ng-bind="option.label"></label>
+                                    <select class="form-control we-pref-select" id="pref-{{option.key}}" ng-if="option.type === 'select'" ng-model="userPrefsEdit[option.key]" ng-options="choice.value as choice.label for choice in option.choices"></select>
+                                    <select class="form-control we-pref-select" id="pref-{{option.key}}" ng-if="option.type === 'font'" ng-model="userPrefsEdit[option.key]">
                                         <option value="">Monaco default</option>
                                         <optgroup label="System fonts">
                                             <option ng-repeat="f in userPrefsEdit.availableFonts" value="{{f}}" ng-style="{'font-family': f}" ng-bind="f"></option>
@@ -3844,251 +3962,49 @@
                                             <option ng-repeat="f in userPrefsEdit.googleFonts" value="{{f}}" ng-style="{'font-family': f}" ng-bind="f"></option>
                                         </optgroup>
                                     </select>
-                                </div>
-                                <div class="we-modal-option">
-                                    <span class="input-group-checkbox">
-                                        <input type="checkbox" class="checkbox" id="chk-word-wrap" ng-model="userPrefsEdit.wordWrap" />
-                                        <label class="checkbox-label" for="chk-word-wrap" we-tooltip-title="Prevents horizontal scrolling by forcing lines that exceed the editor width to break into new lines.">Wrap long lines in editor</label>
-                                    </span>
-                                </div>
-                                <div class="we-modal-option">
-                                    <span class="input-group-checkbox">
-                                        <input type="checkbox" class="checkbox" id="chk-minimap" ng-model="userPrefsEdit.minimap" />
-                                        <label class="checkbox-label" for="chk-minimap" we-tooltip-title="Displays a minimap of the code on the right side of the editor.">Show minimap</label>
-                                    </span>
-                                </div>
-                                <div class="we-modal-option">
-                                    <span class="input-group-checkbox">
-                                        <input type="checkbox" class="checkbox" id="chk-sticky-scroll" ng-model="userPrefsEdit.stickyScroll" />
-                                        <label class="checkbox-label" for="chk-sticky-scroll" we-tooltip-title="Keeps structural headers stuck to the top of the editor pane while scrolling.">Sticky scroll</label>
-                                    </span>
-                                </div>
-                                <div class="we-modal-option">
-                                    <span class="input-group-checkbox">
-                                        <input type="checkbox" class="checkbox" id="chk-ctrl-s-save-active" ng-model="userPrefsEdit.ctrlSSaveActiveOnly" />
-                                        <label class="checkbox-label" for="chk-ctrl-s-save-active" we-tooltip-title="Keyboard shortcut saves the focussed editor only when enabled.">Save shortcut applies to active editor only</label>
-                                    </span>
-                                </div>
-                                <div class="we-modal-option">
-                                    <span class="input-group-checkbox">
-                                        <input type="checkbox" class="checkbox" id="chk-flash-on-open" ng-model="userPrefsEdit.flashOnEditorOpen" />
-                                        <label class="checkbox-label" for="chk-flash-on-open" we-tooltip-title="Briefly highlights an editor pane when it is opened or brought into focus.">Show visual indication when editor is opened</label>
-                                    </span>
-                                </div>
-                                <div class="we-modal-option">
-                                    <span class="input-group-checkbox">
-                                        <input type="checkbox" class="checkbox" id="chk-show-open-history" ng-model="userPrefsEdit.showRecentlyOpenedWidgets" />
-                                        <label class="checkbox-label" for="chk-show-open-history" we-tooltip-title="Displays the recent widget history pane when opening a widget.">Show recently opened widgets</label>
-                                    </span>
-                                </div>
-                                <div class="we-modal-option" ng-if="hasSnUtils">
-                                    <span class="input-group-checkbox">
-                                        <input type="checkbox" class="checkbox" id="chk-show-open-in-vscode" ng-model="userPrefsEdit.showOpenInVsCode" />
-                                        <label class="checkbox-label" for="chk-show-open-in-vscode" we-tooltip-title="Displays an 'Open in VS Code' button in the header bar when the SN Utils browser extension is installed.">Show "Open in VS Code" button (SN Utils)</label>
-                                    </span>
-                                </div>
-                                <div class="we-modal-option we-modal-option-row">
-                                    <label class="we-modal-option-label" for="pref-autosave-interval" we-tooltip-title="Save drafts in this browser. Default: 30 seconds; 0 turns off.">Auto-save local drafts</label>
-                                    <div class="we-spin-wrap">
-                                        <button type="button" class="we-spin-btn we-spin-dec" ng-click="userPrefsEdit.autosaveInterval = userPrefsEdit.autosaveInterval > 0 ? userPrefsEdit.autosaveInterval - 1 : 0" aria-label="Decrease auto-save interval"><i class="icon-subtract"></i></button>
-                                        <input type="number" class="we-pref-number" id="pref-autosave-interval" ng-model="userPrefsEdit.autosaveInterval" min="0" step="1" />
-                                        <button type="button" class="we-spin-btn we-spin-inc" ng-click="userPrefsEdit.autosaveInterval = userPrefsEdit.autosaveInterval + 1" aria-label="Increase auto-save interval">+</button>
-                                    </div>
-                                    <span style="font-size:var(--now-font-size--md);color:rgb(var(--now-color_text--secondary))">seconds</span>
-                                </div>
-                                <div class="we-modal-option" ng-if="!validAutosaveInterval(userPrefsEdit.autosaveInterval)" role="alert">Enter whole seconds (0 = off).</div>
-                                <div class="we-modal-option we-modal-option-row">
-                                    <label class="we-modal-option-label" for="pref-draft-retention" we-tooltip-title="Delete drafts after this many days without changes. Default: 7 days.">Keep drafts for</label>
-                                    <div class="we-spin-wrap">
-                                        <button type="button" class="we-spin-btn we-spin-dec" ng-click="userPrefsEdit.draftRetentionDays = userPrefsEdit.draftRetentionDays > 1 ? userPrefsEdit.draftRetentionDays - 1 : 1" aria-label="Decrease draft retention"><i class="icon-subtract"></i></button>
-                                        <input type="number" class="we-pref-number" id="pref-draft-retention" ng-model="userPrefsEdit.draftRetentionDays" min="1" step="1" />
-                                        <button type="button" class="we-spin-btn we-spin-inc" ng-click="userPrefsEdit.draftRetentionDays = userPrefsEdit.draftRetentionDays + 1" aria-label="Increase draft retention">+</button>
-                                    </div>
-                                    <span style="font-size:var(--now-font-size--md);color:rgb(var(--now-color_text--secondary))">days</span>
-                                </div>
-                                <div class="we-modal-option" ng-if="!validDraftRetentionDays(userPrefsEdit.draftRetentionDays)" role="alert">Enter whole days (minimum 1).</div>
-                            </div>
-                            <div class="we-modal-section">
-                                <div class="we-modal-section-title">Collaboration</div>
-                                <div class="we-modal-option" style="flex-direction: column; align-items: flex-start">
-                                    <div>
-                                        <span class="input-group-checkbox">
-                                            <input type="checkbox" class="checkbox" id="chk-realtime-updates" ng-model="userPrefsEdit.realtimeWidgetUpdates" />
-                                            <label class="checkbox-label" for="chk-realtime-updates" we-tooltip-title="{{userPrefsEdit.realtimeWidgetUpdates ? 'Enabled: real-time changes are immediately applied.' : 'Disabled: a warning alert is displayed above the editor when another user updates the field.'}}">Apply real-time changes from other users</label>
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <span class="input-group-checkbox">
-                                            <input type="checkbox" class="checkbox" id="chk-show-assistant-button" ng-model="userPrefsEdit.showAssistantButton" />
-                                            <label class="checkbox-label" for="chk-show-assistant-button" we-tooltip-title="Off also hides Widget Editor+ Assistant from the header bar and the Service Portal debug menu.">Show Widget Editor+ Assistant (AI context helper)</label>
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <!-- Right column: Formatting, Code Assistance -->
-                        <div class="we-pref-col">
-                            <div class="we-modal-section">
-                                <div class="we-modal-section-title">Formatting</div>
-                                <div class="we-modal-option we-modal-option-row">
-                                    <label class="we-modal-option-label" for="sel-auto-closing-brackets" we-tooltip-title="Controls whether typing an opening bracket automatically appends a closing bracket.">Auto-closing brackets</label>
-                                    <select id="sel-auto-closing-brackets" class="form-control we-pref-select" ng-model="userPrefsEdit.autoClosingBrackets">
-                                        <option value="languageDefined">Language defined</option>
-                                        <option value="always">Always</option>
-                                        <option value="beforeWhitespace">Before whitespace</option>
-                                        <option value="never">Never</option>
-                                    </select>
-                                </div>
-                                <div class="we-modal-option we-modal-option-row">
-                                    <label class="we-modal-option-label" for="sel-auto-closing-quotes" we-tooltip-title="Controls whether typing a quote character automatically appends its closing counterpart.">Auto-closing quotes</label>
-                                    <select id="sel-auto-closing-quotes" class="form-control we-pref-select" ng-model="userPrefsEdit.autoClosingQuotes">
-                                        <option value="languageDefined">Language defined</option>
-                                        <option value="always">Always</option>
-                                        <option value="beforeWhitespace">Before whitespace</option>
-                                        <option value="never">Never</option>
-                                    </select>
-                                </div>
-                                <div class="we-modal-option we-modal-option-row">
-                                    <label class="we-modal-option-label" for="sel-auto-surround" we-tooltip-title="Defines the behaviour when you have text selected and type a quoting or bracketing character.">Auto-surround</label>
-                                    <select id="sel-auto-surround" class="form-control we-pref-select" ng-model="userPrefsEdit.autoSurround">
-                                        <option value="languageDefined">Language defined</option>
-                                        <option value="always">Always</option>
-                                        <option value="quotes">Quotes</option>
-                                        <option value="brackets">Brackets</option>
-                                        <option value="never">Never</option>
-                                    </select>
-                                </div>
-                                <div class="we-modal-option">
-                                    <span class="input-group-checkbox">
-                                        <input type="checkbox" class="checkbox" id="chk-auto-indent" ng-model="userPrefsEdit.autoIndent" />
-                                        <label class="checkbox-label" for="chk-auto-indent" we-tooltip-title="Automatically inserts appropriate whitespace.">Auto-indent</label>
-                                    </span>
-                                </div>
-                                <div class="we-modal-option">
-                                    <span class="input-group-checkbox">
-                                        <input type="checkbox" class="checkbox" id="chk-format-tabs" ng-model="userPrefsEdit.formatTabsToSpaces" />
-                                        <label class="checkbox-label" for="chk-format-tabs" we-tooltip-title="Use spaces when typing, pasting and formatting. Set the number of spaces in 'Tab size'.">Use spaces for indentation and formatting</label>
-                                    </span>
-                                </div>
-                                <div class="we-modal-option">
-                                    <span class="input-group-checkbox">
-                                        <input type="checkbox" class="checkbox" id="chk-format-on-paste" ng-model="userPrefsEdit.formatOnPaste" />
-                                        <label class="checkbox-label" for="chk-format-on-paste" we-tooltip-title="Automatically format code when pasting.">Format on paste</label>
-                                    </span>
-                                </div>
-                                <div class="we-modal-option">
-                                    <span class="input-group-checkbox">
-                                        <input type="checkbox" class="checkbox" id="chk-format-on-type" ng-model="userPrefsEdit.formatOnType" />
-                                        <label class="checkbox-label" for="chk-format-on-type" we-tooltip-title="Automatically format code while typing.">Format on type</label>
-                                    </span>
-                                </div>
-                                <div class="we-modal-option">
-                                    <span class="input-group-checkbox">
-                                        <input type="checkbox" class="checkbox" id="chk-func-paren" ng-model="userPrefsEdit.insertSpaceBeforeFuncParen" />
-                                        <label class="checkbox-label" for="chk-func-paren" we-tooltip-title="Inserts a space before the opening parenthesis of a function declaration.">Insert space before function parenthesis</label>
-                                    </span>
-                                </div>
-                            </div>
-                            <div class="we-modal-section">
-                                <div class="we-modal-section-title">Formatting (HTML)</div>
-                                <div class="we-modal-option">
-                                    <span class="input-group-checkbox">
-                                        <input type="checkbox" class="checkbox" id="chk-html-auto-close" ng-model="userPrefsEdit.htmlAutoCloseTags" />
-                                        <label class="checkbox-label" for="chk-html-auto-close" we-tooltip-title="Automatically inserts a closing tag when typing > in the HTML template editor.">Auto-close HTML tags</label>
-                                    </span>
-                                </div>
-                                <div class="we-modal-option">
-                                    <span class="input-group-checkbox">
-                                        <input type="checkbox" class="checkbox" id="chk-linked-editing" ng-model="userPrefsEdit.linkedEditing" />
-                                        <label class="checkbox-label" for="chk-linked-editing" we-tooltip-title="Automatically updates the closing tag when you edit the opening tag in HTML/XML.">Linked editing</label>
-                                    </span>
-                                </div>
-                                <div class="we-modal-option">
-                                    <span class="input-group-checkbox">
-                                        <input type="checkbox" class="checkbox" id="chk-html-validation" ng-model="userPrefsEdit.htmlValidation" />
-                                        <label class="checkbox-label" for="chk-html-validation" we-tooltip-title="Highlights missing and mismatched closing tags in the HTML template editor.">Validate HTML tags</label>
-                                    </span>
-                                </div>
-                            </div>
-                            <div class="we-modal-section">
-                                <div class="we-modal-section-title">Code Assistance</div>
-                                <div class="we-modal-option">
-                                    <a href="/nav_to.do?uri=syntax_editor_macro_list.do" target="_blank" class="btn btn-default">View code macros</a>
-                                </div>
-                                <div class="we-modal-option">
-                                    <span class="input-group-checkbox">
-                                        <input type="checkbox" class="checkbox" id="chk-language-helpers" ng-model="userPrefsEdit.languageHelpers" />
-                                        <label class="checkbox-label" for="chk-language-helpers">Show tooltip &amp; parameter hints</label>
-                                    </span>
-                                </div>
-                                <div class="we-modal-option">
-                                    <span class="input-group-checkbox">
-                                        <input type="checkbox" class="checkbox" id="chk-show-unused-vars" ng-model="userPrefsEdit.showUnusedVars" />
-                                        <label class="checkbox-label" for="chk-show-unused-vars">Show unused variables</label>
-                                    </span>
-                                </div>
-                                <div class="we-modal-option" ng-if="isWidgetRecord !== false">
-                                    <span class="input-group-checkbox">
-                                        <input type="checkbox" class="checkbox" id="chk-widget-data-checks" ng-model="userPrefsEdit.widgetDataChecks" />
-                                        <label class="checkbox-label" for="chk-widget-data-checks" we-tooltip-title="Highlights data properties the server script never sets, server data the client script, link function and templates never use, actions the server script doesn't handle, and data or options used in the wrong script.">Check widget data and actions</label>
-                                    </span>
-                                </div>
-                                <div class="we-modal-option we-modal-option-row">
-                                    <label class="we-modal-option-label" for="pref-tab-size">Tab size</label>
-                                    <div class="we-spin-wrap">
-                                        <button type="button" class="we-spin-btn we-spin-dec" ng-click="userPrefsEdit.tabSize = userPrefsEdit.tabSize > 1 ? userPrefsEdit.tabSize - 1 : 1" aria-label="Decrease tab size"><i class="icon-subtract"></i></button>
-                                        <input type="number" class="we-pref-number" id="pref-tab-size" ng-model="userPrefsEdit.tabSize" min="1" max="8" step="1" />
-                                        <button type="button" class="we-spin-btn we-spin-inc" ng-click="userPrefsEdit.tabSize = userPrefsEdit.tabSize &lt; 8 ? userPrefsEdit.tabSize + 1 : 8" aria-label="Increase tab size">+</button>
-                                    </div>
-                                    <span style="font-size:var(--now-font-size--md);color:rgb(var(--now-color_text--secondary))">spaces</span>
-                                </div>
-                                <div class="we-modal-option we-modal-option-row">
-                                    <label class="we-modal-option-label" for="pref-rem-base" we-tooltip-title="Sets the base pixel value for 1rem units (CSS/SCSS Code Action).">1rem conversion</label>
-                                    <div class="we-spin-wrap">
-                                        <button type="button" class="we-spin-btn we-spin-dec" ng-click="userPrefsEdit.remBase = userPrefsEdit.remBase > 1 ? userPrefsEdit.remBase - 1 : 1" aria-label="Decrease 1rem base"><i class="icon-subtract"></i></button>
-                                        <input type="number" class="we-pref-number" id="pref-rem-base" ng-model="userPrefsEdit.remBase" min="1" max="100" step="1" />
-                                        <button type="button" class="we-spin-btn we-spin-inc" ng-click="userPrefsEdit.remBase = userPrefsEdit.remBase &lt; 100 ? userPrefsEdit.remBase + 1 : 100" aria-label="Increase 1rem base">+</button>
-                                    </div>
-                                    <span style="font-size:var(--now-font-size--md);color:rgb(var(--now-color_text--secondary))">px</span>
-                                </div>
-                            </div>
-                            <div class="we-modal-section">
-                                <div class="we-modal-section-title">Service Portal</div>
-                                <div class="we-modal-option we-modal-option-row">
-                                    <label class="we-modal-option-label" for="sel-context-menu-mode" we-tooltip-title="Which widget context menu to use.">Debug context menu</label>
-                                    <select id="sel-context-menu-mode" class="form-control we-pref-select" ng-model="userPrefsEdit.contextMenuMode">
-                                        <option value="enhanced">Enhanced</option>
-                                        <option value="standard">Standard</option>
-                                        <option value="off">Off</option>
-                                    </select>
-                                </div>
-                                <div class="we-modal-option we-modal-option-row">
-                                    <label class="we-modal-option-label" for="sel-html-class-portal" we-tooltip-title="Portal and theme used to compile CSS for class=&quot;...&quot; completions in the HTML editor.">CSS theme</label>
-                                    <select id="sel-html-class-portal" class="form-control we-pref-select" ng-model="userPrefsEdit.htmlClassPortalSysId">
-                                        <option value="">— None —</option>
+                                    <select class="form-control we-pref-select" id="pref-{{option.key}}" ng-if="option.type === 'portal'" ng-model="userPrefsEdit[option.key]">
+                                        <option value="">None</option>
                                         <option ng-repeat="p in classPortals" value="{{p.sys_id}}" ng-bind="p.title + ' (' + p.url_suffix + ') - ' + p.themeTitle"></option>
                                     </select>
+                                    <div class="we-spin-wrap" ng-if="option.type === 'number'">
+                                        <button type="button" class="we-spin-btn we-spin-dec" ng-click="stepPref(option, -1)" ng-disabled="prefStepDisabled(option, -1)" aria-label="Decrease {{option.label}}"><i class="icon-subtract" aria-hidden="true"></i></button>
+                                        <input type="number" class="we-pref-number" id="pref-{{option.key}}" ng-model="userPrefsEdit[option.key]" ng-attr-min="{{option.min}}" ng-attr-max="{{option.max}}" step="{{option.step || 1}}" aria-invalid="{{!prefValueValid(option)}}" ng-attr-aria-describedby="{{prefValueValid(option) ? undefined : 'pref-' + option.key + '-error'}}" />
+                                        <button type="button" class="we-spin-btn we-spin-inc" ng-click="stepPref(option, 1)" ng-disabled="prefStepDisabled(option, 1)" aria-label="Increase {{option.label}}"><i class="icon-add" aria-hidden="true"></i></button>
+                                    </div>
+                                    <span class="we-pref-unit" ng-if="option.unit" ng-bind="option.unit"></span>
+                                    <button type="button" class="we-pref-icon-btn we-pref-reset" ng-if="isPrefModified(option)" ng-click="resetPref(option)" aria-label="Reset {{option.label}} to default" we-tooltip-title="{{'Reset to default: ' + prefDefaultLabel(option)}}"><i class="icon-undo" aria-hidden="true"></i></button>
+                                    <div class="we-pref-error" id="pref-{{option.key}}-error" ng-if="!prefValueValid(option)" role="alert" ng-bind="option.error"></div>
                                 </div>
-                                <div class="we-modal-option" ng-if="userPrefsEdit.htmlClassPortalSysId">
-                                    <span class="input-group-checkbox">
-                                        <input type="checkbox" class="checkbox" id="chk-html-class-include-standard-css" ng-model="userPrefsEdit.htmlClassIncludeStandardCss" />
-                                        <label class="checkbox-label" for="chk-html-class-include-standard-css" we-tooltip-title="Also index the standard Service Portal base CSS bundle for class completions, in addition to the theme's own CSS.">Include standard Service Portal CSS</label>
-                                    </span>
-                                </div>
+                                <div class="we-pref-preview monaco-editor-background" ng-if="section.preview" ng-style="prefPreviewStyle()" we-pref-preview="prefPreviewCode" we-pref-theme="userPrefsEdit.editorTheme" aria-hidden="true"></div>
                             </div>
                         </div>
                     </div>
                 </div>
                 <div class="we-modal-footer">
-                    <div style="display:flex;align-items:center;gap:0.5rem;margin-right:auto">
-                        <button class="btn btn-default" ng-click="resetUserPrefsModal()" we-tooltip-title="Restore all preferences to their default values.">Reset</button>
+                    <div class="we-pref-footer-tools">
+                        <button class="btn btn-default" ng-click="resetUserPrefsModal()" we-tooltip-title="Restore every preference shown here to its default value. Changes apply when you save.">Reset all</button>
                         <button class="btn btn-default" ng-click="exportUserPrefs()" we-tooltip-title="Download your current preferences, including Credit view and whitespace settings, debug menu preferences and Assistant favourite groups, as a JSON file.">Export</button>
-                        <button class="btn btn-default" ng-click="triggerImportUserPrefs()" we-tooltip-title="Load preferences, including debug menu preferences and Assistant favourite groups, from a JSON file.">Import</button>
+                        <button class="btn btn-default" ng-click="triggerImportUserPrefs()" we-tooltip-title="Load preferences, including debug menu preferences and Assistant favourite groups, from a JSON file. Changes apply when you save.">Import</button>
                         <input type="file" id="we-import-prefs-input" accept="application/json" style="display:none" we-file-change="importUserPrefsFile($file)" />
-                        <span ng-if="importPrefsStatus.text" ng-style="{color: importPrefsStatus.type === 'error' ? 'rgb(var(--now-color_alert--critical-2))' : 'rgb(var(--now-color_text--secondary))'}" style="font-size:var(--now-font-size--sm)" ng-bind="importPrefsStatus.text"></span>
+                        <span class="we-pref-status" ng-if="importPrefsStatus.text" ng-class="{'we-pref-status--error': importPrefsStatus.type === 'error'}" role="status" ng-bind="importPrefsStatus.text"></span>
                     </div>
                     <button class="btn btn-default" ng-click="cancelUserPrefsModal()">Cancel</button>
-                    <button class="btn btn-primary" ng-click="saveUserPrefsModal()" ng-disabled="!validAutosaveInterval(userPrefsEdit.autosaveInterval) || !validDraftRetentionDays(userPrefsEdit.draftRetentionDays)">Save</button>
+                    <button class="btn btn-primary" ng-click="saveUserPrefsModal()" ng-disabled="userPrefsInvalid()">Save</button>
+                </div>
+            </div>
+        </dialog>
+
+        <!-- Unsaved changes confirmation — User preferences -->
+        <dialog class="we-modal-backdrop" we-modal-dialog="confirmDiscardUserPrefs" we-dialog-cancel="keepEditingUserPrefs()" ng-click="keepEditingUserPrefs()" aria-labelledby="we-pref-discard-title">
+            <div class="we-modal-box" style="width:25rem" ng-click="$event.stopPropagation()">
+                <div class="we-modal-title" id="we-pref-discard-title">Discard preference changes?</div>
+                <div class="we-modal-body">
+                    <p>Your changes to user preferences haven't been saved.</p>
+                </div>
+                <div class="we-modal-actions">
+                    <button class="btn btn-primary" ng-click="saveUserPrefsModal()" ng-disabled="userPrefsInvalid()">Save</button>
+                    <button class="btn btn-danger" ng-click="discardUserPrefsChanges()">Discard</button>
+                    <button class="btn btn-default" ng-click="keepEditingUserPrefs()">Keep editing</button>
                 </div>
             </div>
         </dialog>
@@ -4374,7 +4290,7 @@
         </dialog>
 
         <!-- Related Lists Modal -->
-        <dialog class="we-modal-backdrop" we-modal-dialog="relatedModal.open" we-dialog-cancel="closeRelatedModal()" ng-click="closeRelatedModal()">
+        <dialog class="we-modal-backdrop" we-modal-dialog="relatedModal.open" we-dialog-cancel="cancelRelatedModal()" ng-click="closeRelatedModal()">
             <div class="we-modal we-related-modal" ng-click="$event.stopPropagation()">
                 <div class="we-modal-header" we-modal-draggable="we-modal-draggable">
                     <span ng-bind-template="Related Lists — {{widget.name}}"></span>
@@ -4387,31 +4303,71 @@
                 </div>
                 <div ng-if="!relatedModal.loading &amp;&amp; relatedModal.tabs.length === 0" class="we-related-empty">No related lists configured.</div>
                 <div ng-if="!relatedModal.loading &amp;&amp; relatedModal.tabs.length > 0" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
-                    <div class="tabs2_strip">
+                    <div class="tabs2_strip" role="tablist" aria-label="Related List Tabs">
                         <span class="tab_header" ng-repeat="tab in relatedModal.tabs" ng-click="selectRelatedTab(tab)">
-                            <span class="tabs2_tab" ng-class="{'tabs2_active': relatedModal.activeTab === tab}">
-                                <span class="tab_caption_text"><span ng-bind="tab.title" style="margin-right : 0.25rem;"></span> (<span ng-bind="tab.count"></span>)</span>
+                            <span class="tabs2_tab" role="tab" tabindex="0" aria-selected="{{relatedModal.activeTab === tab}}" ng-keydown="($event.keyCode === 13 || $event.keyCode === 32) &amp;&amp; selectRelatedTab(tab)" ng-class="{'tabs2_active': relatedModal.activeTab === tab}">
+                                <span class="tab_caption_text" ng-bind="tab.title + (tab.count &gt; 0 ? ' (' + tab.count + ')' : '')"></span>
                             </span>
                         </span>
                     </div>
                     <div class="we-related-body tabs2_list" ng-if="relatedModal.activeTab" style="position:relative">
+                        <div class="navbar navbar-default list_nav list_nav_top we-related-nav" role="region" aria-label="{{relatedModal.activeTab.title}}, filtering toolbar">
+                            <button type="button" class="btn btn-default icon-menu navbar-btn" title="List controls" aria-label="List controls" aria-haspopup="menu" ng-click="openRelatedMenu($event, 'title', relatedModal.activeTab)"><span class="sr-only">List controls</span></button>
+                            <div class="input-group we-related-search" role="search" aria-label="{{relatedModal.activeTab.title}}">
+                                <span class="input-group-addon input-group-select">
+                                    <select class="form-control" ng-model="relatedModal.activeTab.searchField" aria-label="Search a specific field of the {{relatedModal.activeTab.title}} list">
+                                        <option value="">for text</option>
+                                        <option ng-repeat="col in relatedModal.activeTab.columns" value="{{col.field}}" ng-bind="col.label"></option>
+                                    </select>
+                                    <i class="select-indicator icon-vcr-down" aria-hidden="true"></i>
+                                </span>
+                                <input type="search" class="form-control" placeholder="Search" aria-label="Search" autocomplete="off" ng-model="relatedModal.activeTab.searchText" ng-keydown="$event.keyCode === 13 &amp;&amp; relatedSearch(relatedModal.activeTab)" />
+                            </div>
+                        </div>
+                        <div class="breadcrumb_container we-related-breadcrumbs" ng-if="relatedModal.activeTab.showCrumbs">
+                            <ul class="breadcrumb_list">
+                                <li ng-repeat="crumb in relatedModal.activeTab.crumbs track by $index">
+                                    <span class="we-related-crumb-separator" ng-if="!$first" aria-hidden="true">&gt;</span>
+                                    <button type="button" class="breadcrumb_link" title="Click to remove subsequent conditions" ng-click="removeRelatedConditionsAfter(relatedModal.activeTab, $index)" ng-bind="crumb"></button>
+                                </li>
+                            </ul>
+                        </div>
+                        <div class="we-related-list-region">
                         <div class="we-related-loading-overlay" ng-if="relatedModal.activeTab.loading">
                             <we-spinner></we-spinner>
                             Loading…
                         </div>
                         <div ng-if="relatedModal.activeTab.error" class="we-related-empty" style="color:rgb(var(--now-alert--critical--color, var(--now-color_alert--critical-3)))" ng-bind="relatedModal.activeTab.error"></div>
                         <div ng-if="!relatedModal.activeTab.loading &amp;&amp; !relatedModal.activeTab.error" class="we-related-table-container">
-                            <table ng-if="relatedModal.activeTab.rows !== null" class="data_list_table list_table table table-hover">
+                            <table ng-if="relatedModal.activeTab.rows !== null" class="data_list_table list_table table table-hover we-related-table">
                                 <thead>
                                     <tr>
-                                        <th ng-repeat="col in relatedModal.activeTab.columns" ng-bind="col.label"></th>
+                                        <th class="col-control list-decoration-table" scope="col">
+                                            <button type="button" class="list_header_search_toggle icon-search btn btn-icon table-btn-lg" title="{{relatedModal.activeTab.columnSearchOpen ? 'Hide' : 'Show'}} column search row" aria-expanded="{{!!relatedModal.activeTab.columnSearchOpen}}" ng-click="relatedModal.activeTab.columnSearchOpen = !relatedModal.activeTab.columnSearchOpen"><span class="sr-only">Show column search row</span></button>
+                                        </th>
+                                        <th ng-repeat="col in relatedModal.activeTab.columns" class="text-align-left list_header_cell list_hdr" scope="col" aria-sort="{{relatedModal.activeTab.sort === col.field ? (relatedModal.activeTab.sortDir === 'desc' ? 'descending' : 'ascending') : 'none'}}" we-contextmenu="openRelatedMenu($event, 'header', relatedModal.activeTab, col)">
+                                            <span class="list_header_cell_container">
+                                                <a href="" class="column_head list_hdrcell table-col-header" role="button" aria-label="Sort by {{col.label}}" ng-click="toggleRelatedSort(relatedModal.activeTab, col)" ng-bind="col.label"></a>
+                                                <i class="we-related-sort-icon" ng-if="relatedModal.activeTab.sort === col.field" ng-class="relatedModal.activeTab.sortDir === 'desc' ? 'icon-vcr-down' : 'icon-vcr-up'" aria-hidden="true"></i>
+                                                <i class="icon-ellipsis-vertical col-menu list_header_context list-column-icon" role="button" tabindex="0" title="Column options" aria-label="{{col.label}} column options" aria-haspopup="menu" ng-click="openRelatedMenu($event, 'header', relatedModal.activeTab, col)" ng-keydown="($event.keyCode === 13 || $event.keyCode === 32) &amp;&amp; openRelatedMenu($event, 'header', relatedModal.activeTab, col)"></i>
+                                            </span>
+                                        </th>
+                                    </tr>
+                                    <tr class="we-related-column-search" ng-if="relatedModal.activeTab.columnSearchOpen">
+                                        <td></td>
+                                        <td ng-repeat="col in relatedModal.activeTab.columns">
+                                            <input type="search" class="form-control list_header_search" placeholder="Search" autocomplete="off" aria-label="Search column: {{col.label}}" ng-model="relatedModal.activeTab.columnSearch[col.field]" ng-keydown="$event.keyCode === 13 &amp;&amp; relatedColumnSearch(relatedModal.activeTab)" />
+                                        </td>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr ng-repeat="row in relatedModal.activeTab.rows" ng-class="{'list_row list_even': $even, 'list_row list_odd': $odd}">
-                                        <td ng-repeat="col in relatedModal.activeTab.columns">
-                                            <a ng-if="col.firstLink" ng-href="{{relatedRecordUrl(relatedModal.activeTab.table, row.sys_id)}}" target="_blank" ng-bind="row[col.field]"></a>
-                                            <a ng-if="!col.firstLink &amp;&amp; col.refTable &amp;&amp; row[col.field + '__ref_id']" ng-href="{{relatedRecordUrl(col.refTable, row[col.field + '__ref_id'])}}" target="_blank" ng-bind="row[col.field]"></a>
+                                    <tr ng-repeat="row in relatedModal.activeTab.rows" class="list_row" ng-class="$even ? 'list_odd' : 'list_even'">
+                                        <td class="list_decoration_cell col-small col-center" we-contextmenu="openRelatedMenu($event, 'row', relatedModal.activeTab, null, row)">
+                                            <a href="" class="btn btn-icon table-btn-lg icon-info list_popup" role="button" aria-haspopup="dialog" title="Preview {{row[relatedModal.activeTab.columns[0].field] || row.sys_id}}" aria-label="Preview record: {{row[relatedModal.activeTab.columns[0].field] || row.sys_id}}" ng-click="openRelatedPreview($event, relatedModal.activeTab, row)"></a>
+                                        </td>
+                                        <td ng-repeat="col in relatedModal.activeTab.columns" class="vt" we-contextmenu="openRelatedMenu($event, 'row', relatedModal.activeTab, col, row)">
+                                            <a ng-if="col.firstLink" class="linked formlink" ng-href="{{relatedRecordUrl(row._class || relatedModal.activeTab.table, row.sys_id)}}" target="_blank" aria-label="{{row[col.field] || '(empty)'}} - Open record" ng-bind="row[col.field] || '(empty)'"></a>
+                                            <a ng-if="!col.firstLink &amp;&amp; col.refTable &amp;&amp; row[col.field + '__ref_id']" class="linked" ng-href="{{relatedRecordUrl(col.refTable, row[col.field + '__ref_id'])}}" target="_blank" aria-label="Open record: {{row[col.field]}}" ng-bind="row[col.field]"></a>
                                             <span ng-if="!col.firstLink &amp;&amp; (!col.refTable || !row[col.field + '__ref_id'])" ng-bind="row[col.field]"></span>
                                         </td>
                                     </tr>
@@ -4419,8 +4375,9 @@
                             </table>
                             <div ng-if="relatedModal.activeTab.rows !== null &amp;&amp; relatedModal.activeTab.rows.length === 0" class="list2_empty-state-list">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="216" height="168" fill="none" viewBox="0 0 216 168" class="list-flavin"><style>.main-object--outline{fill:rgb(var(--empty-state--main-object--outline,var(--main-object--outline,var(--now-color--interactive-3,51,53,123))))}.main-object--fill{fill:rgb(var(--empty-state--main-object--fill,var(--main-object--fill,var(--now-color--interactive-1,144,146,213))))}.primary-object--outline{fill:rgb(var(--empty-state--primary-object--outline,var(--primary-object--outline,var(--now-color_border--secondary,176,181,191))))}.primary-object--primary-fill{fill:rgb(var(--empty-state--primary-object--primary-fill,var(--primary-object--primary-fill,var(--now-color_background--primary,255,255,255))))}.primary-object--tertiary-fill{fill:rgb(var(--empty-state--primary-object--tertiary-fill,var(--primary-object--tertiary-fill,var(--now-color_background--secondary,246,246,248))))}.primary-object--detail{fill:rgb(var(--empty-state--primary-object--detail,var(--primary-object--detail,var(--now-color_border--tertiary,211,214,220))))}.primary-object--shadow{fill:rgb(var(--empty-state--primary-object--shadow,var(--primary-object--shadow,var(--now-color_background--tertiary,228,230,234))))}.background--tertiary-lines{fill:rgb(var(--empty-state--background--tertiary-lines,var(--background--tertiary-lines,var(--now-color_border--tertiary,211,214,220))))}</style><g><path fill-rule="evenodd" d="M24 114a1 1 0 0 1 1-1h1.75a1 1 0 0 1 0 2H25a1 1 0 0 1-1-1Zm8.75 0a1 1 0 0 1 1-1h3.5a1 1 0 0 1 0 2h-3.5a1 1 0 0 1-1-1Zm10.5 0a1 1 0 0 1 1-1h3.5a1 1 0 0 1 0 2h-3.5a1 1 0 0 1-1-1Zm10.5 0a1 1 0 0 1 1-1H67a1 1 0 0 1 0 2h-1.75a1 1 0 0 1-1-1ZM134 155a1 1 0 0 1 1-1h1.625a1 1 0 0 1 0 2H135a1 1 0 0 1-1-1Zm8.125 0a1 1 0 0 1 1-1h3.25a1 1 0 0 1 0 2h-3.25a1 1 0 0 1-1-1Zm9.75 0a1 1 0 0 1 1-1h1.625a1 1 0 0 1 0 2h-1.625a1 1 0 0 1-1-1ZM61 23a1 1 0 0 1 1-1h2.417a1 1 0 1 1 0 2H62a1 1 0 0 1-1-1Zm12.083 0a1 1 0 0 1 1-1H76.5a1 1 0 1 1 0 2h-2.417a1 1 0 0 1-1-1ZM195.5 77a1 1 0 0 0-1-1h-1.875a1 1 0 0 0 0 2h1.875a1 1 0 0 0 1-1Zm-9.375 0a1 1 0 0 0-1-1h-3.75a1 1 0 0 0 0 2h3.75a1 1 0 0 0 1-1Zm-11.25 0a1 1 0 0 0-1-1H172a1 1 0 0 0 0 2h1.875a1 1 0 0 0 1-1Z" class="background--tertiary-lines" clip-rule="evenodd"/><path d="M181 134c0 5-32.683 5-73 5s-73 0-73-5 32.683-5 73-5 73 0 73 5Z" class="primary-object--shadow"/><path d="M175.342 125.644V55.291H42.478v70.353a7 7 0 0 0 7 7h118.864a7 7 0 0 0 7-7Z" class="primary-object--primary-fill"/><path d="M168.342 38H49.477a7 7 0 0 0-7 7v10.29h132.865V45a7 7 0 0 0-7-7Z" class="primary-object--tertiary-fill"/><path fill-rule="evenodd" d="M49.477 37a8 8 0 0 0-8 8v80.644a8 8 0 0 0 8 8h118.865a8 8 0 0 0 8-8V45a8 8 0 0 0-8-8H49.477Zm-6 8a6 6 0 0 1 6-6h118.865a6 6 0 0 1 6 6v9.29H43.477V45Zm0 80.644V56.291h130.865v69.353a6 6 0 0 1-6 6H49.477a6 6 0 0 1-6-6Z" class="primary-object--outline" clip-rule="evenodd"/><path d="M136.666 43.46a3.185 3.185 0 1 1 0 6.37 3.185 3.185 0 0 1 0-6.37Zm11.831 0a3.185 3.185 0 1 1 0 6.37 3.185 3.185 0 0 1 0-6.37Zm11.83 0a3.185 3.185 0 1 1 0 6.37 3.185 3.185 0 0 1 0-6.37Z" class="primary-object--detail"/><path fill-rule="evenodd" d="M109 112c10.493 0 19-8.507 19-19s-8.507-19-19-19-19 8.507-19 19 8.507 19 19 19Zm0 6c13.807 0 25-11.193 25-25s-11.193-25-25-25-25 11.193-25 25 11.193 25 25 25Z" class="main-object--fill" clip-rule="evenodd"/><g class="main-object--outline"><path d="M130.457 80.123a1 1 0 0 1 1.358.396A25.892 25.892 0 0 1 135.001 93c0 14.36-11.641 26-26 26-10.049 0-18.764-5.7-23.092-14.039a1 1 0 1 1 1.776-.921C91.682 111.742 99.728 117 109 117c13.255 0 24-10.745 24-24 0-4.176-1.066-8.1-2.94-11.52a1 1 0 0 1 .396-1.357Z"/><path d="M110.5 103.5a1.5 1.5 0 1 1-3.001-.001 1.5 1.5 0 0 1 3.001.001ZM104 88a5 5 0 1 1 5.831 4.931c-.924.155-1.831.93-1.831 2.069v3a1 1 0 0 0 2 0v-3a.106.106 0 0 1 .018-.025.261.261 0 0 1 .143-.07A7 7 0 1 0 102 88a1 1 0 0 0 2-.001Z"/></g></g></svg>
-                                <p>No records found</p>
+                                <p>No records to display</p>
                             </div>
+                        </div>
                         </div>
                     </div>
                     <div class="we-related-pagination" ng-if="relatedModal.activeTab &amp;&amp; !relatedModal.activeTab.loading &amp;&amp; relatedModal.activeTab.rows !== null &amp;&amp; relatedModal.activeTab.rows.length > 0">
@@ -4432,16 +4389,37 @@
                         </button>
                         <div class="vcr_controls">
                             <input id="pageStart" type="number" min="1" class="list_row_number_input we-pg-start-input form-control" ng-model="relatedModal.activeTab.pageStartInput" ng-keydown="$event.keyCode === 13 &amp;&amp; navigateToStartRow(relatedModal.activeTab)" ng-click="$event.target.select()" aria-label="Skip to row" autocomplete="off" />
-                            <span class="list_row_number_input" style="margin-left: 0.325rem;">to {{relatedModal.activeTab.pageEnd}} of {{relatedModal.activeTab.count}}</span>
+                            <span class="list_row_number_input" style="margin-left: 0.325rem;">to {{relatedModal.activeTab.pageEnd}} of {{relatedModal.activeTab.total}}</span>
                         </div>
-                        <button class="btn btn-icon we-pg-btn" name="vcr_next" title="Next page" ng-disabled="relatedModal.activeTab.pageEnd &gt;= relatedModal.activeTab.count" ng-click="loadRelatedTabData(relatedModal.activeTab, relatedModal.activeTab.page + 1)" aria-label="Next page">
+                        <button class="btn btn-icon we-pg-btn" name="vcr_next" title="Next page" ng-disabled="relatedModal.activeTab.pageEnd &gt;= relatedModal.activeTab.total" ng-click="loadRelatedTabData(relatedModal.activeTab, relatedModal.activeTab.page + 1)" aria-label="Next page">
                             <span class="icon-vcr-right"></span>
                         </button>
-                        <button class="btn btn-icon we-pg-btn" name="vcr_last" title="Last page" ng-disabled="relatedModal.activeTab.pageEnd &gt;= relatedModal.activeTab.count" ng-click="loadRelatedTabData(relatedModal.activeTab, relatedModal.activeTab.lastPage)" aria-label="Last page">
+                        <button class="btn btn-icon we-pg-btn" name="vcr_last" title="Last page" ng-disabled="relatedModal.activeTab.pageEnd &gt;= relatedModal.activeTab.total" ng-click="loadRelatedTabData(relatedModal.activeTab, relatedModal.activeTab.lastPage)" aria-label="Last page">
                             <span class="icon-vcr-right"></span><span class="icon-vcr-right"></span>
                         </button>
                     </div>
                 </div>
+                </div>
+                <div class="context_menu we-related-context-menu" role="menu" aria-label="{{relatedMenu.label}}" ng-if="relatedMenu.open" ng-style="relatedMenu.style" ng-click="$event.stopPropagation()">
+                    <div ng-repeat="item in relatedMenu.items" ng-class="item.divider ? 'context_item_hr' : 'context_item'" role="{{item.divider ? 'separator' : 'menuitem'}}" tabindex="{{item.divider ? '' : '-1'}}" ng-click="!item.divider &amp;&amp; runRelatedMenuItem(item)" ng-keydown="!item.divider &amp;&amp; onRelatedMenuKeydown($event, item)" ng-bind="item.label"></div>
+                </div>
+                <div class="we-related-preview" role="dialog" aria-label="Record preview" ng-if="relatedPreview.open" ng-style="relatedPreview.style">
+                    <div class="we-related-preview-header">
+                        <h3 class="we-related-preview-title" ng-bind="relatedPreview.data ? relatedPreview.data.title : 'Preview'"></h3>
+                        <a class="btn btn-default btn-sm" target="_blank" ng-href="{{relatedRecordUrl(relatedPreview.table, relatedPreview.sysId)}}">Open Record</a>
+                    </div>
+                    <div class="we-related-preview-body">
+                        <div class="we-related-preview-status" ng-if="relatedPreview.loading"><we-spinner></we-spinner></div>
+                        <div class="we-related-preview-status" ng-if="relatedPreview.error" ng-bind="relatedPreview.error"></div>
+                        <div class="we-related-preview-status" ng-if="relatedPreview.data &amp;&amp; !relatedPreview.data.fields.length">No fields to display</div>
+                        <div class="we-related-preview-field" ng-repeat="field in relatedPreview.data.fields">
+                            <span class="we-related-preview-label" ng-bind="field.label"></span>
+                            <span class="we-related-preview-value">
+                                <a ng-if="field.refTable &amp;&amp; field.refId" class="linked" target="_blank" ng-href="{{relatedRecordUrl(field.refTable, field.refId)}}" ng-bind="field.value"></a>
+                                <span ng-if="!field.refTable || !field.refId" ng-bind="field.value"></span>
+                            </span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </dialog>

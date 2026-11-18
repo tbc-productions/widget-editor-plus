@@ -368,8 +368,8 @@ test('data checks are a persisted preference that defaults on', () => {
     assert.match(source, /prefs\.widgetDataChecks = \$scope\.userPrefs\.widgetDataChecks;/);
     assert.match(source, /prefs\.showUnusedVars = \$scope\.userPrefs\.showUnusedVars;/);
     assert.match(source, /\$scope\.userPrefs\.widgetDataChecks = !!\$scope\.userPrefsEdit\.widgetDataChecks;/);
-    assert.match(source, /\$scope\.userPrefsEdit\.widgetDataChecks = true;/);
-    assert.match(html, /id="chk-widget-data-checks" ng-model="userPrefsEdit\.widgetDataChecks"/);
+    assert.match(source, /key: 'widgetDataChecks',[\s\S]*?type: 'checkbox',\s*when: 'widget',/);
+    assert.match(html, /id="pref-\{\{option\.key\}\}" ng-model="userPrefsEdit\[option\.key\]"/);
 });
 
 test('focus rechecks reopen the Different Update Set alert when the current update set no longer matches', async () => {

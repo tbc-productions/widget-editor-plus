@@ -194,6 +194,37 @@
             },
         ])
 
+        // Directive: we-pref-preview — Renders a code sample with Monaco colours, re-rendering when we-pref-theme changes.
+        .directive('wePrefPreview', [
+            '$timeout',
+            function ($timeout) {
+                return {
+                    restrict: 'A',
+                    link: function (scope, element, attrs) {
+                        function render() {
+                            const code = scope.$eval(attrs.wePrefPreview) || '';
+                            const target = element[0];
+                            if (!window.monaco || !monaco.editor || !monaco.editor.colorize) {
+                                target.textContent = code;
+                                return;
+                            }
+                            monaco.editor.colorize(code, 'javascript', { tabSize: 4 }).then(
+                                (html) => {
+                                    target.innerHTML = html;
+                                },
+                                () => {
+                                    target.textContent = code;
+                                }
+                            );
+                        }
+                        scope.$watch(attrs.wePrefTheme, () => {
+                            $timeout(render, 0, false);
+                        });
+                    },
+                };
+            },
+        ])
+
         // Directive: we-auto-resize — Makes a textarea grow vertically to fit its content.
         .directive('weAutoResize', [
             '$timeout',
@@ -500,6 +531,24 @@
                         scope.$on('$destroy', function () {
                             document.removeEventListener('mousemove', onMouseMove);
                             document.removeEventListener('mouseup', onMouseUp);
+                        });
+                    },
+                };
+            },
+        ])
+
+        // Directive: we-contextmenu — Evaluates an expression with $event when the element is right-clicked.
+        .directive('weContextmenu', [
+            '$parse',
+            function ($parse) {
+                return {
+                    restrict: 'A',
+                    link: function (scope, element, attrs) {
+                        const handler = $parse(attrs.weContextmenu);
+                        element.on('contextmenu', (event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            scope.$apply(() => handler(scope, { $event: event }));
                         });
                     },
                 };
@@ -874,6 +923,72 @@
                         }
 
                         scope.$on('$destroy', function () {
+                            if (ro) {
+                                ro.disconnect();
+                            }
+                        });
+                    },
+                };
+            },
+        ])
+
+        // Directive: we-header-fit — Moves wide-only header items into the compact menu only when they would wrap.
+        .directive('weHeaderFit', [
+            function () {
+                return {
+                    restrict: 'A',
+                    link: function (scope, element) {
+                        const el = element[0];
+                        let frame = 0;
+                        let mo = null;
+                        let ro = null;
+
+                        function wraps() {
+                            let maxTop = -Infinity;
+                            let minBottom = Infinity;
+                            for (const child of el.children) {
+                                const rect = child.getBoundingClientRect();
+                                if (!rect.height) {
+                                    continue;
+                                }
+                                maxTop = Math.max(maxTop, rect.top);
+                                minBottom = Math.min(minBottom, rect.bottom);
+                            }
+                            return maxTop >= minBottom;
+                        }
+
+                        function check() {
+                            frame = 0;
+                            el.classList.remove('we-header--compact');
+                            if (wraps()) {
+                                el.classList.add('we-header--compact');
+                            }
+                        }
+
+                        function schedule() {
+                            if (!frame) {
+                                frame = window.requestAnimationFrame(check);
+                            }
+                        }
+
+                        schedule();
+
+                        if (window.ResizeObserver) {
+                            ro = new ResizeObserver(schedule);
+                            ro.observe(el);
+                        }
+                        if (window.MutationObserver) {
+                            mo = new MutationObserver(schedule);
+                            mo.observe(el, { characterData: true, childList: true, subtree: true });
+                        }
+
+                        scope.$on('$destroy', function () {
+                            if (frame) {
+                                window.cancelAnimationFrame(frame);
+                            }
+                            if (mo) {
+                                mo.disconnect();
+                            }
                             if (ro) {
                                 ro.disconnect();
                             }
@@ -1270,12 +1385,15 @@
                 $scope.templates = [];
                 $scope.providers = [];
                 $scope.dependencies = [];
+                $scope.hasRelatedLists = false;
                 $scope.relatedModal = {
                     open: false,
                     tabs: [],
                     activeTab: null,
                     loading: false,
                 };
+                $scope.relatedMenu = { items: [], label: '', open: false, style: {} };
+                $scope.relatedPreview = { data: null, error: null, loading: false, open: false, style: {} };
                 $scope.versionDiffModal = {
                     open: false,
                     url: null,
@@ -1391,6 +1509,9 @@
                 $scope.nameInvalid = false;
                 $scope.visiblePaneCount = 0;
                 $scope.maximisedPaneKey = null;
+                $scope.maximiseShortcut = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
+                    ? '⌥M'
+                    : 'Alt+M';
                 $scope.prefDragKey = null;
 
                 // Link provider modal state
@@ -1416,41 +1537,49 @@
                 $scope.lastSaveTime = null;
                 $scope.lastSaveUpdateSet = null; // { sys_id, name } — set after each saveAll
 
+                // Default values for every setting in the User preferences dialog.
+                function _defaultUserPrefs() {
+                    return {
+                        alwaysShowLink: true,
+                        autoClosingBrackets: 'languageDefined',
+                        autoClosingQuotes: 'languageDefined',
+                        autoIndent: true,
+                        autosaveInterval: 30,
+                        autoSurround: 'languageDefined',
+                        contextMenuMode: 'enhanced',
+                        ctrlSSaveActiveOnly: true,
+                        draftRetentionDays: 7,
+                        editorTheme: 'auto',
+                        flashOnEditorOpen: !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+                        fontFamily: '',
+                        fontSize: 12,
+                        formatOnPaste: true,
+                        formatOnType: true,
+                        formatTabsToSpaces: true,
+                        htmlAutoCloseTags: true,
+                        htmlClassIncludeStandardCss: false,
+                        htmlClassPortalSysId: '',
+                        htmlValidation: true,
+                        insertSpaceBeforeFuncParen: false,
+                        languageHelpers: true,
+                        linkedEditing: true,
+                        minimap: false,
+                        realtimeWidgetUpdates: false,
+                        remBase: 16,
+                        showAssistantButton: false,
+                        showOpenHistory: true,
+                        showOpenInVsCode: true,
+                        showRecentlyOpenedWidgets: true,
+                        showUnusedVars: true,
+                        stickyScroll: true,
+                        tabSize: 4,
+                        widgetDataChecks: true,
+                        wordWrap: true,
+                    };
+                }
+
                 // User preferences (loaded from server; defaults apply until loaded)
-                $scope.userPrefs = {
-                    formatTabsToSpaces: true,
-                    wordWrap: true,
-                    editorTheme: 'auto',
-                    minimap: false,
-                    alwaysShowLink: true,
-                    realtimeWidgetUpdates: false,
-                    showAssistantButton: false,
-                    contextMenuMode: 'enhanced',
-                    autoIndent: true,
-                    formatOnPaste: true,
-                    formatOnType: true,
-                    fontSize: 12,
-                    fontFamily: '',
-                    languageHelpers: true,
-                    showUnusedVars: true,
-                    widgetDataChecks: true,
-                    remBase: 16,
-                    stickyScroll: true,
-                    htmlValidation: true,
-                    htmlAutoCloseTags: true,
-                    autoSurround: 'languageDefined',
-                    autoClosingBrackets: 'languageDefined',
-                    autoClosingQuotes: 'languageDefined',
-                    linkedEditing: true,
-                    insertSpaceBeforeFuncParen: false,
-                    tabSize: 4,
-                    ctrlSSaveActiveOnly: true,
-                    autosaveInterval: 30,
-                    draftRetentionDays: 7,
-                    flashOnEditorOpen: !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-                    showOpenInVsCode: true,
-                    showRecentlyOpenedWidgets: true,
-                    showOpenHistory: true,
+                $scope.userPrefs = Object.assign(_defaultUserPrefs(), {
                     recentWidgets: [],
                     recentRecords: [],
                     // Not surfaced in the Preferences dialog — just carried through load/save/export/import
@@ -1459,7 +1588,7 @@
                     // Last-saved editor order/visibility, so the Preferences dialog reflects saved state, not live changes.
                     editorOrder: [],
                     editorVisibility: {},
-                };
+                });
                 $scope.recentWidgetsResolved = [];
                 $scope.showUserPrefsModal = false;
                 $scope.userPrefsEdit = {};
@@ -2398,23 +2527,14 @@
                     if (_validDraftRetentionDays(p.draftRetentionDays)) {
                         $scope.userPrefs.draftRetentionDays = p.draftRetentionDays;
                     }
-                    if (p.hasOwnProperty('fontSize')) {
-                        var fs = parseInt(p.fontSize, 10);
-                        if (fs >= 8 && fs <= 32) {
-                            $scope.userPrefs.fontSize = fs;
-                        }
+                    if (p.hasOwnProperty('fontSize') && _validFontSize(parseInt(p.fontSize, 10))) {
+                        $scope.userPrefs.fontSize = parseInt(p.fontSize, 10);
                     }
-                    if (p.hasOwnProperty('tabSize')) {
-                        var ts = parseInt(p.tabSize, 10);
-                        if (ts >= 1 && ts <= 8) {
-                            $scope.userPrefs.tabSize = ts;
-                        }
+                    if (p.hasOwnProperty('tabSize') && _validTabSize(parseInt(p.tabSize, 10))) {
+                        $scope.userPrefs.tabSize = parseInt(p.tabSize, 10);
                     }
-                    if (p.hasOwnProperty('remBase')) {
-                        var rb = parseFloat(p.remBase);
-                        if (rb > 0) {
-                            $scope.userPrefs.remBase = rb;
-                        }
+                    if (p.hasOwnProperty('remBase') && _validRemBase(parseFloat(p.remBase))) {
+                        $scope.userPrefs.remBase = parseFloat(p.remBase);
                     }
                     /* fontFamily triggers Google Fonts loader */
                     if (p.hasOwnProperty('fontFamily')) {
@@ -2755,6 +2875,7 @@
 
                     // Side data — parallel, non-blocking
                     if ($scope.isNewWidget) return;
+                    _loadRelatedListAvailability();
                     ajax('getVersions', {
                         sys_id: SYS_ID,
                     }).then(function (d) {
@@ -3023,6 +3144,12 @@
                     buildVisibleItems();
                     const firstPane = $scope.visibleItems.find((item) => item.type === 'pane');
                     _focusPaneWhenReady(focusKey || (firstPane && firstPane.key));
+                };
+
+                // Templates and providers are named by record; untitled ones fall back to their type.
+                $scope.maxChipLabel = function (pane) {
+                    const name = pane.hasIdInput && pane.recordId ? pane.recordId.trim() : '';
+                    return name || pane.label;
                 };
 
                 $scope.toggleMaximisePane = function (pane) {
@@ -3382,8 +3509,8 @@
                     return 'vs-dark';
                 }
 
-                function _resolveMonacoTheme() {
-                    var pref = $scope.userPrefs.editorTheme;
+                function _resolveMonacoTheme(theme) {
+                    var pref = theme === undefined ? $scope.userPrefs.editorTheme : theme;
                     if (pref === 'dark') {
                         return 'we-vs-dark';
                     }
@@ -3557,6 +3684,31 @@
                 }
 
                 var _jsFormattingProviderRegistered = {};
+
+                // Monaco's SCSS formatter reads a declaration after a nested rule as a pseudo-class selector and leaves it unspaced.
+                function _spaceCssDeclarations(formatted) {
+                    var inComment = false;
+                    return formatted
+                        .split(/\r?\n/)
+                        .map(function (line) {
+                            var starts = inComment;
+                            var close = line.lastIndexOf('*/');
+                            var open = line.lastIndexOf('/*');
+                            if (open > close) {
+                                inComment = true;
+                            } else if (close !== -1) {
+                                inComment = false;
+                            }
+                            if (starts) {
+                                return line;
+                            }
+                            return line.replace(
+                                /^([ \t]*[a-zA-Z-][\w-]*):(?=[^\s:])([^{}]*;[ \t]*(?:\/\*.*\*\/[ \t]*)?)$/,
+                                '$1: $2'
+                            );
+                        })
+                        .join('\n');
+                }
 
                 function _removeLeadingCssRuleGaps(formatted) {
                     var lines = formatted.split(/\r?\n/);
@@ -4120,7 +4272,7 @@
                                                 var formatted = _fmtModel.getValue().replace(/\r\n?/g, '\n');
                                                 var restored = _restoreInlineCssComments(
                                                     _cssSource,
-                                                    _removeLeadingCssRuleGaps(formatted)
+                                                    _removeLeadingCssRuleGaps(_spaceCssDeclarations(formatted))
                                                 );
                                                 _applyCssFormattingEdit(ed, formatted, restored);
                                             }
@@ -6316,6 +6468,7 @@
                                     window.parent.history.replaceState({}, '', newUrl);
                                 } catch (e) {}
                                 $scope.isNewWidget = false;
+                                _loadRelatedListAvailability();
                                 $scope.userPrefs.recentRecords = _mergeRecentRecord(RECORD_TABLE, SYS_ID);
                                 saveUserPrefs();
                                 if (
@@ -7585,9 +7738,27 @@
 
                 // Related Lists modal
 
+                const RELATED_PAGE_SIZE = 20;
+                const RELATED_RANGE_TYPES = [
+                    'currency',
+                    'decimal',
+                    'due_date',
+                    'float',
+                    'glide_date',
+                    'glide_date_time',
+                    'glide_duration',
+                    'glide_time',
+                    'integer',
+                    'longint',
+                    'price',
+                    'timer',
+                ];
+                const RELATED_EXACT_SEARCH_TYPES = ['boolean', 'decimal', 'float', 'integer', 'longint'];
+                let _relatedPopupListener = null;
+
                 function _markFirstLink(columns) {
-                    var set = false;
-                    (columns || []).forEach(function (col) {
+                    let set = false;
+                    (columns || []).forEach((col) => {
                         col.firstLink = !set && !col.refTable;
                         if (col.firstLink) {
                             set = true;
@@ -7595,10 +7766,35 @@
                     });
                 }
 
+                function _initRelatedTab(tab) {
+                    _markFirstLink(tab.columns);
+                    tab.columnSearch = {};
+                    tab.columnSearchOpen = false;
+                    tab.conditions = [];
+                    tab.searchField = '';
+                    tab.searchText = '';
+                    tab.sort = '';
+                    tab.sortDir = '';
+                    _updateRelatedCrumbs(tab);
+                }
+
+                function _updateRelatedCrumbs(tab) {
+                    const first = tab.fixed ? tab.fixed.label + ' = ' + tab.fixed.value : 'All';
+                    tab.crumbs = [first].concat(tab.conditions.map((condition) => condition.label));
+                    tab.showCrumbs = !!tab.fixed || tab.conditions.length > 0;
+                }
+
+                function _loadRelatedListAvailability() {
+                    ajax('hasRelatedLists', { sys_id: SYS_ID }).then(function (d) {
+                        $scope.hasRelatedLists = !!(d.success && d.available);
+                    });
+                }
+
                 $scope.openRelatedModal = function () {
                     if ($scope.isNewWidget) {
                         return;
                     }
+                    _closeRelatedPopups();
                     $scope.relatedModal.open = true;
                     $scope.relatedModal.tabs = [];
                     $scope.relatedModal.activeTab = null;
@@ -7608,9 +7804,7 @@
                         if (!d.success) {
                             return;
                         }
-                        d.tabs.forEach(function (tab) {
-                            _markFirstLink(tab.columns);
-                        });
+                        d.tabs.forEach(_initRelatedTab);
                         $scope.relatedModal.tabs = d.tabs;
                         if (d.tabs.length > 0) {
                             $scope.selectRelatedTab(d.tabs[0]);
@@ -7657,12 +7851,22 @@
                 };
 
                 $scope.closeRelatedModal = function () {
+                    _closeRelatedPopups();
                     _closeModal(function () {
                         $scope.relatedModal.open = false;
                     });
                 };
 
+                $scope.cancelRelatedModal = function () {
+                    if ($scope.relatedMenu.open || $scope.relatedPreview.open) {
+                        _closeRelatedPopups();
+                        return;
+                    }
+                    $scope.closeRelatedModal();
+                };
+
                 $scope.selectRelatedTab = function (tab) {
+                    _closeRelatedPopups();
                     $scope.relatedModal.activeTab = tab;
                     if (!tab.rows) {
                         $scope.loadRelatedTabData(tab, 0);
@@ -7670,13 +7874,23 @@
                 };
 
                 $scope.loadRelatedTabData = function (tab, page) {
+                    _closeRelatedPopups();
                     tab.loading = true;
                     tab.rows = null;
                     tab.error = null;
                     ajax('getRelatedData', {
-                        sys_id: SYS_ID,
-                        related_list: tab.related_list,
+                        conditions: JSON.stringify(
+                            tab.conditions.map((condition) => ({
+                                field: condition.field,
+                                op: condition.op,
+                                value: condition.value,
+                            }))
+                        ),
                         page: page,
+                        related_list: tab.related_list,
+                        sort: tab.sort,
+                        sort_dir: tab.sortDir,
+                        sys_id: SYS_ID,
                     }).then(function (d) {
                         tab.loading = false;
                         if (!d.success) {
@@ -7686,22 +7900,25 @@
                         tab.rows = d.rows;
                         tab.columns = d.columns;
                         _markFirstLink(tab.columns);
+                        tab.query = d.query || '';
                         tab.page = d.page;
-                        var _ps = 20;
-                        tab.pageStart = d.rows.length > 0 ? d.page * _ps + 1 : 0;
-                        tab.pageEnd = d.page * _ps + d.rows.length;
-                        tab.lastPage = Math.max(0, Math.ceil(tab.count / _ps) - 1);
+                        if (tab.conditions.length === 0) {
+                            tab.count = d.count;
+                        }
+                        tab.total = d.count;
+                        tab.pageStart = d.rows.length > 0 ? d.page * RELATED_PAGE_SIZE + 1 : 0;
+                        tab.pageEnd = d.page * RELATED_PAGE_SIZE + d.rows.length;
+                        tab.lastPage = Math.max(0, Math.ceil(tab.total / RELATED_PAGE_SIZE) - 1);
                         tab.pageStartInput = tab.pageStart;
                     });
                 };
 
                 $scope.navigateToStartRow = function (tab) {
-                    var ps = 20;
-                    var val = parseInt(tab.pageStartInput, 10);
+                    let val = parseInt(tab.pageStartInput, 10);
                     if (isNaN(val) || val < 1) val = 1;
-                    if (val > tab.count) val = Math.max(1, tab.count);
-                    var page = Math.floor((val - 1) / ps);
-                    tab.pageStartInput = page * ps + 1;
+                    if (val > tab.total) val = Math.max(1, tab.total);
+                    const page = Math.floor((val - 1) / RELATED_PAGE_SIZE);
+                    tab.pageStartInput = page * RELATED_PAGE_SIZE + 1;
                     if (page !== tab.page) {
                         $scope.loadRelatedTabData(tab, page);
                     }
@@ -7710,6 +7927,317 @@
                 $scope.relatedRecordUrl = function (table, sysId) {
                     return '/nav_to.do?uri=' + encodeURIComponent(table + '.do?sys_id=' + sysId);
                 };
+
+                function _relatedListUrl(tab) {
+                    const query =
+                        (tab.query || '') +
+                        (tab.sort ? '^' + (tab.sortDir === 'desc' ? 'ORDERBYDESC' : 'ORDERBY') + tab.sort : '');
+                    return (
+                        '/nav_to.do?uri=' +
+                        encodeURIComponent(tab.table + '_list.do?sysparm_query=' + encodeURIComponent(query))
+                    );
+                }
+
+                function _addRelatedConditions(tab, conditions, replaceSource) {
+                    if (replaceSource) {
+                        tab.conditions = tab.conditions.filter((condition) => condition.source !== replaceSource);
+                    }
+                    tab.conditions = tab.conditions.concat(conditions);
+                    _updateRelatedCrumbs(tab);
+                    $scope.loadRelatedTabData(tab, 0);
+                }
+
+                $scope.removeRelatedConditionsAfter = function (tab, index) {
+                    if (index >= tab.conditions.length) {
+                        return;
+                    }
+                    tab.conditions = tab.conditions.slice(0, index);
+                    if (!tab.conditions.some((condition) => condition.source === 'column')) {
+                        tab.columnSearch = {};
+                    }
+                    _updateRelatedCrumbs(tab);
+                    $scope.loadRelatedTabData(tab, 0);
+                };
+
+                function _relatedSearchCondition(col, text, source) {
+                    let op = RELATED_EXACT_SEARCH_TYPES.indexOf(col.type) === -1 ? 'STARTSWITH' : '=';
+                    let value = text;
+                    if (text.charAt(0) === '*' && text.length > 1) {
+                        op = 'LIKE';
+                        value = text.substring(1);
+                    }
+                    const opLabel = { '=': '=', LIKE: 'contains', STARTSWITH: 'starts with' }[op];
+                    return { field: col.field, label: col.label + ' ' + opLabel + ' ' + value, op, source, value };
+                }
+
+                $scope.relatedSearch = function (tab) {
+                    const text = String(tab.searchText || '').trim();
+                    if (!text) {
+                        return;
+                    }
+                    const col = tab.columns.find((column) => column.field === tab.searchField);
+                    const condition = col
+                        ? _relatedSearchCondition(col, text, 'search')
+                        : { field: '', label: 'Keywords = ' + text, op: 'TEXT', source: 'search', value: text };
+                    tab.searchText = '';
+                    const index = tab.conditions.findIndex(
+                        (existing) => existing.source === 'search' && existing.field === condition.field
+                    );
+                    if (index === -1) {
+                        _addRelatedConditions(tab, [condition]);
+                        return;
+                    }
+                    tab.conditions = tab.conditions.map((existing, i) => (i === index ? condition : existing));
+                    _updateRelatedCrumbs(tab);
+                    $scope.loadRelatedTabData(tab, 0);
+                };
+
+                $scope.relatedColumnSearch = function (tab) {
+                    const conditions = tab.columns
+                        .filter((col) => String(tab.columnSearch[col.field] || '').trim())
+                        .map((col) =>
+                            _relatedSearchCondition(col, String(tab.columnSearch[col.field]).trim(), 'column')
+                        );
+                    _addRelatedConditions(tab, conditions, 'column');
+                };
+
+                $scope.toggleRelatedSort = function (tab, col) {
+                    _setRelatedSort(tab, col, tab.sort === col.field && tab.sortDir === 'asc' ? 'desc' : 'asc');
+                };
+
+                function _setRelatedSort(tab, col, dir) {
+                    tab.sort = col.field;
+                    tab.sortDir = dir;
+                    $scope.loadRelatedTabData(tab, 0);
+                }
+
+                function _relatedCellConditions(tab, col, row) {
+                    const value = row[col.field + '__value'];
+                    if (value === undefined) {
+                        return [];
+                    }
+                    const display = row[col.field] || '';
+                    const isDate = /date|time|timer|duration/.test(col.type || '');
+                    const make = (op, label) => ({
+                        field: col.field,
+                        label: col.label + ' ' + label,
+                        op,
+                        source: 'row',
+                        value,
+                    });
+                    const items = [
+                        {
+                            label: 'Show Matching',
+                            action: () =>
+                                _addRelatedConditions(tab, [
+                                    value === '' ? make('ISEMPTY', 'is empty') : make('=', '= ' + display),
+                                ]),
+                        },
+                        {
+                            label: 'Filter Out',
+                            action: () =>
+                                _addRelatedConditions(tab, [
+                                    value === '' ? make('ISNOTEMPTY', 'is not empty') : make('!=', '!= ' + display),
+                                ]),
+                        },
+                    ];
+                    if (value !== '' && RELATED_RANGE_TYPES.indexOf(col.type) !== -1) {
+                        items.push(
+                            {
+                                label: 'Show After',
+                                action: () =>
+                                    _addRelatedConditions(tab, [make('>', (isDate ? 'after' : '>') + ' ' + display)]),
+                            },
+                            {
+                                label: 'Show Before',
+                                action: () =>
+                                    _addRelatedConditions(tab, [make('<', (isDate ? 'before' : '<') + ' ' + display)]),
+                            }
+                        );
+                    }
+                    return items;
+                }
+
+                function _relatedRowItems(tab, col, row) {
+                    const table = row._class || tab.table;
+                    const items = col ? _relatedCellConditions(tab, col, row) : [];
+                    if (items.length) {
+                        items.push({ divider: true });
+                    }
+                    items.push(
+                        {
+                            label: 'Copy URL to Clipboard',
+                            action: () =>
+                                _copyRelatedText(
+                                    window.location.protocol +
+                                        '//' +
+                                        window.location.host +
+                                        $scope.relatedRecordUrl(table, row.sys_id)
+                                ),
+                        },
+                        { label: 'Copy sys_id', action: () => _copyRelatedText(row.sys_id) }
+                    );
+                    if ($scope.recordTypes.some((type) => type.table === table)) {
+                        items.push(
+                            { divider: true },
+                            {
+                                label: 'Open in Widget Editor+',
+                                action: () => $window.open(buildWidgetEditorUrl(row.sys_id, table), '_blank'),
+                            }
+                        );
+                    }
+                    return items;
+                }
+
+                function _copyRelatedText(text) {
+                    try {
+                        navigator.clipboard.writeText(text);
+                    } catch (e) {}
+                }
+
+                $scope.openRelatedMenu = function ($event, kind, tab, col, row) {
+                    $event.preventDefault();
+                    $event.stopPropagation();
+                    let items = [];
+                    let label = '';
+                    if (kind === 'title') {
+                        label = 'List controls';
+                        items = [
+                            { label: 'Refresh List', action: () => $scope.loadRelatedTabData(tab, tab.page || 0) },
+                            {
+                                label: 'Open List in New Tab',
+                                action: () => $window.open(_relatedListUrl(tab), '_blank'),
+                            },
+                        ];
+                    } else if (kind === 'header') {
+                        label = col.label + ' column options';
+                        items = [
+                            { label: 'Sort (a to z)', action: () => _setRelatedSort(tab, col, 'asc') },
+                            { label: 'Sort (z to a)', action: () => _setRelatedSort(tab, col, 'desc') },
+                        ];
+                    } else {
+                        label = 'Record actions';
+                        items = _relatedRowItems(tab, col, row);
+                    }
+                    _closeRelatedPopups();
+                    const anchor = $event.type === 'contextmenu' ? null : $event.currentTarget;
+                    $scope.relatedMenu = { items, label, open: true, style: _relatedPopupStyle($event, anchor) };
+                    _watchRelatedPopupDismiss('.we-related-context-menu');
+                    $timeout(() => {
+                        _fitRelatedPopup('.we-related-context-menu', $scope.relatedMenu);
+                        const first = document.querySelector('.we-related-context-menu .context_item');
+                        if (first) first.focus();
+                    });
+                };
+
+                $scope.runRelatedMenuItem = function (item) {
+                    _closeRelatedPopups();
+                    if (item && item.action) {
+                        item.action();
+                    }
+                };
+
+                $scope.onRelatedMenuKeydown = function ($event, item) {
+                    const key = $event.key;
+                    if (key === 'Enter' || key === ' ') {
+                        $event.preventDefault();
+                        $scope.runRelatedMenuItem(item);
+                    } else if (key === 'ArrowDown' || key === 'ArrowUp') {
+                        $event.preventDefault();
+                        const items = Array.from(document.querySelectorAll('.we-related-context-menu .context_item'));
+                        const index = items.indexOf($event.currentTarget);
+                        const next = items[(index + (key === 'ArrowDown' ? 1 : items.length - 1)) % items.length];
+                        if (next) next.focus();
+                    } else if (key === 'Escape' || key === 'Tab') {
+                        $event.preventDefault();
+                        $event.stopPropagation();
+                        _closeRelatedPopups();
+                    }
+                };
+
+                $scope.openRelatedPreview = function ($event, tab, row) {
+                    $event.preventDefault();
+                    $event.stopPropagation();
+                    _closeRelatedPopups();
+                    const preview = {
+                        data: null,
+                        error: null,
+                        loading: true,
+                        open: true,
+                        style: _relatedPopupStyle($event, $event.currentTarget),
+                        table: row._class || tab.table,
+                        sysId: row.sys_id,
+                    };
+                    $scope.relatedPreview = preview;
+                    _watchRelatedPopupDismiss('.we-related-preview');
+                    ajax('getRelatedPreview', {
+                        related_list: tab.related_list,
+                        row_sys_id: row.sys_id,
+                        sys_id: SYS_ID,
+                    }).then((d) => {
+                        if ($scope.relatedPreview !== preview) {
+                            return;
+                        }
+                        preview.loading = false;
+                        if (!d.success) {
+                            preview.error = d.error || 'Failed to load';
+                            return;
+                        }
+                        preview.data = d;
+                        preview.table = d.table || preview.table;
+                        $timeout(() => _fitRelatedPopup('.we-related-preview', preview));
+                    });
+                };
+
+                function _relatedPopupStyle($event, anchor) {
+                    const modal = $event.target.closest('.we-related-modal');
+                    const bounds = modal.getBoundingClientRect();
+                    if (anchor) {
+                        const rect = anchor.getBoundingClientRect();
+                        return { left: rect.left - bounds.left + 'px', top: rect.bottom - bounds.top + 2 + 'px' };
+                    }
+                    return { left: $event.clientX - bounds.left + 'px', top: $event.clientY - bounds.top + 'px' };
+                }
+
+                function _fitRelatedPopup(selector, popup) {
+                    const el = document.querySelector(selector);
+                    const modal = el && el.closest('.we-related-modal');
+                    if (!el || !modal) {
+                        return;
+                    }
+                    const left = parseFloat(popup.style.left) || 0;
+                    const top = parseFloat(popup.style.top) || 0;
+                    const maxLeft = Math.max(0, modal.clientWidth - el.offsetWidth - 8);
+                    const maxTop = Math.max(0, modal.clientHeight - el.offsetHeight - 8);
+                    popup.style = { left: Math.min(left, maxLeft) + 'px', top: Math.min(top, maxTop) + 'px' };
+                }
+
+                function _watchRelatedPopupDismiss(selector) {
+                    _unwatchRelatedPopupDismiss();
+                    _relatedPopupListener = (event) => {
+                        if (!event.target.closest(selector)) {
+                            $scope.$apply(_closeRelatedPopups);
+                        }
+                    };
+                    $timeout(() => {
+                        if (_relatedPopupListener) {
+                            document.addEventListener('mousedown', _relatedPopupListener, true);
+                        }
+                    });
+                }
+
+                function _unwatchRelatedPopupDismiss() {
+                    if (_relatedPopupListener) {
+                        document.removeEventListener('mousedown', _relatedPopupListener, true);
+                        _relatedPopupListener = null;
+                    }
+                }
+
+                function _closeRelatedPopups() {
+                    _unwatchRelatedPopupDismiss();
+                    $scope.relatedMenu = { items: [], label: '', open: false, style: {} };
+                    $scope.relatedPreview = { data: null, error: null, loading: false, open: false, style: {} };
+                }
 
                 // Unlink Provider
                 $scope.pendingUnlinkProvider = null;
@@ -8575,7 +9103,7 @@
                         return true;
                     }
                     if ($scope.relatedModal && $scope.relatedModal.open) {
-                        $scope.closeRelatedModal();
+                        $scope.cancelRelatedModal();
                         return true;
                     }
                     if ($scope.versionDiffModal && $scope.versionDiffModal.open) {
@@ -8874,6 +9402,18 @@
                 }
 
                 $scope.validDraftRetentionDays = _validDraftRetentionDays;
+
+                function _validFontSize(value) {
+                    return Number.isSafeInteger(value) && value >= 8 && value <= 32;
+                }
+
+                function _validTabSize(value) {
+                    return Number.isSafeInteger(value) && value >= 1 && value <= 8;
+                }
+
+                function _validRemBase(value) {
+                    return typeof value === 'number' && Number.isFinite(value) && value >= 1 && value <= 100;
+                }
 
                 function _draftPrefix() {
                     return (
@@ -9943,6 +10483,599 @@
                     document.head.appendChild(link);
                 }
 
+                // User preferences dialog definitions
+                const _PREF_BRACKET_CHOICES = [
+                    { label: 'Language defined', value: 'languageDefined' },
+                    { label: 'Always', value: 'always' },
+                    { label: 'Before whitespace', value: 'beforeWhitespace' },
+                    { label: 'Never', value: 'never' },
+                ];
+                const _PREF_DEFAULT_WIDGET_EDITORS = [
+                    { key: 'template', visible: true },
+                    { key: 'css', visible: true },
+                    { key: 'client_script', visible: true },
+                    { key: 'link', visible: false },
+                    { key: 'script', visible: true },
+                ];
+                const _PREF_STAGED_IMPORT_KEYS = [
+                    'credit',
+                    'debugMenu',
+                    'favouriteGroups',
+                    'recentRecords',
+                    'widgetEditorLayout',
+                ];
+                const _PREF_CONDITIONS = {
+                    css: () => $scope.isWidgetRecord !== false || _coreEditorUses(['css', 'scss']),
+                    html: () => $scope.isWidgetRecord !== false || _coreEditorUses(['html']),
+                    snUtils: () => !!$scope.hasSnUtils,
+                    widget: () => $scope.isWidgetRecord !== false,
+                };
+
+                $scope.prefPreviewCode = [
+                    'function greet(name) {',
+                    '    // Build a friendly greeting',
+                    "    const message = 'Hello, ' + name;",
+                    '    return message.length > 0 ? message : null;',
+                    '}',
+                ].join('\n');
+                $scope.prefColumns = [
+                    [
+                        {
+                            editors: true,
+                            options: [
+                                {
+                                    key: 'alwaysShowLink',
+                                    label: 'Always show the Link editor when it has code',
+                                    tooltip:
+                                        'Opens the Link editor for widgets with a link function, even when it is hidden above.',
+                                    type: 'checkbox',
+                                },
+                            ],
+                            title: 'Default editors',
+                            when: 'widget',
+                        },
+                        {
+                            options: [
+                                {
+                                    choices: [
+                                        { label: 'Auto (follow UI theme)', value: 'auto' },
+                                        { label: 'Dark', value: 'dark' },
+                                        { label: 'Light', value: 'light' },
+                                    ],
+                                    key: 'editorTheme',
+                                    label: 'Theme',
+                                    tooltip: 'Sets the code editor colour theme. Auto follows the ServiceNow UI theme.',
+                                    type: 'select',
+                                },
+                                {
+                                    key: 'fontFamily',
+                                    label: 'Font family',
+                                    tooltip:
+                                        'Sets the code editor typeface. Google Fonts load from fonts.googleapis.com.',
+                                    type: 'font',
+                                },
+                                {
+                                    error: 'Enter a whole number from 8 to 32.',
+                                    key: 'fontSize',
+                                    label: 'Font size',
+                                    max: 32,
+                                    min: 8,
+                                    tooltip: 'Sets the code editor text size, from 8 to 32 pixels.',
+                                    type: 'number',
+                                    unit: 'px',
+                                },
+                            ],
+                            preview: true,
+                            title: 'Appearance',
+                        },
+                        {
+                            options: [
+                                {
+                                    key: 'wordWrap',
+                                    label: 'Wrap long lines',
+                                    tooltip:
+                                        'Breaks lines that exceed the editor width instead of scrolling horizontally.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'minimap',
+                                    label: 'Show minimap',
+                                    tooltip: 'Shows a code overview along the right edge of each editor.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'stickyScroll',
+                                    label: 'Sticky scroll',
+                                    tooltip:
+                                        'Keeps the enclosing function and block headers at the top of the editor while scrolling.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'flashOnEditorOpen',
+                                    label: 'Highlight editors when opened',
+                                    tooltip: 'Briefly highlights an editor when it opens or is brought into focus.',
+                                    type: 'checkbox',
+                                },
+                            ],
+                            title: 'Editor display',
+                        },
+                        {
+                            options: [
+                                {
+                                    key: 'ctrlSSaveActiveOnly',
+                                    label: 'Save shortcut saves the active editor only',
+                                    tooltip:
+                                        'When on, the save shortcut saves the focused editor. When off, it saves every changed editor.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'realtimeWidgetUpdates',
+                                    label: 'Apply real-time changes from other users',
+                                    tooltip:
+                                        'When on, changes other users save are applied immediately. When off, an alert appears above the editor instead.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'showRecentlyOpenedWidgets',
+                                    label: 'Show recently opened records',
+                                    tooltip: 'Shows your recently opened records beside the record picker.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'showOpenInVsCode',
+                                    label: 'Show "Open in VS Code" button (SN Utils)',
+                                    tooltip:
+                                        'Shows an Open in VS Code button in the header when the SN Utils browser extension is installed.',
+                                    type: 'checkbox',
+                                    when: 'snUtils',
+                                },
+                                {
+                                    key: 'showAssistantButton',
+                                    label: 'Show Widget Editor+ Assistant',
+                                    tooltip:
+                                        'Shows the Assistant (AI context helper) in the header and the Service Portal debug menu.',
+                                    type: 'checkbox',
+                                },
+                            ],
+                            title: 'Behaviour',
+                        },
+                    ],
+                    [
+                        {
+                            options: [
+                                {
+                                    key: 'formatTabsToSpaces',
+                                    label: 'Use spaces for indentation',
+                                    tooltip: 'Inserts spaces instead of tabs when typing, pasting and formatting.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    error: 'Enter a whole number from 1 to 8.',
+                                    key: 'tabSize',
+                                    label: 'Tab size',
+                                    max: 8,
+                                    min: 1,
+                                    tooltip: 'Sets the indentation width, from 1 to 8 columns.',
+                                    type: 'number',
+                                    unit: 'spaces',
+                                },
+                                {
+                                    key: 'autoIndent',
+                                    label: 'Auto-indent',
+                                    tooltip: 'Indents new lines to match the surrounding code.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'formatOnPaste',
+                                    label: 'Format on paste',
+                                    tooltip: 'Formats pasted code automatically.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'formatOnType',
+                                    label: 'Format on type',
+                                    tooltip: 'Formats code automatically as you type.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'insertSpaceBeforeFuncParen',
+                                    label: 'Insert space before function parentheses',
+                                    tooltip:
+                                        'Adds a space before the opening parenthesis of a function declaration when formatting.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    choices: _PREF_BRACKET_CHOICES,
+                                    key: 'autoClosingBrackets',
+                                    label: 'Auto-closing brackets',
+                                    tooltip: 'Adds a closing bracket when you type an opening bracket.',
+                                    type: 'select',
+                                },
+                                {
+                                    choices: _PREF_BRACKET_CHOICES,
+                                    key: 'autoClosingQuotes',
+                                    label: 'Auto-closing quotes',
+                                    tooltip: 'Adds a closing quote when you type an opening quote.',
+                                    type: 'select',
+                                },
+                                {
+                                    choices: [
+                                        { label: 'Language defined', value: 'languageDefined' },
+                                        { label: 'Always', value: 'always' },
+                                        { label: 'Quotes', value: 'quotes' },
+                                        { label: 'Brackets', value: 'brackets' },
+                                        { label: 'Never', value: 'never' },
+                                    ],
+                                    key: 'autoSurround',
+                                    label: 'Auto-surround',
+                                    tooltip: 'Wraps selected text when you type a quote or bracket.',
+                                    type: 'select',
+                                },
+                            ],
+                            title: 'Formatting',
+                        },
+                        {
+                            options: [
+                                {
+                                    key: 'htmlAutoCloseTags',
+                                    label: 'Auto-close HTML tags',
+                                    tooltip: 'Adds the closing tag when you finish typing an opening tag.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'linkedEditing',
+                                    label: 'Linked editing',
+                                    tooltip: 'Renames the matching closing tag as you edit an opening tag.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'htmlValidation',
+                                    label: 'Validate HTML tags',
+                                    tooltip: 'Highlights missing and mismatched closing tags.',
+                                    type: 'checkbox',
+                                },
+                            ],
+                            title: 'HTML editing',
+                            when: 'html',
+                        },
+                        {
+                            link: { href: '/nav_to.do?uri=syntax_editor_macro_list.do', label: 'View code macros' },
+                            options: [
+                                {
+                                    key: 'languageHelpers',
+                                    label: 'Show hover and parameter hints',
+                                    tooltip:
+                                        'Shows documentation on hover and parameter hints while you type function calls.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'showUnusedVars',
+                                    label: 'Show unused variables',
+                                    tooltip:
+                                        'Highlights variables, functions and parameters that are declared but never used.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'widgetDataChecks',
+                                    label: 'Check widget data and actions',
+                                    tooltip:
+                                        "Highlights data properties the server script never sets, server data the client script, link function and templates never use, actions the server script doesn't handle, and data or options used in the wrong script.",
+                                    type: 'checkbox',
+                                    when: 'widget',
+                                },
+                                {
+                                    error: 'Enter a number from 1 to 100.',
+                                    key: 'remBase',
+                                    label: '1rem conversion',
+                                    max: 100,
+                                    min: 1,
+                                    step: 'any',
+                                    tooltip: 'Sets the pixel value of 1rem for the CSS/SCSS px-to-rem code action.',
+                                    type: 'number',
+                                    unit: 'px',
+                                    when: 'css',
+                                },
+                            ],
+                            title: 'Code assistance',
+                        },
+                        {
+                            options: [
+                                {
+                                    choices: [
+                                        { label: 'Enhanced', value: 'enhanced' },
+                                        { label: 'Standard', value: 'standard' },
+                                        { label: 'Off', value: 'off' },
+                                    ],
+                                    key: 'contextMenuMode',
+                                    label: 'Debug context menu',
+                                    tooltip: 'Chooses which widget context menu Service Portal pages use.',
+                                    type: 'select',
+                                },
+                                {
+                                    key: 'htmlClassPortalSysId',
+                                    label: 'CSS theme',
+                                    tooltip:
+                                        'Chooses the portal and theme whose CSS supplies class="..." completions in HTML editors.',
+                                    type: 'portal',
+                                    when: 'html',
+                                },
+                                {
+                                    key: 'htmlClassIncludeStandardCss',
+                                    label: 'Include standard Service Portal CSS',
+                                    requires: 'htmlClassPortalSysId',
+                                    tooltip:
+                                        "Also indexes the standard Service Portal CSS bundle for class completions, in addition to the theme's own CSS.",
+                                    type: 'checkbox',
+                                    when: 'html',
+                                },
+                            ],
+                            title: 'Service Portal',
+                        },
+                        {
+                            options: [
+                                {
+                                    error: 'Enter whole seconds (0 = off).',
+                                    key: 'autosaveInterval',
+                                    label: 'Auto-save local drafts',
+                                    min: 0,
+                                    tooltip:
+                                        'Saves recovery drafts in this browser at this interval. 0 turns capture off.',
+                                    type: 'number',
+                                    unit: 'seconds',
+                                },
+                                {
+                                    error: 'Enter whole days (minimum 1).',
+                                    key: 'draftRetentionDays',
+                                    label: 'Keep drafts for',
+                                    min: 1,
+                                    tooltip: 'Deletes drafts after this many days without changes.',
+                                    type: 'number',
+                                    unit: 'days',
+                                },
+                            ],
+                            title: 'Local drafts',
+                        },
+                    ],
+                ];
+                const _prefSections = $scope.prefColumns.flat();
+                const _prefOptions = _prefSections.flatMap((section) => section.options);
+                for (const section of _prefSections) {
+                    for (const option of section.options) {
+                        option.when = option.when || section.when;
+                        option.searchText = [section.title, option.label, option.tooltip, option.unit || '']
+                            .concat((option.choices || []).map((choice) => choice.label))
+                            .join(' ')
+                            .toLowerCase();
+                    }
+                }
+                $scope.prefFilter = { text: '' };
+                $scope.prefMoveStatus = '';
+                $scope.confirmDiscardUserPrefs = false;
+                let _userPrefsDefaults = _defaultUserPrefs();
+                let _userPrefsBaseline = '';
+                let _stopPrefPreviewWatch = null;
+
+                function _coreEditorUses(languages) {
+                    return ($scope.coreEditorDefs || []).some((def) => languages.includes(def.language));
+                }
+
+                function _prefApplies(item) {
+                    return !item.when || _PREF_CONDITIONS[item.when]();
+                }
+
+                function _prefMatches(text) {
+                    return String($scope.prefFilter.text || '')
+                        .toLowerCase()
+                        .split(/\s+/)
+                        .filter(Boolean)
+                        .every((token) => text.includes(token));
+                }
+
+                $scope.prefOptionShown = function (option) {
+                    return (
+                        _prefApplies(option) &&
+                        (!option.requires || !!$scope.userPrefsEdit[option.requires]) &&
+                        _prefMatches(option.searchText)
+                    );
+                };
+
+                $scope.prefEditorShown = function (editor) {
+                    return _prefMatches(('default editors ' + editor.label).toLowerCase());
+                };
+
+                $scope.prefSectionShown = function (section) {
+                    return (
+                        _prefApplies(section) &&
+                        (section.options.some($scope.prefOptionShown) ||
+                            (!!section.editors && ($scope.userPrefsEdit.editors || []).some($scope.prefEditorShown)))
+                    );
+                };
+
+                $scope.prefNoMatches = function () {
+                    return !_prefSections.some($scope.prefSectionShown);
+                };
+
+                function _prefNumberValid(key, value) {
+                    switch (key) {
+                        case 'autosaveInterval':
+                            return _validAutosaveInterval(value);
+                        case 'draftRetentionDays':
+                            return _validDraftRetentionDays(value);
+                        case 'fontSize':
+                            return _validFontSize(value);
+                        case 'remBase':
+                            return _validRemBase(value);
+                        case 'tabSize':
+                            return _validTabSize(value);
+                        default:
+                            return true;
+                    }
+                }
+
+                $scope.prefValueValid = function (option) {
+                    return (
+                        option.type !== 'number' ||
+                        !_prefApplies(option) ||
+                        _prefNumberValid(option.key, $scope.userPrefsEdit[option.key])
+                    );
+                };
+
+                function _userPrefsInvalid() {
+                    return _prefOptions.some((option) => !$scope.prefValueValid(option));
+                }
+
+                $scope.userPrefsInvalid = _userPrefsInvalid;
+
+                $scope.stepPref = function (option, delta) {
+                    const current = $scope.userPrefsEdit[option.key];
+                    const base =
+                        typeof current === 'number' && Number.isFinite(current)
+                            ? current
+                            : _userPrefsDefaults[option.key];
+                    $scope.userPrefsEdit[option.key] = Math.min(
+                        option.max ?? Infinity,
+                        Math.max(option.min ?? -Infinity, base + delta)
+                    );
+                };
+
+                $scope.prefStepDisabled = function (option, delta) {
+                    const value = $scope.userPrefsEdit[option.key];
+                    if (typeof value !== 'number') return false;
+                    return delta < 0
+                        ? option.min !== undefined && value <= option.min
+                        : option.max !== undefined && value >= option.max;
+                };
+
+                function _prefValuesEqual(option, left, right) {
+                    if (option.type === 'checkbox') return !!left === !!right;
+                    if (option.type === 'number') return left === right;
+                    return String(left ?? '') === String(right ?? '');
+                }
+
+                $scope.isPrefModified = function (option) {
+                    return !_prefValuesEqual(option, $scope.userPrefsEdit[option.key], _userPrefsDefaults[option.key]);
+                };
+
+                $scope.prefDefaultLabel = function (option) {
+                    const value = _userPrefsDefaults[option.key];
+                    if (option.type === 'checkbox') return value ? 'On' : 'Off';
+                    if (option.type === 'number') return value + (option.unit ? ' ' + option.unit : '');
+                    if (option.type === 'font') return 'Monaco default';
+                    if (option.type === 'portal') return 'None';
+                    const choice = (option.choices || []).find((item) => item.value === value);
+                    return choice ? choice.label : String(value);
+                };
+
+                $scope.resetPref = function (option) {
+                    $scope.userPrefsEdit[option.key] = _userPrefsDefaults[option.key];
+                };
+
+                $scope.prefEditorsModified = function () {
+                    const editors = $scope.userPrefsEdit.editors || [];
+                    return _PREF_DEFAULT_WIDGET_EDITORS.some(
+                        (def, index) =>
+                            !editors[index] ||
+                            editors[index].key !== def.key ||
+                            !!editors[index].visible !== def.visible
+                    );
+                };
+
+                function _resetPrefEditors() {
+                    const editors = $scope.userPrefsEdit.editors || [];
+                    const ordered = [];
+                    for (const def of _PREF_DEFAULT_WIDGET_EDITORS) {
+                        const editor = editors.find((item) => item.key === def.key);
+                        if (editor) {
+                            editor.visible = def.visible;
+                            ordered.push(editor);
+                        }
+                    }
+                    $scope.userPrefsEdit.editors = ordered.concat(editors.filter((item) => !ordered.includes(item)));
+                }
+
+                $scope.resetPrefEditors = _resetPrefEditors;
+
+                $scope.prefEditorIndex = function (editor) {
+                    return ($scope.userPrefsEdit.editors || []).indexOf(editor);
+                };
+
+                $scope.movePrefEditor = function (editor, delta) {
+                    const editors = $scope.userPrefsEdit.editors || [];
+                    const index = editors.indexOf(editor);
+                    const target = index + delta;
+                    if (index === -1 || target < 0 || target >= editors.length) return;
+                    editors.splice(index, 1);
+                    editors.splice(target, 0, editor);
+                    $scope.prefMoveStatus =
+                        editor.label + ' moved to position ' + (target + 1) + ' of ' + editors.length + '.';
+                    $timeout(() => {
+                        const direction = delta < 0 ? 'up' : 'down';
+                        const opposite = delta < 0 ? 'down' : 'up';
+                        const preferred = document.getElementById('pref-move-' + editor.key + '-' + direction);
+                        const button =
+                            preferred && !preferred.disabled
+                                ? preferred
+                                : document.getElementById('pref-move-' + editor.key + '-' + opposite);
+                        if (button) button.focus();
+                    });
+                };
+
+                function _userPrefsEditState() {
+                    const edit = $scope.userPrefsEdit;
+                    const state = {
+                        editors: (edit.editors || []).map((editor) => [editor.key, !!editor.visible]),
+                        showOpenHistory: edit.showOpenHistory,
+                    };
+                    for (const option of _prefOptions) state[option.key] = edit[option.key];
+                    for (const key of _PREF_STAGED_IMPORT_KEYS) state[key] = edit[key];
+                    return angular.toJson(state);
+                }
+
+                $scope.userPrefsDirty = function () {
+                    return _userPrefsEditState() !== _userPrefsBaseline;
+                };
+
+                // Applies theme and font settings to open editors without saving them.
+                function _applyEditorAppearance(prefs) {
+                    const options = { fontFamily: _buildFontFamily(prefs.fontFamily) };
+                    if (_validFontSize(prefs.fontSize)) options.fontSize = prefs.fontSize;
+                    Object.keys(monacoEditors).forEach((key) => monacoEditors[key].updateOptions(options));
+                    if (window.monaco) monaco.editor.setTheme(_resolveMonacoTheme(prefs.editorTheme));
+                }
+
+                function _startUserPrefsPreview() {
+                    _stopUserPrefsPreview(false);
+                    _stopPrefPreviewWatch = $scope.$watchGroup(
+                        ['userPrefsEdit.editorTheme', 'userPrefsEdit.fontSize', 'userPrefsEdit.fontFamily'],
+                        (values, previous) => {
+                            if (values !== previous) _applyEditorAppearance($scope.userPrefsEdit);
+                        }
+                    );
+                }
+
+                function _stopUserPrefsPreview(revert) {
+                    if (_stopPrefPreviewWatch) {
+                        _stopPrefPreviewWatch();
+                        _stopPrefPreviewWatch = null;
+                        if (revert) _applyEditorAppearance($scope.userPrefs);
+                    }
+                }
+
+                $scope.prefPreviewStyle = function () {
+                    const size = _validFontSize($scope.userPrefsEdit.fontSize)
+                        ? $scope.userPrefsEdit.fontSize
+                        : $scope.userPrefs.fontSize;
+                    return { fontFamily: _buildFontFamily($scope.userPrefsEdit.fontFamily), fontSize: size + 'px' };
+                };
+
+                function _closeUserPrefsModal(revertPreview) {
+                    _stopUserPrefsPreview(revertPreview);
+                    $scope.confirmDiscardUserPrefs = false;
+                    _closeModal(function () {
+                        $scope.showUserPrefsModal = false;
+                    });
+                }
+
                 $scope.openUserPrefsModal = function () {
                     _loadGoogleFonts();
                     var _savedOrder = $scope.userPrefs.editorOrder;
@@ -10010,9 +11143,15 @@
                         googleFonts: _GOOGLE_FONTS,
                     };
                     _loadClassPortals();
+                    _userPrefsDefaults = _defaultUserPrefs();
+                    _userPrefsBaseline = _userPrefsEditState();
+                    $scope.prefFilter.text = '';
+                    $scope.prefMoveStatus = '';
+                    $scope.confirmDiscardUserPrefs = false;
                     $scope.importPrefsStatus = null;
                     $scope.showUserPrefsModal = true;
                     $scope.openDropdown = null;
+                    _startUserPrefsPreview();
                 };
 
                 // Lazily loads portals for the "CSS theme" preference dropdown.
@@ -10029,12 +11168,10 @@
                 }
 
                 $scope.saveUserPrefsModal = function () {
-                    if (
-                        !_validAutosaveInterval($scope.userPrefsEdit.autosaveInterval) ||
-                        !_validDraftRetentionDays($scope.userPrefsEdit.draftRetentionDays)
-                    ) {
+                    if (_userPrefsInvalid()) {
                         return;
                     }
+                    $scope.confirmDiscardUserPrefs = false;
                     $scope.userPrefs.autosaveInterval = $scope.userPrefsEdit.autosaveInterval;
                     $scope.userPrefs.draftRetentionDays = $scope.userPrefsEdit.draftRetentionDays;
                     _draftRetentionLoaded = true;
@@ -10066,7 +11203,9 @@
                     $scope.userPrefs.autoIndent = $scope.userPrefsEdit.autoIndent;
                     $scope.userPrefs.formatOnPaste = $scope.userPrefsEdit.formatOnPaste;
                     $scope.userPrefs.formatOnType = $scope.userPrefsEdit.formatOnType;
-                    $scope.userPrefs.fontSize = $scope.userPrefsEdit.fontSize;
+                    if (_validFontSize($scope.userPrefsEdit.fontSize)) {
+                        $scope.userPrefs.fontSize = $scope.userPrefsEdit.fontSize;
+                    }
                     $scope.userPrefs.fontFamily = $scope.userPrefsEdit.fontFamily || '';
                     $scope.userPrefs.languageHelpers = $scope.userPrefsEdit.languageHelpers;
                     $scope.userPrefs.showUnusedVars = !!$scope.userPrefsEdit.showUnusedVars;
@@ -10096,13 +11235,11 @@
                         : '';
                     $scope.userPrefs.htmlClassThemeSysId = _selectedClassPortal ? _selectedClassPortal.themeSysId : '';
                     $scope.userPrefs.htmlClassIncludeStandardCss = !!$scope.userPrefsEdit.htmlClassIncludeStandardCss;
-                    var ts = parseInt($scope.userPrefsEdit.tabSize, 10);
-                    if (ts >= 1 && ts <= 8) {
-                        $scope.userPrefs.tabSize = ts;
+                    if (_validTabSize($scope.userPrefsEdit.tabSize)) {
+                        $scope.userPrefs.tabSize = $scope.userPrefsEdit.tabSize;
                     }
-                    var rb = parseFloat($scope.userPrefsEdit.remBase);
-                    if (rb > 0) {
-                        $scope.userPrefs.remBase = rb;
+                    if (_validRemBase($scope.userPrefsEdit.remBase)) {
+                        $scope.userPrefs.remBase = $scope.userPrefsEdit.remBase;
                     }
                     var wrapVal = $scope.userPrefs.wordWrap ? 'on' : 'off';
                     var minimapVal = { enabled: !!$scope.userPrefs.minimap };
@@ -10268,9 +11405,7 @@
                                     if (!saveRes || !saveRes.success) {
                                         return $q.reject('The server rejected the save.');
                                     }
-                                    _closeModal(function () {
-                                        $scope.showUserPrefsModal = false;
-                                    });
+                                    _closeUserPrefsModal(false);
                                 },
                                 function (reason) {
                                     $scope.importPrefsStatus = {
@@ -10284,73 +11419,36 @@
                             );
                         return;
                     }
-                    _closeModal(function () {
-                        $scope.showUserPrefsModal = false;
-                    });
+                    _closeUserPrefsModal(false);
                 };
 
                 $scope.cancelUserPrefsModal = function () {
-                    _closeModal(function () {
-                        $scope.showUserPrefsModal = false;
-                    });
+                    if ($scope.userPrefsDirty()) {
+                        $scope.confirmDiscardUserPrefs = true;
+                        return;
+                    }
+                    _closeUserPrefsModal(true);
+                };
+
+                $scope.keepEditingUserPrefs = function () {
+                    $scope.confirmDiscardUserPrefs = false;
+                };
+
+                $scope.discardUserPrefsChanges = function () {
+                    _closeUserPrefsModal(true);
                 };
 
                 $scope.resetUserPrefsModal = function () {
                     if ($scope.isWidgetRecord !== false) {
-                        var defaultOrder = ['template', 'css', 'client_script', 'link', 'script'];
-                        var defaultVisible = {
-                            template: true,
-                            css: true,
-                            client_script: true,
-                            link: false,
-                            script: true,
-                        };
-                        var sorted = [];
-                        defaultOrder.forEach(function (key) {
-                            for (var i = 0; i < $scope.userPrefsEdit.editors.length; i++) {
-                                if ($scope.userPrefsEdit.editors[i].key === key) {
-                                    var e = $scope.userPrefsEdit.editors[i];
-                                    e.visible = !!defaultVisible[key];
-                                    sorted.push(e);
-                                    break;
-                                }
-                            }
-                        });
-                        $scope.userPrefsEdit.editors = sorted;
+                        _resetPrefEditors();
                     }
-                    $scope.userPrefsEdit.formatTabsToSpaces = true;
-                    $scope.userPrefsEdit.wordWrap = true;
-                    $scope.userPrefsEdit.editorTheme = 'auto';
-                    $scope.userPrefsEdit.minimap = false;
-                    if ($scope.isWidgetRecord !== false) $scope.userPrefsEdit.alwaysShowLink = true;
-                    $scope.userPrefsEdit.realtimeWidgetUpdates = false;
-                    $scope.userPrefsEdit.autoIndent = true;
-                    $scope.userPrefsEdit.formatOnPaste = true;
-                    $scope.userPrefsEdit.formatOnType = true;
-                    $scope.userPrefsEdit.fontSize = 13;
-                    $scope.userPrefsEdit.fontFamily = '';
-                    $scope.userPrefsEdit.languageHelpers = true;
-                    $scope.userPrefsEdit.showUnusedVars = true;
-                    $scope.userPrefsEdit.widgetDataChecks = true;
-                    $scope.userPrefsEdit.remBase = 16;
-                    $scope.userPrefsEdit.stickyScroll = true;
-                    $scope.userPrefsEdit.htmlValidation = true;
-                    $scope.userPrefsEdit.htmlAutoCloseTags = true;
-                    $scope.userPrefsEdit.autoSurround = 'languageDefined';
-                    $scope.userPrefsEdit.autoClosingBrackets = 'languageDefined';
-                    $scope.userPrefsEdit.autoClosingQuotes = 'languageDefined';
-                    $scope.userPrefsEdit.linkedEditing = true;
-                    $scope.userPrefsEdit.insertSpaceBeforeFuncParen = false;
-                    $scope.userPrefsEdit.tabSize = 4;
-                    $scope.userPrefsEdit.autosaveInterval = 30;
-                    $scope.userPrefsEdit.draftRetentionDays = 7;
-                    $scope.userPrefsEdit.ctrlSSaveActiveOnly = true;
-                    $scope.userPrefsEdit.flashOnEditorOpen = !window.matchMedia('(prefers-reduced-motion: reduce)')
-                        .matches;
-                    $scope.userPrefsEdit.showOpenInVsCode = true;
-                    $scope.userPrefsEdit.showRecentlyOpenedWidgets = true;
-                    $scope.userPrefsEdit.showOpenHistory = true;
-                    $scope.userPrefsEdit.showAssistantButton = false;
+                    const defaults = _defaultUserPrefs();
+                    for (const option of _prefOptions) {
+                        if (_prefApplies(option)) {
+                            $scope.userPrefsEdit[option.key] = defaults[option.key];
+                        }
+                    }
+                    $scope.userPrefsEdit.showOpenHistory = defaults.showOpenHistory;
                 };
 
                 $scope.importPrefsStatus = null;
@@ -10511,29 +11609,26 @@
                     } else if (p.hasOwnProperty('contextMenuMode')) {
                         $scope.userPrefsEdit.contextMenuMode = 'enhanced';
                     }
+                    if (typeof p.htmlClassPortalSysId === 'string') {
+                        $scope.userPrefsEdit.htmlClassPortalSysId = p.htmlClassPortalSysId;
+                    }
+                    if (p.hasOwnProperty('htmlClassIncludeStandardCss')) {
+                        $scope.userPrefsEdit.htmlClassIncludeStandardCss = !!p.htmlClassIncludeStandardCss;
+                    }
                     if (_validAutosaveInterval(p.autosaveInterval)) {
                         $scope.userPrefsEdit.autosaveInterval = p.autosaveInterval;
                     }
                     if (_validDraftRetentionDays(p.draftRetentionDays)) {
                         $scope.userPrefsEdit.draftRetentionDays = p.draftRetentionDays;
                     }
-                    if (p.hasOwnProperty('fontSize')) {
-                        var fs = parseInt(p.fontSize, 10);
-                        if (fs >= 8 && fs <= 32) {
-                            $scope.userPrefsEdit.fontSize = fs;
-                        }
+                    if (p.hasOwnProperty('fontSize') && _validFontSize(parseInt(p.fontSize, 10))) {
+                        $scope.userPrefsEdit.fontSize = parseInt(p.fontSize, 10);
                     }
-                    if (p.hasOwnProperty('tabSize')) {
-                        var ts = parseInt(p.tabSize, 10);
-                        if (ts >= 1 && ts <= 8) {
-                            $scope.userPrefsEdit.tabSize = ts;
-                        }
+                    if (p.hasOwnProperty('tabSize') && _validTabSize(parseInt(p.tabSize, 10))) {
+                        $scope.userPrefsEdit.tabSize = parseInt(p.tabSize, 10);
                     }
-                    if (p.hasOwnProperty('remBase')) {
-                        var rb = parseFloat(p.remBase);
-                        if (rb > 0) {
-                            $scope.userPrefsEdit.remBase = rb;
-                        }
+                    if (p.hasOwnProperty('remBase') && _validRemBase(parseFloat(p.remBase))) {
+                        $scope.userPrefsEdit.remBase = parseFloat(p.remBase);
                     }
                     if (p.hasOwnProperty('recentWidgets') && Array.isArray(p.recentWidgets)) {
                         $scope.userPrefs.recentWidgets = p.recentWidgets;

@@ -72,7 +72,7 @@ Use **Ctrl + Right-Click** on a Service Portal widget to inspect it.
 
 - Navigate nested widgets and open editors or platform records.
 - Inspect generation times, scopes, data and instance customisations.
-- Choose Enhanced, Standard or Off in User Preferences.
+- Choose Enhanced, Standard or Off in User preferences.
 
 ---
 

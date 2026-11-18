@@ -6,7 +6,7 @@ export const widgetRelatedListExclusionsProperty = Property({
     name: 'monaco.plus.widget.related_list_exclusions',
     value: '',
     description:
-        'Excludes sp_widget related lists using a comma-separated lists of sys_ui_related_list_entry.related_list values.',
+        'Excludes Widget Editor+ related lists using a comma-separated list of sys_ui_related_list_entry.related_list values.',
     ignoreCache: true,
     roles: {
         read: ['sp_admin'],

@@ -219,7 +219,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
         return choices;
     },
 
-    _getEditorFieldDefs: function (gr, profile) {
+    _getEditorFieldDefs: function (gr, profile, isNew) {
         var defs = [];
         for (var i = 0; i < profile.fields.length; i++) {
             var source = profile.fields[i];
@@ -244,7 +244,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             if (element.isMandatory && element.isMandatory()) def.required = true;
             if (def.multiline === undefined && !def.language && def.type === 'string')
                 def.multiline = Number(descriptor.getLength()) > 255;
-            def.canWrite = !def.readOnly && element.canWrite();
+            def.canWrite = !def.readOnly && this._canEditElement(element, isNew);
             if (def.type === 'choice') def.choices = this._getEditorChoices(gr.getTableName(), def.name);
             defs.push(def);
         }
@@ -288,7 +288,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                     throw new Error('Record creation is not allowed.');
             }
             var name = String(this.getParameter('field') || '');
-            var def = this._getEditorFieldDefs(record, profiles[table]).filter(function (field) {
+            var def = this._getEditorFieldDefs(record, profiles[table], !sysId).filter(function (field) {
                 return field.name === name && field.type === 'reference';
             })[0];
             if (!def) throw new Error('Reference field is not available.');
@@ -436,7 +436,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     },
 
     _editorRecordData: function (gr, profile, sysId, isNew) {
-        var defs = this._getEditorFieldDefs(gr, profile);
+        var defs = this._getEditorFieldDefs(gr, profile, isNew);
         var values = {
             sys_id: sysId,
             name: '',
@@ -549,7 +549,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 throw new Error('Record not found or write access denied.');
             if (gr.isValidField('sys_policy') && gr.getValue('sys_policy'))
                 throw new Error('This record is protected.');
-            var defs = this._getEditorFieldDefs(gr, profiles[table]);
+            var defs = this._getEditorFieldDefs(gr, profiles[table], isNew);
             if (
                 !defs.some(function (def) {
                     return def.name === profiles[table].primary;
@@ -3577,234 +3577,646 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     ////////////////////////////////////////////////////////////
 
     /**
-     * Reads the related-list configuration for sp_widget from sys_ui_related_list and
+     * Reads the default-view related-list configuration for the record's table and
      * returns one tab descriptor per list entry (excluding internal/dependency lists).
      * Each tab descriptor includes the record count and column definitions for the tab.
-     * Accepts `sys_id` (sp_widget sys_id).
+     * Accepts `record_table` (defaults to sp_widget) and `sys_id`.
      * @returns {{success: boolean, tabs: Array.<{related_list: string, type: number,
      *   table: string, field: string, title: string, count: number, rel_sys_id: string,
      *   columns: Array.<{field: string, label: string, refTable: string|null}>}>}} Return value.
      */
     getRelatedDefinitions: function () {
-        var sysId = this.getParameter('sys_id');
-        if (!sysId) {
-            return this._answer({
-                success: false,
-                error: 'No sys_id provided',
-            });
+        var parent = this._relatedGetParent();
+        if (parent.error) {
+            return this._answer({ success: false, error: parent.error });
         }
 
-        var EXCLUDED_LISTS = [
-            'm2m_sp_widget_dependency.sp_widget',
-            'm2m_sp_ng_pro_sp_widget.sp_widget',
-            'sp_ng_template.sp_widget',
-        ];
-        var EXCLUDED_TABLES = ['sys_update_version', 'm2m_sp_public_widget_allow_table'];
-        var CUSTOM_EXCLUSIONS = this._getRelatedListExclusions();
-
-        var rlGr = new GlideRecordSecure('sys_ui_related_list');
-        rlGr.addQuery('name', 'sp_widget');
-        rlGr.addQuery('view', 'Default view');
-        rlGr.setLimit(1);
-        rlGr.query();
-        if (!rlGr.next()) {
-            return this._answer({ success: true, tabs: [] });
-        }
-
-        var listId = rlGr.getUniqueValue();
-
-        var entryGr = new GlideRecordSecure('sys_ui_related_list_entry');
-        entryGr.addQuery('list_id', listId);
-        entryGr.orderBy('position');
-        entryGr.query();
-
+        var values = this._relatedGetVisibleListValues(parent);
         var tabs = [];
-        while (entryGr.next()) {
-            var rlValue = entryGr.getValue('related_list');
-            if (EXCLUDED_LISTS.indexOf(rlValue) !== -1) {
+        for (var i = 0; i < values.length; i++) {
+            var list = this._relatedResolveList(values[i]);
+            if (!list) {
                 continue;
             }
-            if (CUSTOM_EXCLUSIONS[rlValue]) {
-                continue;
-            }
-
-            var tab = null;
-            if (rlValue.indexOf('REL:') === 0) {
-                tab = this._relatedBuildRelTab(sysId, rlValue.substring(4), rlValue);
-                if (tab && EXCLUDED_TABLES.indexOf(tab.table) !== -1) tab = null;
-            } else {
-                var dotIdx = rlValue.indexOf('.');
-                if (dotIdx < 1) {
-                    continue;
-                }
-                var table = rlValue.substring(0, dotIdx);
-                var field = rlValue.substring(dotIdx + 1);
-                if (EXCLUDED_TABLES.indexOf(table) !== -1) {
-                    continue;
-                }
-                tab = this._relatedBuildFieldTab(sysId, table, field, rlValue);
-            }
-            if (tab) {
-                tabs.push(tab);
-            }
+            tabs.push({
+                related_list: values[i],
+                type: list.relGr ? 2 : 1,
+                table: list.table,
+                field: list.field || undefined,
+                fixed: this._relatedGetFixedCondition(list, parent.record),
+                rel_sys_id: list.relGr ? list.relGr.getUniqueValue() : undefined,
+                title: list.relGr
+                    ? list.relGr.getValue('name') || this._relatedGetTableLabel(list.table)
+                    : this._relatedGetTableLabel(list.table),
+                count: this._relatedGetCount(list, parent.record),
+                columns: this._relatedGetColumns(list.table, parent.table),
+            });
         }
 
         return this._answer({ success: true, tabs: tabs });
     },
 
     /**
-     * Returns a paginated set of rows for a given related-list tab on a widget.
+     * Reports whether the record has any available related lists, without counting rows.
+     * Accepts `record_table` (defaults to sp_widget) and `sys_id`.
+     * @returns {{success: boolean, available: boolean}} Return value.
+     */
+    hasRelatedLists: function () {
+        var parent = this._relatedGetParent();
+        if (parent.error) {
+            return this._answer({ success: false, error: parent.error });
+        }
+        var self = this;
+        var available = this._relatedGetVisibleListValues(parent).some(function (value) {
+            return !!self._relatedResolveList(value);
+        });
+        return this._answer({ success: true, available: available });
+    },
+
+    /**
+     * Returns a paginated set of rows for one of the record's configured related-list tabs.
      * Supports both field-based (table.field=sys_id) and relationship-based (REL:...) lists.
-     * Accepts `sys_id` (sp_widget sys_id), `related_list` (tab identifier, e.g. "sp_page.widget" or
-     * "REL:<sys_id>"), and `page` (optional zero-based page index; defaults to 0).
+     * Accepts `record_table` (defaults to sp_widget), `sys_id`, `related_list` (tab identifier,
+     * e.g. "sp_page.widget" or "REL:<sys_id>"), `page` (optional zero-based page index),
+     * `conditions` (optional JSON array of {field, op, value}), `sort` and `sort_dir` (asc or desc).
      * @returns {{success: boolean, rows: Array.<Object>,
-     *   columns: Array.<{field: string, label: string, refTable: string|null}>,
-     *   page: number}} Return value.
+     *   columns: Array.<{field: string, label: string, refTable: string|null, type: string}>,
+     *   count: number, page: number, query: string}} Return value.
      */
     getRelatedData: function () {
-        var sysId = this.getParameter('sys_id');
-        var relatedList = this.getParameter('related_list');
-        var page = parseInt(this.getParameter('page') || '0');
+        var relatedList = String(this.getParameter('related_list') || '');
+        var page = Math.max(0, parseInt(this.getParameter('page') || '0', 10) || 0);
         var PAGE_SIZE = 20;
 
-        if (!sysId || !relatedList) {
+        if (!relatedList) {
             return this._answer({ success: false, error: 'Missing params' });
+        }
+        var parent = this._relatedGetParent();
+        if (parent.error) {
+            return this._answer({ success: false, error: parent.error });
+        }
+        var list =
+            this._relatedGetVisibleListValues(parent).indexOf(relatedList) === -1
+                ? null
+                : this._relatedResolveList(relatedList);
+        if (!list) {
+            return this._answer({ success: false, error: 'Related list not available.' });
         }
 
         var offset = page * PAGE_SIZE;
         var rows = [];
-        var columns = [];
-
+        var columns = this._relatedGetColumns(list.table, parent.table);
+        var count = 0;
+        var query = '';
         try {
-            if (relatedList.indexOf('REL:') === 0) {
-                var relSysId = relatedList.substring(4);
-                var relGr = new GlideRecordSecure('sys_relationship');
-                if (!relGr.get(relSysId)) {
-                    return this._answer({
-                        success: false,
-                        error: 'Relationship not found',
-                    });
-                }
-                var targetTable = relGr.getValue('basic_query_from');
-                var queryWith = relGr.getValue('query_with');
-                columns = this._relatedGetColumns(targetTable);
-                var parent = new GlideRecordSecure('sp_widget');
-                parent.get(sysId);
-                var gr = new GlideRecordSecure(targetTable);
-                var evaluator = new GlideScopedEvaluator();
-                evaluator.putVariable('current', gr);
-                evaluator.putVariable('parent', parent);
-                evaluator.evaluateScript(relGr, 'query_with');
-                gr.chooseWindow(offset, offset + PAGE_SIZE);
-                gr.query();
-                while (gr.next()) rows.push(this._relatedExtractRow(gr, columns));
-            } else {
-                var dotIdx = relatedList.indexOf('.');
-                var table = relatedList.substring(0, dotIdx);
-                var field = relatedList.substring(dotIdx + 1);
-                columns = this._relatedGetColumns(table);
-                var gr2 = new GlideRecordSecure(table);
-                gr2.addQuery(field, sysId);
-                gr2.chooseWindow(offset, offset + PAGE_SIZE);
-                gr2.query();
-                while (gr2.next()) rows.push(this._relatedExtractRow(gr2, columns));
+            var gr = this._relatedQuery(list, parent.record);
+            var filterError = this._relatedApplyFilters(
+                gr,
+                columns,
+                this.getParameter('conditions'),
+                String(this.getParameter('sort') || ''),
+                String(this.getParameter('sort_dir') || '')
+            );
+            if (filterError) {
+                return this._answer({ success: false, error: filterError });
             }
+            query = gr.getEncodedQuery();
+            count = this._relatedCountQuery(list.table, query);
+            gr.chooseWindow(offset, offset + PAGE_SIZE);
+            gr.query();
+            while (gr.next()) rows.push(this._relatedExtractRow(gr, columns));
         } catch (e) {
             gs.error('Widget Editor getRelatedData error: ' + e.message);
             return this._answer({ success: false, error: e.message });
         }
 
         return this._answer({
-            success: true,
-            rows: rows,
             columns: columns,
+            count: count,
             page: page,
+            query: query,
+            rows: rows,
+            success: true,
         });
     },
 
     /**
-     * Builds a tab descriptor for a field-based related list (table.field = sysId).
-     * Returns null if the table does not exist on this instance.
-     * @param {string} sysId - sys_id of the sp_widget.
-     * @param {string} table - Name of the related table.
-     * @param {string} field - Name of the reference field pointing back to sp_widget.
-     * @param {string} rlValue - Raw related_list value from sys_ui_related_list_entry.
-     * @returns {Object|null} Tab descriptor or null if table is invalid.
+     * Returns the fields shown when previewing one row of a related list, taken from the
+     * row class's sys_popup form view, its default form view, or the list columns.
+     * Accepts `record_table` (defaults to sp_widget), `sys_id`, `related_list` and `row_sys_id`.
+     * @returns {{success: boolean, title: string, table: string, sys_id: string,
+     *   fields: Array.<{label: string, value: string, refTable: string|null, refId: string}>}} Return value.
      */
-    _relatedBuildFieldTab: function (sysId, table, field, rlValue) {
-        if (!new GlideRecordSecure(table).isValid()) {
-            return null; // table doesn't exist in this instance
+    getRelatedPreview: function () {
+        var relatedList = String(this.getParameter('related_list') || '');
+        var rowSysId = String(this.getParameter('row_sys_id') || '');
+        if (!relatedList || !/^[0-9a-f]{32}$/i.test(rowSysId)) {
+            return this._answer({ success: false, error: 'Missing params' });
         }
-        var title = this._relatedGetTableLabel(table);
-        var count = this._relatedGetCount(table, field, sysId, null);
-        var columns = this._relatedGetColumns(table);
-        return {
-            related_list: rlValue,
-            type: 1,
-            table: table,
-            field: field,
-            title: title,
-            count: count,
-            columns: columns,
-        };
+        var parent = this._relatedGetParent();
+        if (parent.error) {
+            return this._answer({ success: false, error: parent.error });
+        }
+        var list =
+            this._relatedGetVisibleListValues(parent).indexOf(relatedList) === -1
+                ? null
+                : this._relatedResolveList(relatedList);
+        if (!list) {
+            return this._answer({ success: false, error: 'Related list not available.' });
+        }
+        try {
+            var gr = this._relatedQuery(list, parent.record);
+            gr.addQuery('sys_id', rowSysId);
+            gr.setLimit(1);
+            gr.query();
+            if (!gr.next()) {
+                return this._answer({ success: false, error: 'Record not found.' });
+            }
+            var table = String(gr.getRecordClassName() || list.table);
+            if (table !== list.table) {
+                var classGr = new GlideRecordSecure(table);
+                if (classGr.isValid() && classGr.get(rowSysId)) {
+                    gr = classGr;
+                } else {
+                    table = list.table;
+                }
+            }
+            var fieldNames = this._relatedGetPreviewFields(table);
+            if (fieldNames.length === 0) {
+                fieldNames = this._relatedGetColumns(list.table, '').map(function (column) {
+                    return column.field;
+                });
+            }
+            var fields = [];
+            var max = this.RELATED_CELL_MAX_LENGTH * 5;
+            for (var i = 0; i < fieldNames.length && fields.length < 20; i++) {
+                if (!gr.isValidField(fieldNames[i])) {
+                    continue;
+                }
+                var element = gr.getElement(fieldNames[i]);
+                if (!element || (element.canRead && !element.canRead())) {
+                    continue;
+                }
+                var ed = element.getED();
+                var isReference = !!ed && String(ed.getInternalType() || '') === 'reference';
+                var value = String(gr.getDisplayValue(fieldNames[i]) || '');
+                if (value.length > max) {
+                    value = value.substring(0, max) + '\u2026';
+                }
+                fields.push({
+                    label: String(element.getLabel() || fieldNames[i]),
+                    refId: isReference ? String(gr.getValue(fieldNames[i]) || '') : '',
+                    refTable: isReference ? String(ed.getReference() || '') || null : null,
+                    value: value,
+                });
+            }
+            return this._answer({
+                fields: fields,
+                success: true,
+                sys_id: rowSysId,
+                table: table,
+                title: String(gr.getClassDisplayValue() || this._relatedGetTableLabel(table)),
+            });
+        } catch (e) {
+            gs.error('Widget Editor getRelatedPreview error: ' + e.message);
+            return this._answer({ success: false, error: e.message });
+        }
     },
 
     /**
-     * Builds a tab descriptor for a relationship-based related list (REL:<sys_id>).
-     * Returns null if the sys_relationship record is not found.
-     * @param {string} sysId - sys_id of the sp_widget.
-     * @param {string} relSysId - sys_id of the sys_relationship record.
-     * @param {string} rlValue - Raw related_list value from sys_ui_related_list_entry.
-     * @returns {Object|null} Tab descriptor or null if relationship not found.
+     * Applies validated list conditions and sorting to a related-list query.
+     * Conditions may only reference the list's displayed columns; a blank field with the
+     * TEXT operator searches every displayed text, choice and reference column.
+     * @param {GlideRecord} gr - Unqueried related-list query.
+     * @param {Array.<{field: string, type: string}>} columns - Displayed columns.
+     * @param {string} conditionsJson - JSON array of {field, op, value}.
+     * @param {string} sort - Column to order by.
+     * @param {string} sortDir - asc or desc.
+     * @returns {string} Error message, or an empty string when applied.
      */
-    _relatedBuildRelTab: function (sysId, relSysId, rlValue) {
-        var relGr = new GlideRecordSecure('sys_relationship');
-        if (!relGr.get(relSysId)) {
-            return null;
+    _relatedApplyFilters: function (gr, columns, conditionsJson, sort, sortDir) {
+        var OPERATORS = ['=', '!=', '>', '<', 'STARTSWITH', 'LIKE', 'ISEMPTY', 'ISNOTEMPTY', 'TEXT'];
+        var NON_TEXT_TYPES = [
+            'boolean',
+            'currency',
+            'decimal',
+            'due_date',
+            'float',
+            'glide_date',
+            'glide_date_time',
+            'glide_duration',
+            'glide_time',
+            'integer',
+            'longint',
+            'price',
+            'timer',
+        ];
+        var fields = {};
+        for (var c = 0; c < columns.length; c++) {
+            fields[columns[c].field] = columns[c];
         }
-        var targetTable = relGr.getValue('basic_query_from');
-        var title = relGr.getValue('name') || this._relatedGetTableLabel(targetTable);
-        var count = this._relatedGetCount(targetTable, null, sysId, relGr);
-        var columns = this._relatedGetColumns(targetTable);
-        return {
-            related_list: rlValue,
-            type: 2,
-            table: targetTable,
-            rel_sys_id: relSysId,
-            title: title,
-            count: count,
-            columns: columns,
-        };
+        var conditions = [];
+        if (conditionsJson) {
+            try {
+                conditions = JSON.parse(String(conditionsJson));
+            } catch (e) {
+                return 'Invalid conditions.';
+            }
+        }
+        if (Object.prototype.toString.call(conditions) !== '[object Array]' || conditions.length > 20) {
+            return 'Invalid conditions.';
+        }
+        for (var i = 0; i < conditions.length; i++) {
+            var condition = conditions[i] || {};
+            var field = String(condition.field || '');
+            var op = String(condition.op || '');
+            var value = condition.value === null || condition.value === undefined ? '' : String(condition.value);
+            if (OPERATORS.indexOf(op) === -1 || value.length > 1000) {
+                return 'Invalid conditions.';
+            }
+            if (op === 'TEXT') {
+                var textFields = [];
+                for (var t = 0; t < columns.length; t++) {
+                    if (NON_TEXT_TYPES.indexOf(columns[t].type) === -1) {
+                        textFields.push(columns[t].field);
+                    }
+                }
+                if (field || !value || textFields.length === 0) {
+                    return 'Invalid conditions.';
+                }
+                var textCondition = gr.addQuery(textFields[0], 'CONTAINS', value);
+                for (var o = 1; o < textFields.length; o++) {
+                    textCondition.addOrCondition(textFields[o], 'CONTAINS', value);
+                }
+                continue;
+            }
+            if (!Object.prototype.hasOwnProperty.call(fields, field)) {
+                return 'Invalid conditions.';
+            }
+            if (op === 'ISEMPTY') {
+                gr.addNullQuery(field);
+            } else if (op === 'ISNOTEMPTY') {
+                gr.addNotNullQuery(field);
+            } else {
+                gr.addQuery(field, op === 'LIKE' ? 'CONTAINS' : op, value);
+            }
+        }
+        if (sort) {
+            if (!Object.prototype.hasOwnProperty.call(fields, sort) || (sortDir !== 'asc' && sortDir !== 'desc')) {
+                return 'Invalid sort.';
+            }
+            if (sortDir === 'desc') {
+                gr.orderByDesc(sort);
+            } else {
+                gr.orderBy(sort);
+            }
+        }
+        return '';
     },
 
     /**
-     * Returns the number of records matching either a field equality query or a
-     * relationship query_with script. Returns 0 on error.
-     * @param {string} table - Table to count records from.
-     * @param {string|null} field - Field to match sysId against (null when using relGr).
-     * @param {string} sysId - sys_id of the sp_widget (also exposed as `parent` in query_with).
-     * @param {GlideRecord|null} relGr - sys_relationship GlideRecord whose query_with is evaluated.
+     * Counts the rows matching an encoded query. Returns 0 on error.
+     * @param {string} table - Table name.
+     * @param {string} query - Encoded query.
      * @returns {number} Record count.
      */
-    _relatedGetCount: function (table, field, sysId, relGr) {
+    _relatedCountQuery: function (table, query) {
         try {
-            if (relGr) {
-                var parent = new GlideRecordSecure('sp_widget');
-                parent.get(sysId);
-                var gr = new GlideRecordSecure(table);
-                var evaluator = new GlideScopedEvaluator();
-                evaluator.putVariable('current', gr);
-                evaluator.putVariable('parent', parent);
-                evaluator.evaluateScript(relGr, 'query_with');
-                gr.query();
-                return gr.getRowCount();
-            }
             var ga = new GlideAggregate(table);
-            ga.addQuery(field, sysId);
+            if (query) {
+                ga.addEncodedQuery(query);
+            }
             ga.addAggregate('COUNT');
             ga.query();
             if (ga.next()) {
-                return parseInt(ga.getAggregate('COUNT')) || 0;
+                return parseInt(ga.getAggregate('COUNT'), 10) || 0;
+            }
+        } catch (e) {
+            gs.error('Widget Editor _relatedCountQuery error: ' + e.message);
+        }
+        return 0;
+    },
+
+    /**
+     * Describes the condition a reference-field related list always applies, for its breadcrumb.
+     * @param {{table: string, field: string|null, relGr: GlideRecord|null}} list - Resolved related list.
+     * @param {GlideRecord} parent - Record that owns the related list.
+     * @returns {{label: string, value: string}|undefined} Breadcrumb parts, or undefined for relationships.
+     */
+    _relatedGetFixedCondition: function (list, parent) {
+        if (!list.field) {
+            return undefined;
+        }
+        var label = list.field;
+        try {
+            var probe = new GlideRecordSecure(list.table);
+            probe.initialize();
+            label = probe.getElement(list.field).getLabel() || list.field;
+        } catch (e) {}
+        return { label: label, value: String(parent.getDisplayValue() || parent.getUniqueValue()) };
+    },
+
+    /**
+     * Returns the fields on the first section of a table's sys_popup or default form view,
+     * searching the table hierarchy for the nearest configured form.
+     * @param {string} table - Table name.
+     * @returns {Array.<string>} Ordered field names, without formatters and layout markers.
+     */
+    _relatedGetPreviewFields: function (table) {
+        var tables = [];
+        try {
+            var hierarchy = new TableUtils(table).getTables();
+            for (var h = 0; h < hierarchy.size(); h++) {
+                tables.push(String(hierarchy.get(h)));
+            }
+        } catch (e) {}
+        if (tables.indexOf(table) === -1) {
+            tables.unshift(table);
+        }
+        var views = ['sys_popup', 'Default view'];
+        for (var v = 0; v < views.length; v++) {
+            for (var i = 0; i < tables.length; i++) {
+                var section = new GlideRecordSecure('sys_ui_section');
+                section.addQuery('name', tables[i]);
+                if (views[v] === 'Default view') {
+                    section.addQuery('view', views[v]);
+                } else {
+                    section.addQuery('view.name', views[v]);
+                }
+                section.addNullQuery('caption');
+                section.setLimit(1);
+                section.query();
+                if (!section.next()) {
+                    continue;
+                }
+                var fields = [];
+                var element = new GlideRecordSecure('sys_ui_element');
+                element.addQuery('sys_ui_section', section.getUniqueValue());
+                element.orderBy('position');
+                element.query();
+                while (element.next()) {
+                    var name = String(element.getValue('element') || '');
+                    var type = String(element.getValue('type') || '');
+                    if (name && name.charAt(0) !== '.' && !type && fields.indexOf(name) === -1) {
+                        fields.push(name);
+                    }
+                }
+                if (fields.length > 0) {
+                    return fields;
+                }
+            }
+        }
+        return [];
+    },
+
+    /**
+     * Resolves the readable sp_widget or Editor+ record named by `record_table` and `sys_id`.
+     * @returns {{table: string, record: GlideRecord}|{error: string}} Parent record or an error.
+     */
+    _relatedGetParent: function () {
+        var table = this._getEditorTable();
+        var sysId = String(this.getParameter('sys_id') || '');
+        if (!sysId) {
+            return { error: 'No sys_id provided' };
+        }
+        if (table !== 'sp_widget' && !Object.prototype.hasOwnProperty.call(this._getEditorProfiles(), table)) {
+            return { error: 'Unsupported record type.' };
+        }
+        var record = new GlideRecordSecure(table);
+        if (!record.isValid() || !record.get(sysId) || !record.canRead()) {
+            return { error: 'Record not found.' };
+        }
+        return { table: table, record: record };
+    },
+
+    /**
+     * Returns the related_list values shown for a table, read from the default view of the
+     * table or its nearest ancestor with a configuration, without internal or excluded lists.
+     * @param {string} table - Record table name.
+     * @returns {Array.<string>} Ordered sys_ui_related_list_entry.related_list values.
+     */
+    _relatedGetListValues: function (table) {
+        var EXCLUDED_LISTS =
+            table === 'sp_widget'
+                ? [
+                      'm2m_sp_widget_dependency.sp_widget',
+                      'm2m_sp_ng_pro_sp_widget.sp_widget',
+                      'sp_ng_template.sp_widget',
+                  ]
+                : [];
+        var customExclusions = this._getRelatedListExclusions();
+        var tables = [];
+        try {
+            var hierarchy = new TableUtils(table).getTables();
+            for (var h = 0; h < hierarchy.size(); h++) {
+                tables.push(String(hierarchy.get(h)));
+            }
+        } catch (e) {}
+        if (tables.indexOf(table) === -1) {
+            tables.unshift(table);
+        }
+
+        for (var i = 0; i < tables.length; i++) {
+            var rlGr = new GlideRecordSecure('sys_ui_related_list');
+            rlGr.addQuery('name', tables[i]);
+            rlGr.addQuery('view', 'Default view');
+            rlGr.setLimit(1);
+            rlGr.query();
+            if (!rlGr.next()) {
+                continue;
+            }
+            var values = [];
+            var entryGr = new GlideRecordSecure('sys_ui_related_list_entry');
+            entryGr.addQuery('list_id', rlGr.getUniqueValue());
+            entryGr.orderBy('position');
+            entryGr.query();
+            while (entryGr.next()) {
+                var value = String(entryGr.getValue('related_list') || '');
+                if (value && EXCLUDED_LISTS.indexOf(value) === -1 && !customExclusions[value]) {
+                    values.push(value);
+                }
+            }
+            return values;
+        }
+        return [];
+    },
+
+    /**
+     * Returns the related_list values shown for a record, after applying the related list
+     * actions of active on-load UI policies whose conditions match the saved record.
+     * UI policy scripts are not run.
+     * @param {{table: string, record: GlideRecord}} parent - Record that owns the related lists.
+     * @returns {Array.<string>} Ordered sys_ui_related_list_entry.related_list values.
+     */
+    _relatedGetVisibleListValues: function (parent) {
+        var values = this._relatedGetListValues(parent.table);
+        if (values.length === 0) {
+            return values;
+        }
+        var visibility = {};
+        try {
+            var tables = [];
+            var hierarchy = new TableUtils(parent.table).getTables();
+            for (var h = 0; h < hierarchy.size(); h++) {
+                tables.push(String(hierarchy.get(h)));
+            }
+            if (tables.indexOf(parent.table) === -1) {
+                tables.unshift(parent.table);
+            }
+            var policies = [];
+            var policyGr = new GlideRecord('sys_ui_policy');
+            policyGr.addQuery('active', true);
+            policyGr.addQuery('on_load', true);
+            policyGr.addQuery('table', 'IN', tables.join(','));
+            policyGr.addQuery('global', true).addOrCondition('view', 'Default view');
+            policyGr.orderBy('order');
+            policyGr.query();
+            while (policyGr.next()) {
+                var policyTable = String(policyGr.getValue('table') || '');
+                if (
+                    policyTable !== parent.table &&
+                    String(policyGr.getValue('inherit')) !== '1' &&
+                    String(policyGr.getValue('inherit')) !== 'true'
+                ) {
+                    continue;
+                }
+                policies.push({
+                    actions: [],
+                    conditions: String(policyGr.getValue('conditions') || ''),
+                    reverse:
+                        String(policyGr.getValue('reverse_if_false')) === '1' ||
+                        String(policyGr.getValue('reverse_if_false')) === 'true',
+                    sysId: policyGr.getUniqueValue(),
+                });
+            }
+            if (policies.length === 0) {
+                return values;
+            }
+            var byId = {};
+            for (var p = 0; p < policies.length; p++) {
+                byId[policies[p].sysId] = policies[p];
+            }
+            var actionGr = new GlideRecord('sys_ui_policy_rl_action');
+            actionGr.addQuery('ui_policy', 'IN', Object.keys(byId).join(','));
+            actionGr.addQuery('list', 'IN', values.join(','));
+            actionGr.query();
+            while (actionGr.next()) {
+                var visible = String(actionGr.getValue('visible') || '');
+                if (visible === 'true' || visible === 'false') {
+                    byId[String(actionGr.getValue('ui_policy'))].actions.push({
+                        list: String(actionGr.getValue('list')),
+                        visible: visible === 'true',
+                    });
+                }
+            }
+            for (var i = 0; i < policies.length; i++) {
+                var policy = policies[i];
+                if (policy.actions.length === 0) {
+                    continue;
+                }
+                var matches = this._relatedRecordMatches(parent, policy.conditions);
+                if (!matches && !policy.reverse) {
+                    continue;
+                }
+                for (var a = 0; a < policy.actions.length; a++) {
+                    visibility[policy.actions[a].list] = matches
+                        ? policy.actions[a].visible
+                        : !policy.actions[a].visible;
+                }
+            }
+        } catch (e) {
+            gs.error('Widget Editor _relatedGetVisibleListValues error: ' + e.message);
+            return values;
+        }
+        return values.filter(function (value) {
+            return visibility[value] !== false;
+        });
+    },
+
+    /**
+     * Checks whether a saved record matches an encoded query; an empty query always matches.
+     * @param {{table: string, record: GlideRecord}} parent - Record to test.
+     * @param {string} conditions - Encoded query.
+     * @returns {boolean} True when the record matches.
+     */
+    _relatedRecordMatches: function (parent, conditions) {
+        if (!conditions || conditions === '^EQ') {
+            return true;
+        }
+        var check = new GlideRecord(parent.table);
+        check.addQuery('sys_id', parent.record.getUniqueValue());
+        check.addEncodedQuery(conditions);
+        check.setLimit(1);
+        check.query();
+        return check.hasNext();
+    },
+
+    /**
+     * Resolves a related_list value to its target table and either the reference field
+     * (table.field) or the sys_relationship record (REL:<sys_id>).
+     * @param {string} value - Raw related_list value from sys_ui_related_list_entry.
+     * @returns {{table: string, field: string|null, relGr: GlideRecord|null}|null} List or null when unavailable.
+     */
+    _relatedResolveList: function (value) {
+        var EXCLUDED_TABLES = ['sys_update_version', 'm2m_sp_public_widget_allow_table'];
+        var list = null;
+        if (value.indexOf('REL:') === 0) {
+            var relGr = new GlideRecordSecure('sys_relationship');
+            if (relGr.get(value.substring(4))) {
+                list = { table: String(relGr.getValue('basic_query_from') || ''), field: null, relGr: relGr };
+            }
+        } else {
+            var dotIdx = value.indexOf('.');
+            if (dotIdx > 0) {
+                list = { table: value.substring(0, dotIdx), field: value.substring(dotIdx + 1), relGr: null };
+            }
+        }
+        if (!list || !list.table || EXCLUDED_TABLES.indexOf(list.table) !== -1) {
+            return null;
+        }
+        var probe = new GlideRecordSecure(list.table);
+        if (!probe.isValid() || (list.field && !probe.isValidField(list.field))) {
+            return null;
+        }
+        return list;
+    },
+
+    /**
+     * Builds an unqueried GlideRecordSecure for a related list's rows.
+     * @param {{table: string, field: string|null, relGr: GlideRecord|null}} list - Resolved related list.
+     * @param {GlideRecord} parent - Record that owns the related list.
+     * @returns {GlideRecordSecure} Query with the list's conditions applied.
+     */
+    _relatedQuery: function (list, parent) {
+        var gr = new GlideRecordSecure(list.table);
+        if (list.relGr) {
+            var evaluator = new GlideScopedEvaluator();
+            evaluator.putVariable('current', gr);
+            evaluator.putVariable('parent', parent);
+            evaluator.evaluateScript(list.relGr, 'query_with');
+        } else {
+            gr.addQuery(list.field, parent.getUniqueValue());
+        }
+        return gr;
+    },
+
+    /**
+     * Returns the number of records in a related list. Returns 0 on error.
+     * @param {{table: string, field: string|null, relGr: GlideRecord|null}} list - Resolved related list.
+     * @param {GlideRecord} parent - Record that owns the related list.
+     * @returns {number} Record count.
+     */
+    _relatedGetCount: function (list, parent) {
+        try {
+            if (list.relGr) {
+                return this._relatedCountQuery(list.table, this._relatedQuery(list, parent).getEncodedQuery());
+            }
+            var ga = new GlideAggregate(list.table);
+            ga.addQuery(list.field, parent.getUniqueValue());
+            ga.addAggregate('COUNT');
+            ga.query();
+            if (ga.next()) {
+                return parseInt(ga.getAggregate('COUNT'), 10) || 0;
             }
             return 0;
         } catch (e) {
@@ -3815,12 +4227,13 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
 
     /**
      * Returns the ordered column definitions for a table based on its default sys_ui_list,
-     * resolving field labels and reference table names. Back-references to sp_widget
-     * are automatically excluded.
+     * resolving field labels and reference table names. Back-references to the parent
+     * table are automatically excluded.
      * @param {string} table - Table name.
-     * @returns {Array<{field: string, label: string, refTable: string|null}>}
+     * @param {string} parentTable - Table of the record that owns the related list.
+     * @returns {Array<{field: string, label: string, refTable: string|null, type: string}>}
      */
-    _relatedGetColumns: function (table) {
+    _relatedGetColumns: function (table, parentTable) {
         var listSysId = this._relatedFindListSysId(table);
         if (!listSysId) {
             return [];
@@ -3848,6 +4261,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             var elementName = fieldNames[i];
             var label = elementName;
             var refTable = null;
+            var type = '';
             if (!grProbe.isValidField(elementName)) {
                 continue;
             }
@@ -3855,17 +4269,19 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 var glideEl = grProbe.getElement(elementName);
                 label = glideEl.getLabel() || elementName;
                 var ed = glideEl.getED();
-                if (ed && ed.getInternalType() === 'reference') {
-                    refTable = ed.getReference() || null;
+                type = (ed && String(ed.getInternalType() || '')) || '';
+                if (type === 'reference') {
+                    refTable = String(ed.getReference() || '') || null;
                 }
             } catch (e) {}
-            if (refTable === 'sp_widget') {
-                continue; // omit back-reference to current widget
+            if (refTable && refTable === parentTable) {
+                continue; // omit back-reference to the current record
             }
             cols.push({
                 field: elementName,
                 label: label,
                 refTable: refTable,
+                type: type,
             });
         }
         return cols;
@@ -3897,12 +4313,23 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     },
 
     /**
-     * Returns the plural (or singular) display label for a table from sys_db_object.
-     * Falls back to the table name itself if no record is found.
+     * Returns the plural display label for a table from its collection documentation,
+     * falling back to the sys_db_object label and then the table name.
      * @param {string} table - Table name.
      * @returns {string} Human-readable table label.
      */
     _relatedGetTableLabel: function (table) {
+        try {
+            var doc = new GlideRecord('sys_documentation');
+            doc.addQuery('name', table);
+            doc.addNullQuery('element');
+            doc.addQuery('language', String(gs.getSession().getLanguage() || 'en'));
+            doc.setLimit(1);
+            doc.query();
+            if (doc.next() && doc.getValue('plural')) {
+                return String(doc.getValue('plural'));
+            }
+        } catch (e) {}
         var gr = new GlideRecordSecure('sys_db_object');
         gr.addQuery('name', table);
         gr.setLimit(1);
@@ -3914,14 +4341,18 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     },
 
     /**
-     * Extracts display values for the given columns from a GlideRecord row,
-     * including reference sys_ids for reference fields.
+     * Extracts display values for the given columns from a GlideRecord row, with raw values
+     * for list conditions and reference sys_ids for reference fields.
      * @param {GlideRecord} gr - The current GlideRecord.
      * @param {Array<{field: string, label: string, refTable: string|null}>} columns - Column definitions.
-     * @returns {Object} Row object with sys_id, _table, and one key per column field.
+     * @returns {Object} Row object with sys_id, _table, _class and one key per column field.
      */
     _relatedExtractRow: function (gr, columns) {
-        var row = { sys_id: gr.getUniqueValue(), _table: gr.getTableName() };
+        var row = {
+            _class: String(gr.getRecordClassName() || gr.getTableName()),
+            _table: gr.getTableName(),
+            sys_id: gr.getUniqueValue(),
+        };
         var max = this.RELATED_CELL_MAX_LENGTH;
         for (var i = 0; i < columns.length; i++) {
             var f = columns[i].field;
@@ -3931,8 +4362,13 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                     val = val.substring(0, max) + '\u2026';
                 }
                 row[f] = val;
+                var raw = gr.getValue(f);
+                raw = raw === null || raw === undefined ? '' : String(raw);
                 if (columns[i].refTable) {
-                    row[f + '__ref_id'] = gr.getValue(f) || '';
+                    row[f + '__ref_id'] = raw;
+                }
+                if (raw.length <= 1000) {
+                    row[f + '__value'] = raw;
                 }
             } catch (e) {
                 row[f] = '';
@@ -4288,7 +4724,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             defaults: defaults,
             application: appName,
             application_sys_id: appSysId || '',
-            additional_widget_fields: this._getAdditionalWidgetFieldDefs(this._buildWidgetFieldAccessProbe()),
+            additional_widget_fields: this._getAdditionalWidgetFieldDefs(this._buildWidgetFieldAccessProbe(), true),
         });
     },
 
@@ -4792,9 +5228,10 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     /**
      * Returns dictionary metadata for configured additional sp_widget fields.
      * @param {GlideRecord} accessGr - Optional sp_widget GlideRecord used to resolve field ACLs.
+     * @param {boolean} isNew - True to resolve field create ACLs instead of write ACLs.
      * @returns {Array.<{name: string, label: string, type: string, canWrite: boolean}>} Field definitions.
      */
-    _getAdditionalWidgetFieldDefs: function (accessGr) {
+    _getAdditionalWidgetFieldDefs: function (accessGr, isNew) {
         var names = this._getConfiguredAdditionalWidgetFields();
         if (!names.length) {
             return [];
@@ -4814,7 +5251,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
                 name: element,
                 label: gr.getValue('column_label') || element,
                 type: gr.getValue('internal_type') || 'string',
-                canWrite: this._canWriteWidgetField(accessGr, element),
+                canWrite: this._canWriteWidgetField(accessGr, element, isNew),
             };
         }
 
@@ -4867,9 +5304,10 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
      * Returns whether the current user can write a specific widget field.
      * @param {GlideRecord} gr - sp_widget record or initialised probe.
      * @param {string} fieldName - Field element name.
+     * @param {boolean} isNew - True to resolve the field create ACL instead of the write ACL.
      * @returns {boolean} True if the field is writable.
      */
-    _canWriteWidgetField: function (gr, fieldName) {
+    _canWriteWidgetField: function (gr, fieldName, isNew) {
         if (!gr || !fieldName) {
             return false;
         }
@@ -4877,11 +5315,22 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             if (!gr.isValidField(fieldName)) {
                 return false;
             }
-            var element = gr.getElement(fieldName);
-            return !!(element && element.canWrite && element.canWrite());
+            return this._canEditElement(gr.getElement(fieldName), isNew);
         } catch (e) {
             return false;
         }
+    },
+
+    /**
+     * Returns whether a field can be edited, using create ACLs for unsaved records.
+     * @param {GlideElement} element - Field element.
+     * @param {boolean} isNew - True when the record has not been inserted.
+     * @returns {boolean} True if the field is editable.
+     */
+    _canEditElement: function (element, isNew) {
+        if (!element) return false;
+        if (isNew && typeof element.canCreate === 'function') return !!element.canCreate();
+        return !!(element.canWrite && element.canWrite());
     },
 
     /**

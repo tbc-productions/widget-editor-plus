@@ -361,7 +361,7 @@ const page = embeddedScript(
 const cssContext = vm.createContext({ monaco: { Range: function (
     startLineNumber, startColumn, endLineNumber, endColumn
 ) { Object.assign(this, { startLineNumber, startColumn, endLineNumber, endColumn }); } } });
-vm.runInContext(page.slice(page.indexOf('                function _removeLeadingCssRuleGaps'),
+vm.runInContext(page.slice(page.indexOf('                // Monaco\'s SCSS formatter reads a declaration'),
     page.indexOf('                // Calls the TypeScript worker')), cssContext);
 
 test('CSS and SCSS formatting removes only the gap before a first nested rule', () => {
@@ -395,6 +395,13 @@ test('CSS post-format correction edits only the changed span', () => {
     edit = undefined;
     cssContext._applyCssFormattingEdit(editor, after, after);
     assert.equal(edit, undefined);
+});
+
+test('CSS post-format spacing fixes declarations after nested rules and leaves selectors alone', () => {
+    const formatted = '.parent {\n    .child {\n        width: 1px;\n    }\n\n    color:red;\n    margin:0 auto; /* centre */\n    a:hover {\n        color: blue;\n    }\n    &:focus,\n    li:first-child {\n        top: 0;\n    }\n    background:url(data:image/png;base64,AA==);\n    @include mix:in;\n    $gap:4px;\n}\n/*\n    note:kept;\n*/';
+    assert.equal(cssContext._spaceCssDeclarations(formatted),
+        '.parent {\n    .child {\n        width: 1px;\n    }\n\n    color: red;\n    margin: 0 auto; /* centre */\n    a:hover {\n        color: blue;\n    }\n    &:focus,\n    li:first-child {\n        top: 0;\n    }\n    background: url(data:image/png;base64,AA==);\n    @include mix:in;\n    $gap:4px;\n}\n/*\n    note:kept;\n*/');
+    assert.equal(cssContext._spaceCssDeclarations('a {\r\n    color:red;\r\n}'), 'a {\n    color: red;\n}');
 });
 
 test('CSS post-format corrections handle Windows line endings', () => {

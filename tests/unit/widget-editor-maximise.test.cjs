@@ -108,5 +108,28 @@ test('maximised panes hide their siblings without changing saved visibility', ()
 
 test('the maximised strip flags editors another user has updated', () => {
     assert.match(source, /'we-pane-max-chip--changed': other\.externalChange/);
-    assert.match(source, /other\.externalChange\.user \+ ' has updated ' \+ other\.label/);
+    assert.match(source, /other\.externalChange\.user \+ ' has updated ' \+ maxChipLabel\(other\)/);
+});
+
+test('the maximised strip keeps every editor in place and marks the shown one active', () => {
+    const strip = source.slice(source.indexOf('class="we-pane-max-strip"'), source.indexOf('</span>', source.indexOf('class="we-pane-max-strip"')));
+    assert.doesNotMatch(strip, /ng-if="other\.key !== item\.key"/);
+    assert.match(strip, /'we-pane-max-chip--active': other\.key === item\.key/);
+    assert.match(strip, /aria-pressed="\{\{other\.key === item\.key\}\}"/);
+});
+
+test('maximise and restore buttons have their own tooltip with a platform shortcut', () => {
+    assert.match(source, /title="Maximise editor \(\{\{maximiseShortcut\}\}\)"/);
+    assert.match(source, /title="Restore editors \(\{\{maximiseShortcut\}\}\)"/);
+    assert.match(source, /\$scope\.maximiseShortcut =[\s\S]*?'⌥M'[\s:]*'Alt\+M'/);
+});
+
+test('maximised strip names templates and providers by record name', () => {
+    const start = source.indexOf('$scope.maxChipLabel =');
+    const $scope = {};
+    vm.runInNewContext(source.slice(start, source.indexOf('};', start) + 2), { $scope });
+    assert.equal($scope.maxChipLabel({ hasIdInput: true, label: 'Angular provider', recordId: ' myProvider ' }), 'myProvider');
+    assert.equal($scope.maxChipLabel({ hasIdInput: true, label: 'Angular template', recordId: '' }), 'Angular template');
+    assert.equal($scope.maxChipLabel({ label: 'Client controller' }), 'Client controller');
+    assert.match(source, /<span ng-bind="maxChipLabel\(other\)"><\/span>/);
 });
