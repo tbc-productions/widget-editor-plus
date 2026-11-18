@@ -506,6 +506,24 @@
             },
         ])
 
+        // Directive: we-contextmenu — Evaluates an expression with $event when the element is right-clicked.
+        .directive('weContextmenu', [
+            '$parse',
+            function ($parse) {
+                return {
+                    restrict: 'A',
+                    link: function (scope, element, attrs) {
+                        const handler = $parse(attrs.weContextmenu);
+                        element.on('contextmenu', (event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            scope.$apply(() => handler(scope, { $event: event }));
+                        });
+                    },
+                };
+            },
+        ])
+
         // Directive: we-modal-dialog — Manages HTML5 <dialog> modal state, rendering in top-layer and making rest of page inert
         .directive('weModalDialog', [
             function () {
@@ -1270,12 +1288,15 @@
                 $scope.templates = [];
                 $scope.providers = [];
                 $scope.dependencies = [];
+                $scope.hasRelatedLists = false;
                 $scope.relatedModal = {
                     open: false,
                     tabs: [],
                     activeTab: null,
                     loading: false,
                 };
+                $scope.relatedMenu = { items: [], label: '', open: false, style: {} };
+                $scope.relatedPreview = { data: null, error: null, loading: false, open: false, style: {} };
                 $scope.versionDiffModal = {
                     open: false,
                     url: null,
@@ -2758,6 +2779,7 @@
 
                     // Side data — parallel, non-blocking
                     if ($scope.isNewWidget) return;
+                    _loadRelatedListAvailability();
                     ajax('getVersions', {
                         sys_id: SYS_ID,
                     }).then(function (d) {
@@ -6350,6 +6372,7 @@
                                     window.parent.history.replaceState({}, '', newUrl);
                                 } catch (e) {}
                                 $scope.isNewWidget = false;
+                                _loadRelatedListAvailability();
                                 $scope.userPrefs.recentRecords = _mergeRecentRecord(RECORD_TABLE, SYS_ID);
                                 saveUserPrefs();
                                 if (
@@ -7619,9 +7642,27 @@
 
                 // Related Lists modal
 
+                const RELATED_PAGE_SIZE = 20;
+                const RELATED_RANGE_TYPES = [
+                    'currency',
+                    'decimal',
+                    'due_date',
+                    'float',
+                    'glide_date',
+                    'glide_date_time',
+                    'glide_duration',
+                    'glide_time',
+                    'integer',
+                    'longint',
+                    'price',
+                    'timer',
+                ];
+                const RELATED_EXACT_SEARCH_TYPES = ['boolean', 'decimal', 'float', 'integer', 'longint'];
+                let _relatedPopupListener = null;
+
                 function _markFirstLink(columns) {
-                    var set = false;
-                    (columns || []).forEach(function (col) {
+                    let set = false;
+                    (columns || []).forEach((col) => {
                         col.firstLink = !set && !col.refTable;
                         if (col.firstLink) {
                             set = true;
@@ -7629,10 +7670,35 @@
                     });
                 }
 
+                function _initRelatedTab(tab) {
+                    _markFirstLink(tab.columns);
+                    tab.columnSearch = {};
+                    tab.columnSearchOpen = false;
+                    tab.conditions = [];
+                    tab.searchField = '';
+                    tab.searchText = '';
+                    tab.sort = '';
+                    tab.sortDir = '';
+                    _updateRelatedCrumbs(tab);
+                }
+
+                function _updateRelatedCrumbs(tab) {
+                    const first = tab.fixed ? tab.fixed.label + ' = ' + tab.fixed.value : 'All';
+                    tab.crumbs = [first].concat(tab.conditions.map((condition) => condition.label));
+                    tab.showCrumbs = !!tab.fixed || tab.conditions.length > 0;
+                }
+
+                function _loadRelatedListAvailability() {
+                    ajax('hasRelatedLists', { sys_id: SYS_ID }).then(function (d) {
+                        $scope.hasRelatedLists = !!(d.success && d.available);
+                    });
+                }
+
                 $scope.openRelatedModal = function () {
                     if ($scope.isNewWidget) {
                         return;
                     }
+                    _closeRelatedPopups();
                     $scope.relatedModal.open = true;
                     $scope.relatedModal.tabs = [];
                     $scope.relatedModal.activeTab = null;
@@ -7642,9 +7708,7 @@
                         if (!d.success) {
                             return;
                         }
-                        d.tabs.forEach(function (tab) {
-                            _markFirstLink(tab.columns);
-                        });
+                        d.tabs.forEach(_initRelatedTab);
                         $scope.relatedModal.tabs = d.tabs;
                         if (d.tabs.length > 0) {
                             $scope.selectRelatedTab(d.tabs[0]);
@@ -7691,12 +7755,22 @@
                 };
 
                 $scope.closeRelatedModal = function () {
+                    _closeRelatedPopups();
                     _closeModal(function () {
                         $scope.relatedModal.open = false;
                     });
                 };
 
+                $scope.cancelRelatedModal = function () {
+                    if ($scope.relatedMenu.open || $scope.relatedPreview.open) {
+                        _closeRelatedPopups();
+                        return;
+                    }
+                    $scope.closeRelatedModal();
+                };
+
                 $scope.selectRelatedTab = function (tab) {
+                    _closeRelatedPopups();
                     $scope.relatedModal.activeTab = tab;
                     if (!tab.rows) {
                         $scope.loadRelatedTabData(tab, 0);
@@ -7704,13 +7778,23 @@
                 };
 
                 $scope.loadRelatedTabData = function (tab, page) {
+                    _closeRelatedPopups();
                     tab.loading = true;
                     tab.rows = null;
                     tab.error = null;
                     ajax('getRelatedData', {
-                        sys_id: SYS_ID,
-                        related_list: tab.related_list,
+                        conditions: JSON.stringify(
+                            tab.conditions.map((condition) => ({
+                                field: condition.field,
+                                op: condition.op,
+                                value: condition.value,
+                            }))
+                        ),
                         page: page,
+                        related_list: tab.related_list,
+                        sort: tab.sort,
+                        sort_dir: tab.sortDir,
+                        sys_id: SYS_ID,
                     }).then(function (d) {
                         tab.loading = false;
                         if (!d.success) {
@@ -7720,22 +7804,25 @@
                         tab.rows = d.rows;
                         tab.columns = d.columns;
                         _markFirstLink(tab.columns);
+                        tab.query = d.query || '';
                         tab.page = d.page;
-                        var _ps = 20;
-                        tab.pageStart = d.rows.length > 0 ? d.page * _ps + 1 : 0;
-                        tab.pageEnd = d.page * _ps + d.rows.length;
-                        tab.lastPage = Math.max(0, Math.ceil(tab.count / _ps) - 1);
+                        if (tab.conditions.length === 0) {
+                            tab.count = d.count;
+                        }
+                        tab.total = d.count;
+                        tab.pageStart = d.rows.length > 0 ? d.page * RELATED_PAGE_SIZE + 1 : 0;
+                        tab.pageEnd = d.page * RELATED_PAGE_SIZE + d.rows.length;
+                        tab.lastPage = Math.max(0, Math.ceil(tab.total / RELATED_PAGE_SIZE) - 1);
                         tab.pageStartInput = tab.pageStart;
                     });
                 };
 
                 $scope.navigateToStartRow = function (tab) {
-                    var ps = 20;
-                    var val = parseInt(tab.pageStartInput, 10);
+                    let val = parseInt(tab.pageStartInput, 10);
                     if (isNaN(val) || val < 1) val = 1;
-                    if (val > tab.count) val = Math.max(1, tab.count);
-                    var page = Math.floor((val - 1) / ps);
-                    tab.pageStartInput = page * ps + 1;
+                    if (val > tab.total) val = Math.max(1, tab.total);
+                    const page = Math.floor((val - 1) / RELATED_PAGE_SIZE);
+                    tab.pageStartInput = page * RELATED_PAGE_SIZE + 1;
                     if (page !== tab.page) {
                         $scope.loadRelatedTabData(tab, page);
                     }
@@ -7744,6 +7831,308 @@
                 $scope.relatedRecordUrl = function (table, sysId) {
                     return '/nav_to.do?uri=' + encodeURIComponent(table + '.do?sys_id=' + sysId);
                 };
+
+                function _relatedListUrl(tab) {
+                    const query =
+                        (tab.query || '') +
+                        (tab.sort ? '^' + (tab.sortDir === 'desc' ? 'ORDERBYDESC' : 'ORDERBY') + tab.sort : '');
+                    return (
+                        '/nav_to.do?uri=' +
+                        encodeURIComponent(tab.table + '_list.do?sysparm_query=' + encodeURIComponent(query))
+                    );
+                }
+
+                function _addRelatedConditions(tab, conditions, replaceSource) {
+                    if (replaceSource) {
+                        tab.conditions = tab.conditions.filter((condition) => condition.source !== replaceSource);
+                    }
+                    tab.conditions = tab.conditions.concat(conditions);
+                    _updateRelatedCrumbs(tab);
+                    $scope.loadRelatedTabData(tab, 0);
+                }
+
+                $scope.removeRelatedConditionsAfter = function (tab, index) {
+                    if (index >= tab.conditions.length) {
+                        return;
+                    }
+                    tab.conditions = tab.conditions.slice(0, index);
+                    if (!tab.conditions.some((condition) => condition.source === 'column')) {
+                        tab.columnSearch = {};
+                    }
+                    _updateRelatedCrumbs(tab);
+                    $scope.loadRelatedTabData(tab, 0);
+                };
+
+                function _relatedSearchCondition(col, text, source) {
+                    let op = RELATED_EXACT_SEARCH_TYPES.indexOf(col.type) === -1 ? 'STARTSWITH' : '=';
+                    let value = text;
+                    if (text.charAt(0) === '*' && text.length > 1) {
+                        op = 'LIKE';
+                        value = text.substring(1);
+                    }
+                    const opLabel = { '=': '=', LIKE: 'contains', STARTSWITH: 'starts with' }[op];
+                    return { field: col.field, label: col.label + ' ' + opLabel + ' ' + value, op, source, value };
+                }
+
+                $scope.relatedSearch = function (tab) {
+                    const text = String(tab.searchText || '').trim();
+                    if (!text) {
+                        return;
+                    }
+                    const col = tab.columns.find((column) => column.field === tab.searchField);
+                    const condition = col
+                        ? _relatedSearchCondition(col, text, 'search')
+                        : { field: '', label: 'Keywords = ' + text, op: 'TEXT', source: 'search', value: text };
+                    tab.searchText = '';
+                    _addRelatedConditions(tab, [condition]);
+                };
+
+                $scope.relatedColumnSearch = function (tab) {
+                    const conditions = tab.columns
+                        .filter((col) => String(tab.columnSearch[col.field] || '').trim())
+                        .map((col) =>
+                            _relatedSearchCondition(col, String(tab.columnSearch[col.field]).trim(), 'column')
+                        );
+                    _addRelatedConditions(tab, conditions, 'column');
+                };
+
+                $scope.toggleRelatedSort = function (tab, col) {
+                    _setRelatedSort(tab, col, tab.sort === col.field && tab.sortDir === 'asc' ? 'desc' : 'asc');
+                };
+
+                function _setRelatedSort(tab, col, dir) {
+                    tab.sort = col.field;
+                    tab.sortDir = dir;
+                    $scope.loadRelatedTabData(tab, 0);
+                }
+
+                function _relatedCellConditions(tab, col, row) {
+                    const value = row[col.field + '__value'];
+                    if (value === undefined) {
+                        return [];
+                    }
+                    const display = row[col.field] || '';
+                    const isDate = /date|time|timer|duration/.test(col.type || '');
+                    const make = (op, label) => ({
+                        field: col.field,
+                        label: col.label + ' ' + label,
+                        op,
+                        source: 'row',
+                        value,
+                    });
+                    const items = [
+                        {
+                            label: 'Show Matching',
+                            action: () =>
+                                _addRelatedConditions(tab, [
+                                    value === '' ? make('ISEMPTY', 'is empty') : make('=', '= ' + display),
+                                ]),
+                        },
+                        {
+                            label: 'Filter Out',
+                            action: () =>
+                                _addRelatedConditions(tab, [
+                                    value === '' ? make('ISNOTEMPTY', 'is not empty') : make('!=', '!= ' + display),
+                                ]),
+                        },
+                    ];
+                    if (value !== '' && RELATED_RANGE_TYPES.indexOf(col.type) !== -1) {
+                        items.push(
+                            {
+                                label: 'Show After',
+                                action: () =>
+                                    _addRelatedConditions(tab, [make('>', (isDate ? 'after' : '>') + ' ' + display)]),
+                            },
+                            {
+                                label: 'Show Before',
+                                action: () =>
+                                    _addRelatedConditions(tab, [make('<', (isDate ? 'before' : '<') + ' ' + display)]),
+                            }
+                        );
+                    }
+                    return items;
+                }
+
+                function _relatedRowItems(tab, col, row) {
+                    const table = row._class || tab.table;
+                    const items = col ? _relatedCellConditions(tab, col, row) : [];
+                    if (items.length) {
+                        items.push({ divider: true });
+                    }
+                    items.push(
+                        {
+                            label: 'Copy URL to Clipboard',
+                            action: () =>
+                                _copyRelatedText(
+                                    window.location.protocol +
+                                        '//' +
+                                        window.location.host +
+                                        $scope.relatedRecordUrl(table, row.sys_id)
+                                ),
+                        },
+                        { label: 'Copy sys_id', action: () => _copyRelatedText(row.sys_id) }
+                    );
+                    if ($scope.recordTypes.some((type) => type.table === table)) {
+                        items.push(
+                            { divider: true },
+                            {
+                                label: 'Open in Widget Editor+',
+                                action: () => $window.open(buildWidgetEditorUrl(row.sys_id, table), '_blank'),
+                            }
+                        );
+                    }
+                    return items;
+                }
+
+                function _copyRelatedText(text) {
+                    try {
+                        navigator.clipboard.writeText(text);
+                    } catch (e) {}
+                }
+
+                $scope.openRelatedMenu = function ($event, kind, tab, col, row) {
+                    $event.preventDefault();
+                    $event.stopPropagation();
+                    let items = [];
+                    let label = '';
+                    if (kind === 'title') {
+                        label = 'List controls';
+                        items = [
+                            { label: 'Refresh List', action: () => $scope.loadRelatedTabData(tab, tab.page || 0) },
+                            {
+                                label: 'Open List in New Tab',
+                                action: () => $window.open(_relatedListUrl(tab), '_blank'),
+                            },
+                        ];
+                    } else if (kind === 'header') {
+                        label = col.label + ' column options';
+                        items = [
+                            { label: 'Sort (a to z)', action: () => _setRelatedSort(tab, col, 'asc') },
+                            { label: 'Sort (z to a)', action: () => _setRelatedSort(tab, col, 'desc') },
+                        ];
+                    } else {
+                        label = 'Record actions';
+                        items = _relatedRowItems(tab, col, row);
+                    }
+                    _closeRelatedPopups();
+                    const anchor = $event.type === 'contextmenu' ? null : $event.currentTarget;
+                    $scope.relatedMenu = { items, label, open: true, style: _relatedPopupStyle($event, anchor) };
+                    _watchRelatedPopupDismiss('.we-related-context-menu');
+                    $timeout(() => {
+                        _fitRelatedPopup('.we-related-context-menu', $scope.relatedMenu);
+                        const first = document.querySelector('.we-related-context-menu .context_item');
+                        if (first) first.focus();
+                    });
+                };
+
+                $scope.runRelatedMenuItem = function (item) {
+                    _closeRelatedPopups();
+                    if (item && item.action) {
+                        item.action();
+                    }
+                };
+
+                $scope.onRelatedMenuKeydown = function ($event, item) {
+                    const key = $event.key;
+                    if (key === 'Enter' || key === ' ') {
+                        $event.preventDefault();
+                        $scope.runRelatedMenuItem(item);
+                    } else if (key === 'ArrowDown' || key === 'ArrowUp') {
+                        $event.preventDefault();
+                        const items = Array.from(document.querySelectorAll('.we-related-context-menu .context_item'));
+                        const index = items.indexOf($event.currentTarget);
+                        const next = items[(index + (key === 'ArrowDown' ? 1 : items.length - 1)) % items.length];
+                        if (next) next.focus();
+                    } else if (key === 'Escape' || key === 'Tab') {
+                        $event.preventDefault();
+                        $event.stopPropagation();
+                        _closeRelatedPopups();
+                    }
+                };
+
+                $scope.openRelatedPreview = function ($event, tab, row) {
+                    $event.preventDefault();
+                    $event.stopPropagation();
+                    _closeRelatedPopups();
+                    const preview = {
+                        data: null,
+                        error: null,
+                        loading: true,
+                        open: true,
+                        style: _relatedPopupStyle($event, $event.currentTarget),
+                        table: row._class || tab.table,
+                        sysId: row.sys_id,
+                    };
+                    $scope.relatedPreview = preview;
+                    _watchRelatedPopupDismiss('.we-related-preview');
+                    ajax('getRelatedPreview', {
+                        related_list: tab.related_list,
+                        row_sys_id: row.sys_id,
+                        sys_id: SYS_ID,
+                    }).then((d) => {
+                        if ($scope.relatedPreview !== preview) {
+                            return;
+                        }
+                        preview.loading = false;
+                        if (!d.success) {
+                            preview.error = d.error || 'Failed to load';
+                            return;
+                        }
+                        preview.data = d;
+                        preview.table = d.table || preview.table;
+                        $timeout(() => _fitRelatedPopup('.we-related-preview', preview));
+                    });
+                };
+
+                function _relatedPopupStyle($event, anchor) {
+                    const modal = $event.target.closest('.we-related-modal');
+                    const bounds = modal.getBoundingClientRect();
+                    if (anchor) {
+                        const rect = anchor.getBoundingClientRect();
+                        return { left: rect.left - bounds.left + 'px', top: rect.bottom - bounds.top + 2 + 'px' };
+                    }
+                    return { left: $event.clientX - bounds.left + 'px', top: $event.clientY - bounds.top + 'px' };
+                }
+
+                function _fitRelatedPopup(selector, popup) {
+                    const el = document.querySelector(selector);
+                    const modal = el && el.closest('.we-related-modal');
+                    if (!el || !modal) {
+                        return;
+                    }
+                    const left = parseFloat(popup.style.left) || 0;
+                    const top = parseFloat(popup.style.top) || 0;
+                    const maxLeft = Math.max(0, modal.clientWidth - el.offsetWidth - 8);
+                    const maxTop = Math.max(0, modal.clientHeight - el.offsetHeight - 8);
+                    popup.style = { left: Math.min(left, maxLeft) + 'px', top: Math.min(top, maxTop) + 'px' };
+                }
+
+                function _watchRelatedPopupDismiss(selector) {
+                    _unwatchRelatedPopupDismiss();
+                    _relatedPopupListener = (event) => {
+                        if (!event.target.closest(selector)) {
+                            $scope.$apply(_closeRelatedPopups);
+                        }
+                    };
+                    $timeout(() => {
+                        if (_relatedPopupListener) {
+                            document.addEventListener('mousedown', _relatedPopupListener, true);
+                        }
+                    });
+                }
+
+                function _unwatchRelatedPopupDismiss() {
+                    if (_relatedPopupListener) {
+                        document.removeEventListener('mousedown', _relatedPopupListener, true);
+                        _relatedPopupListener = null;
+                    }
+                }
+
+                function _closeRelatedPopups() {
+                    _unwatchRelatedPopupDismiss();
+                    $scope.relatedMenu = { items: [], label: '', open: false, style: {} };
+                    $scope.relatedPreview = { data: null, error: null, loading: false, open: false, style: {} };
+                }
 
                 // Unlink Provider
                 $scope.pendingUnlinkProvider = null;
@@ -8609,7 +8998,7 @@
                         return true;
                     }
                     if ($scope.relatedModal && $scope.relatedModal.open) {
-                        $scope.closeRelatedModal();
+                        $scope.cancelRelatedModal();
                         return true;
                     }
                     if ($scope.versionDiffModal && $scope.versionDiffModal.open) {
