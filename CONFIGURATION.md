@@ -223,10 +223,12 @@ In Assistant, use the history button in a record’s **Actions** or graph card t
 ## User Preferences
 User preferences (including editor themes and Assistant visibility) persist in `localStorage` and synchronise to the ServiceNow instance as `sys_user_preference` records under `monaco_plus.user_prefs`. Debug Menu editor, timing and console preferences synchronise separately under `we_debug_menu_prefs`.
 
+Open **User preferences** from the editor menu. Use the filter box to find a setting. Changed settings are marked, with a button to restore each default; **Reset all** restores every setting shown for the current record type. Theme and font changes preview immediately and revert if you cancel, and closing with unsaved changes asks before discarding them. Settings that do not apply to the current record type, such as widget editors or HTML options for Script Includes, are hidden.
+
 
 ### Local draft autosave
 
-In **User Preferences → Editor**, set **Auto-save local drafts** in whole seconds (default **30**; **0** disables capture), and **Keep drafts for** in whole days (minimum **1**, default **7**). Both settings synchronise with your preferences and are included in preference exports.
+In **User preferences → Local drafts**, set **Auto-save local drafts** in whole seconds (default **30**; **0** disables capture), and **Keep drafts for** in whole days (minimum **1**, default **7**). Both settings synchronise with your preferences and are included in preference exports.
 
 Drafts capture unsaved changes to saved records, including open related templates, providers, Script Includes, Option Schema and Demo Data edits. Capture also runs when leaving or hiding the tab. New records and read-only versions are excluded. Drafts stay in this browser and never save to ServiceNow automatically.
 

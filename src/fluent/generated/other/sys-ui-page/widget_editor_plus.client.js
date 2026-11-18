@@ -194,6 +194,37 @@
             },
         ])
 
+        // Directive: we-pref-preview — Renders a code sample with Monaco colours, re-rendering when we-pref-theme changes.
+        .directive('wePrefPreview', [
+            '$timeout',
+            function ($timeout) {
+                return {
+                    restrict: 'A',
+                    link: function (scope, element, attrs) {
+                        function render() {
+                            const code = scope.$eval(attrs.wePrefPreview) || '';
+                            const target = element[0];
+                            if (!window.monaco || !monaco.editor || !monaco.editor.colorize) {
+                                target.textContent = code;
+                                return;
+                            }
+                            monaco.editor.colorize(code, 'javascript', { tabSize: 4 }).then(
+                                (html) => {
+                                    target.innerHTML = html;
+                                },
+                                () => {
+                                    target.textContent = code;
+                                }
+                            );
+                        }
+                        scope.$watch(attrs.wePrefTheme, () => {
+                            $timeout(render, 0, false);
+                        });
+                    },
+                };
+            },
+        ])
+
         // Directive: we-auto-resize — Makes a textarea grow vertically to fit its content.
         .directive('weAutoResize', [
             '$timeout',
@@ -1506,41 +1537,49 @@
                 $scope.lastSaveTime = null;
                 $scope.lastSaveUpdateSet = null; // { sys_id, name } — set after each saveAll
 
+                // Default values for every setting in the User preferences dialog.
+                function _defaultUserPrefs() {
+                    return {
+                        alwaysShowLink: true,
+                        autoClosingBrackets: 'languageDefined',
+                        autoClosingQuotes: 'languageDefined',
+                        autoIndent: true,
+                        autosaveInterval: 30,
+                        autoSurround: 'languageDefined',
+                        contextMenuMode: 'enhanced',
+                        ctrlSSaveActiveOnly: true,
+                        draftRetentionDays: 7,
+                        editorTheme: 'auto',
+                        flashOnEditorOpen: !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+                        fontFamily: '',
+                        fontSize: 12,
+                        formatOnPaste: true,
+                        formatOnType: true,
+                        formatTabsToSpaces: true,
+                        htmlAutoCloseTags: true,
+                        htmlClassIncludeStandardCss: false,
+                        htmlClassPortalSysId: '',
+                        htmlValidation: true,
+                        insertSpaceBeforeFuncParen: false,
+                        languageHelpers: true,
+                        linkedEditing: true,
+                        minimap: false,
+                        realtimeWidgetUpdates: false,
+                        remBase: 16,
+                        showAssistantButton: false,
+                        showOpenHistory: true,
+                        showOpenInVsCode: true,
+                        showRecentlyOpenedWidgets: true,
+                        showUnusedVars: true,
+                        stickyScroll: true,
+                        tabSize: 4,
+                        widgetDataChecks: true,
+                        wordWrap: true,
+                    };
+                }
+
                 // User preferences (loaded from server; defaults apply until loaded)
-                $scope.userPrefs = {
-                    formatTabsToSpaces: true,
-                    wordWrap: true,
-                    editorTheme: 'auto',
-                    minimap: false,
-                    alwaysShowLink: true,
-                    realtimeWidgetUpdates: false,
-                    showAssistantButton: false,
-                    contextMenuMode: 'enhanced',
-                    autoIndent: true,
-                    formatOnPaste: true,
-                    formatOnType: true,
-                    fontSize: 12,
-                    fontFamily: '',
-                    languageHelpers: true,
-                    showUnusedVars: true,
-                    widgetDataChecks: true,
-                    remBase: 16,
-                    stickyScroll: true,
-                    htmlValidation: true,
-                    htmlAutoCloseTags: true,
-                    autoSurround: 'languageDefined',
-                    autoClosingBrackets: 'languageDefined',
-                    autoClosingQuotes: 'languageDefined',
-                    linkedEditing: true,
-                    insertSpaceBeforeFuncParen: false,
-                    tabSize: 4,
-                    ctrlSSaveActiveOnly: true,
-                    autosaveInterval: 30,
-                    draftRetentionDays: 7,
-                    flashOnEditorOpen: !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-                    showOpenInVsCode: true,
-                    showRecentlyOpenedWidgets: true,
-                    showOpenHistory: true,
+                $scope.userPrefs = Object.assign(_defaultUserPrefs(), {
                     recentWidgets: [],
                     recentRecords: [],
                     // Not surfaced in the Preferences dialog — just carried through load/save/export/import
@@ -1549,7 +1588,7 @@
                     // Last-saved editor order/visibility, so the Preferences dialog reflects saved state, not live changes.
                     editorOrder: [],
                     editorVisibility: {},
-                };
+                });
                 $scope.recentWidgetsResolved = [];
                 $scope.showUserPrefsModal = false;
                 $scope.userPrefsEdit = {};
@@ -2488,23 +2527,14 @@
                     if (_validDraftRetentionDays(p.draftRetentionDays)) {
                         $scope.userPrefs.draftRetentionDays = p.draftRetentionDays;
                     }
-                    if (p.hasOwnProperty('fontSize')) {
-                        var fs = parseInt(p.fontSize, 10);
-                        if (fs >= 8 && fs <= 32) {
-                            $scope.userPrefs.fontSize = fs;
-                        }
+                    if (p.hasOwnProperty('fontSize') && _validFontSize(parseInt(p.fontSize, 10))) {
+                        $scope.userPrefs.fontSize = parseInt(p.fontSize, 10);
                     }
-                    if (p.hasOwnProperty('tabSize')) {
-                        var ts = parseInt(p.tabSize, 10);
-                        if (ts >= 1 && ts <= 8) {
-                            $scope.userPrefs.tabSize = ts;
-                        }
+                    if (p.hasOwnProperty('tabSize') && _validTabSize(parseInt(p.tabSize, 10))) {
+                        $scope.userPrefs.tabSize = parseInt(p.tabSize, 10);
                     }
-                    if (p.hasOwnProperty('remBase')) {
-                        var rb = parseFloat(p.remBase);
-                        if (rb > 0) {
-                            $scope.userPrefs.remBase = rb;
-                        }
+                    if (p.hasOwnProperty('remBase') && _validRemBase(parseFloat(p.remBase))) {
+                        $scope.userPrefs.remBase = parseFloat(p.remBase);
                     }
                     /* fontFamily triggers Google Fonts loader */
                     if (p.hasOwnProperty('fontFamily')) {
@@ -3479,8 +3509,8 @@
                     return 'vs-dark';
                 }
 
-                function _resolveMonacoTheme() {
-                    var pref = $scope.userPrefs.editorTheme;
+                function _resolveMonacoTheme(theme) {
+                    var pref = theme === undefined ? $scope.userPrefs.editorTheme : theme;
                     if (pref === 'dark') {
                         return 'we-vs-dark';
                     }
@@ -9373,6 +9403,18 @@
 
                 $scope.validDraftRetentionDays = _validDraftRetentionDays;
 
+                function _validFontSize(value) {
+                    return Number.isSafeInteger(value) && value >= 8 && value <= 32;
+                }
+
+                function _validTabSize(value) {
+                    return Number.isSafeInteger(value) && value >= 1 && value <= 8;
+                }
+
+                function _validRemBase(value) {
+                    return typeof value === 'number' && Number.isFinite(value) && value >= 1 && value <= 100;
+                }
+
                 function _draftPrefix() {
                     return (
                         'we_local_draft:v1:' +
@@ -10441,6 +10483,599 @@
                     document.head.appendChild(link);
                 }
 
+                // User preferences dialog definitions
+                const _PREF_BRACKET_CHOICES = [
+                    { label: 'Language defined', value: 'languageDefined' },
+                    { label: 'Always', value: 'always' },
+                    { label: 'Before whitespace', value: 'beforeWhitespace' },
+                    { label: 'Never', value: 'never' },
+                ];
+                const _PREF_DEFAULT_WIDGET_EDITORS = [
+                    { key: 'template', visible: true },
+                    { key: 'css', visible: true },
+                    { key: 'client_script', visible: true },
+                    { key: 'link', visible: false },
+                    { key: 'script', visible: true },
+                ];
+                const _PREF_STAGED_IMPORT_KEYS = [
+                    'credit',
+                    'debugMenu',
+                    'favouriteGroups',
+                    'recentRecords',
+                    'widgetEditorLayout',
+                ];
+                const _PREF_CONDITIONS = {
+                    css: () => $scope.isWidgetRecord !== false || _coreEditorUses(['css', 'scss']),
+                    html: () => $scope.isWidgetRecord !== false || _coreEditorUses(['html']),
+                    snUtils: () => !!$scope.hasSnUtils,
+                    widget: () => $scope.isWidgetRecord !== false,
+                };
+
+                $scope.prefPreviewCode = [
+                    'function greet(name) {',
+                    '    // Build a friendly greeting',
+                    "    const message = 'Hello, ' + name;",
+                    '    return message.length > 0 ? message : null;',
+                    '}',
+                ].join('\n');
+                $scope.prefColumns = [
+                    [
+                        {
+                            editors: true,
+                            options: [
+                                {
+                                    key: 'alwaysShowLink',
+                                    label: 'Always show the Link editor when it has code',
+                                    tooltip:
+                                        'Opens the Link editor for widgets with a link function, even when it is hidden above.',
+                                    type: 'checkbox',
+                                },
+                            ],
+                            title: 'Default editors',
+                            when: 'widget',
+                        },
+                        {
+                            options: [
+                                {
+                                    choices: [
+                                        { label: 'Auto (follow UI theme)', value: 'auto' },
+                                        { label: 'Dark', value: 'dark' },
+                                        { label: 'Light', value: 'light' },
+                                    ],
+                                    key: 'editorTheme',
+                                    label: 'Theme',
+                                    tooltip: 'Sets the code editor colour theme. Auto follows the ServiceNow UI theme.',
+                                    type: 'select',
+                                },
+                                {
+                                    key: 'fontFamily',
+                                    label: 'Font family',
+                                    tooltip:
+                                        'Sets the code editor typeface. Google Fonts load from fonts.googleapis.com.',
+                                    type: 'font',
+                                },
+                                {
+                                    error: 'Enter a whole number from 8 to 32.',
+                                    key: 'fontSize',
+                                    label: 'Font size',
+                                    max: 32,
+                                    min: 8,
+                                    tooltip: 'Sets the code editor text size, from 8 to 32 pixels.',
+                                    type: 'number',
+                                    unit: 'px',
+                                },
+                            ],
+                            preview: true,
+                            title: 'Appearance',
+                        },
+                        {
+                            options: [
+                                {
+                                    key: 'wordWrap',
+                                    label: 'Wrap long lines',
+                                    tooltip:
+                                        'Breaks lines that exceed the editor width instead of scrolling horizontally.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'minimap',
+                                    label: 'Show minimap',
+                                    tooltip: 'Shows a code overview along the right edge of each editor.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'stickyScroll',
+                                    label: 'Sticky scroll',
+                                    tooltip:
+                                        'Keeps the enclosing function and block headers at the top of the editor while scrolling.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'flashOnEditorOpen',
+                                    label: 'Highlight editors when opened',
+                                    tooltip: 'Briefly highlights an editor when it opens or is brought into focus.',
+                                    type: 'checkbox',
+                                },
+                            ],
+                            title: 'Editor display',
+                        },
+                        {
+                            options: [
+                                {
+                                    key: 'ctrlSSaveActiveOnly',
+                                    label: 'Save shortcut saves the active editor only',
+                                    tooltip:
+                                        'When on, the save shortcut saves the focused editor. When off, it saves every changed editor.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'realtimeWidgetUpdates',
+                                    label: 'Apply real-time changes from other users',
+                                    tooltip:
+                                        'When on, changes other users save are applied immediately. When off, an alert appears above the editor instead.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'showRecentlyOpenedWidgets',
+                                    label: 'Show recently opened records',
+                                    tooltip: 'Shows your recently opened records beside the record picker.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'showOpenInVsCode',
+                                    label: 'Show "Open in VS Code" button (SN Utils)',
+                                    tooltip:
+                                        'Shows an Open in VS Code button in the header when the SN Utils browser extension is installed.',
+                                    type: 'checkbox',
+                                    when: 'snUtils',
+                                },
+                                {
+                                    key: 'showAssistantButton',
+                                    label: 'Show Widget Editor+ Assistant',
+                                    tooltip:
+                                        'Shows the Assistant (AI context helper) in the header and the Service Portal debug menu.',
+                                    type: 'checkbox',
+                                },
+                            ],
+                            title: 'Behaviour',
+                        },
+                    ],
+                    [
+                        {
+                            options: [
+                                {
+                                    key: 'formatTabsToSpaces',
+                                    label: 'Use spaces for indentation',
+                                    tooltip: 'Inserts spaces instead of tabs when typing, pasting and formatting.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    error: 'Enter a whole number from 1 to 8.',
+                                    key: 'tabSize',
+                                    label: 'Tab size',
+                                    max: 8,
+                                    min: 1,
+                                    tooltip: 'Sets the indentation width, from 1 to 8 columns.',
+                                    type: 'number',
+                                    unit: 'spaces',
+                                },
+                                {
+                                    key: 'autoIndent',
+                                    label: 'Auto-indent',
+                                    tooltip: 'Indents new lines to match the surrounding code.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'formatOnPaste',
+                                    label: 'Format on paste',
+                                    tooltip: 'Formats pasted code automatically.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'formatOnType',
+                                    label: 'Format on type',
+                                    tooltip: 'Formats code automatically as you type.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'insertSpaceBeforeFuncParen',
+                                    label: 'Insert space before function parentheses',
+                                    tooltip:
+                                        'Adds a space before the opening parenthesis of a function declaration when formatting.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    choices: _PREF_BRACKET_CHOICES,
+                                    key: 'autoClosingBrackets',
+                                    label: 'Auto-closing brackets',
+                                    tooltip: 'Adds a closing bracket when you type an opening bracket.',
+                                    type: 'select',
+                                },
+                                {
+                                    choices: _PREF_BRACKET_CHOICES,
+                                    key: 'autoClosingQuotes',
+                                    label: 'Auto-closing quotes',
+                                    tooltip: 'Adds a closing quote when you type an opening quote.',
+                                    type: 'select',
+                                },
+                                {
+                                    choices: [
+                                        { label: 'Language defined', value: 'languageDefined' },
+                                        { label: 'Always', value: 'always' },
+                                        { label: 'Quotes', value: 'quotes' },
+                                        { label: 'Brackets', value: 'brackets' },
+                                        { label: 'Never', value: 'never' },
+                                    ],
+                                    key: 'autoSurround',
+                                    label: 'Auto-surround',
+                                    tooltip: 'Wraps selected text when you type a quote or bracket.',
+                                    type: 'select',
+                                },
+                            ],
+                            title: 'Formatting',
+                        },
+                        {
+                            options: [
+                                {
+                                    key: 'htmlAutoCloseTags',
+                                    label: 'Auto-close HTML tags',
+                                    tooltip: 'Adds the closing tag when you finish typing an opening tag.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'linkedEditing',
+                                    label: 'Linked editing',
+                                    tooltip: 'Renames the matching closing tag as you edit an opening tag.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'htmlValidation',
+                                    label: 'Validate HTML tags',
+                                    tooltip: 'Highlights missing and mismatched closing tags.',
+                                    type: 'checkbox',
+                                },
+                            ],
+                            title: 'HTML editing',
+                            when: 'html',
+                        },
+                        {
+                            link: { href: '/nav_to.do?uri=syntax_editor_macro_list.do', label: 'View code macros' },
+                            options: [
+                                {
+                                    key: 'languageHelpers',
+                                    label: 'Show hover and parameter hints',
+                                    tooltip:
+                                        'Shows documentation on hover and parameter hints while you type function calls.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'showUnusedVars',
+                                    label: 'Show unused variables',
+                                    tooltip:
+                                        'Highlights variables, functions and parameters that are declared but never used.',
+                                    type: 'checkbox',
+                                },
+                                {
+                                    key: 'widgetDataChecks',
+                                    label: 'Check widget data and actions',
+                                    tooltip:
+                                        "Highlights data properties the server script never sets, server data the client script, link function and templates never use, actions the server script doesn't handle, and data or options used in the wrong script.",
+                                    type: 'checkbox',
+                                    when: 'widget',
+                                },
+                                {
+                                    error: 'Enter a number from 1 to 100.',
+                                    key: 'remBase',
+                                    label: '1rem conversion',
+                                    max: 100,
+                                    min: 1,
+                                    step: 'any',
+                                    tooltip: 'Sets the pixel value of 1rem for the CSS/SCSS px-to-rem code action.',
+                                    type: 'number',
+                                    unit: 'px',
+                                    when: 'css',
+                                },
+                            ],
+                            title: 'Code assistance',
+                        },
+                        {
+                            options: [
+                                {
+                                    choices: [
+                                        { label: 'Enhanced', value: 'enhanced' },
+                                        { label: 'Standard', value: 'standard' },
+                                        { label: 'Off', value: 'off' },
+                                    ],
+                                    key: 'contextMenuMode',
+                                    label: 'Debug context menu',
+                                    tooltip: 'Chooses which widget context menu Service Portal pages use.',
+                                    type: 'select',
+                                },
+                                {
+                                    key: 'htmlClassPortalSysId',
+                                    label: 'CSS theme',
+                                    tooltip:
+                                        'Chooses the portal and theme whose CSS supplies class="..." completions in HTML editors.',
+                                    type: 'portal',
+                                    when: 'html',
+                                },
+                                {
+                                    key: 'htmlClassIncludeStandardCss',
+                                    label: 'Include standard Service Portal CSS',
+                                    requires: 'htmlClassPortalSysId',
+                                    tooltip:
+                                        "Also indexes the standard Service Portal CSS bundle for class completions, in addition to the theme's own CSS.",
+                                    type: 'checkbox',
+                                    when: 'html',
+                                },
+                            ],
+                            title: 'Service Portal',
+                        },
+                        {
+                            options: [
+                                {
+                                    error: 'Enter whole seconds (0 = off).',
+                                    key: 'autosaveInterval',
+                                    label: 'Auto-save local drafts',
+                                    min: 0,
+                                    tooltip:
+                                        'Saves recovery drafts in this browser at this interval. 0 turns capture off.',
+                                    type: 'number',
+                                    unit: 'seconds',
+                                },
+                                {
+                                    error: 'Enter whole days (minimum 1).',
+                                    key: 'draftRetentionDays',
+                                    label: 'Keep drafts for',
+                                    min: 1,
+                                    tooltip: 'Deletes drafts after this many days without changes.',
+                                    type: 'number',
+                                    unit: 'days',
+                                },
+                            ],
+                            title: 'Local drafts',
+                        },
+                    ],
+                ];
+                const _prefSections = $scope.prefColumns.flat();
+                const _prefOptions = _prefSections.flatMap((section) => section.options);
+                for (const section of _prefSections) {
+                    for (const option of section.options) {
+                        option.when = option.when || section.when;
+                        option.searchText = [section.title, option.label, option.tooltip, option.unit || '']
+                            .concat((option.choices || []).map((choice) => choice.label))
+                            .join(' ')
+                            .toLowerCase();
+                    }
+                }
+                $scope.prefFilter = { text: '' };
+                $scope.prefMoveStatus = '';
+                $scope.confirmDiscardUserPrefs = false;
+                let _userPrefsDefaults = _defaultUserPrefs();
+                let _userPrefsBaseline = '';
+                let _stopPrefPreviewWatch = null;
+
+                function _coreEditorUses(languages) {
+                    return ($scope.coreEditorDefs || []).some((def) => languages.includes(def.language));
+                }
+
+                function _prefApplies(item) {
+                    return !item.when || _PREF_CONDITIONS[item.when]();
+                }
+
+                function _prefMatches(text) {
+                    return String($scope.prefFilter.text || '')
+                        .toLowerCase()
+                        .split(/\s+/)
+                        .filter(Boolean)
+                        .every((token) => text.includes(token));
+                }
+
+                $scope.prefOptionShown = function (option) {
+                    return (
+                        _prefApplies(option) &&
+                        (!option.requires || !!$scope.userPrefsEdit[option.requires]) &&
+                        _prefMatches(option.searchText)
+                    );
+                };
+
+                $scope.prefEditorShown = function (editor) {
+                    return _prefMatches(('default editors ' + editor.label).toLowerCase());
+                };
+
+                $scope.prefSectionShown = function (section) {
+                    return (
+                        _prefApplies(section) &&
+                        (section.options.some($scope.prefOptionShown) ||
+                            (!!section.editors && ($scope.userPrefsEdit.editors || []).some($scope.prefEditorShown)))
+                    );
+                };
+
+                $scope.prefNoMatches = function () {
+                    return !_prefSections.some($scope.prefSectionShown);
+                };
+
+                function _prefNumberValid(key, value) {
+                    switch (key) {
+                        case 'autosaveInterval':
+                            return _validAutosaveInterval(value);
+                        case 'draftRetentionDays':
+                            return _validDraftRetentionDays(value);
+                        case 'fontSize':
+                            return _validFontSize(value);
+                        case 'remBase':
+                            return _validRemBase(value);
+                        case 'tabSize':
+                            return _validTabSize(value);
+                        default:
+                            return true;
+                    }
+                }
+
+                $scope.prefValueValid = function (option) {
+                    return (
+                        option.type !== 'number' ||
+                        !_prefApplies(option) ||
+                        _prefNumberValid(option.key, $scope.userPrefsEdit[option.key])
+                    );
+                };
+
+                function _userPrefsInvalid() {
+                    return _prefOptions.some((option) => !$scope.prefValueValid(option));
+                }
+
+                $scope.userPrefsInvalid = _userPrefsInvalid;
+
+                $scope.stepPref = function (option, delta) {
+                    const current = $scope.userPrefsEdit[option.key];
+                    const base =
+                        typeof current === 'number' && Number.isFinite(current)
+                            ? current
+                            : _userPrefsDefaults[option.key];
+                    $scope.userPrefsEdit[option.key] = Math.min(
+                        option.max ?? Infinity,
+                        Math.max(option.min ?? -Infinity, base + delta)
+                    );
+                };
+
+                $scope.prefStepDisabled = function (option, delta) {
+                    const value = $scope.userPrefsEdit[option.key];
+                    if (typeof value !== 'number') return false;
+                    return delta < 0
+                        ? option.min !== undefined && value <= option.min
+                        : option.max !== undefined && value >= option.max;
+                };
+
+                function _prefValuesEqual(option, left, right) {
+                    if (option.type === 'checkbox') return !!left === !!right;
+                    if (option.type === 'number') return left === right;
+                    return String(left ?? '') === String(right ?? '');
+                }
+
+                $scope.isPrefModified = function (option) {
+                    return !_prefValuesEqual(option, $scope.userPrefsEdit[option.key], _userPrefsDefaults[option.key]);
+                };
+
+                $scope.prefDefaultLabel = function (option) {
+                    const value = _userPrefsDefaults[option.key];
+                    if (option.type === 'checkbox') return value ? 'On' : 'Off';
+                    if (option.type === 'number') return value + (option.unit ? ' ' + option.unit : '');
+                    if (option.type === 'font') return 'Monaco default';
+                    if (option.type === 'portal') return 'None';
+                    const choice = (option.choices || []).find((item) => item.value === value);
+                    return choice ? choice.label : String(value);
+                };
+
+                $scope.resetPref = function (option) {
+                    $scope.userPrefsEdit[option.key] = _userPrefsDefaults[option.key];
+                };
+
+                $scope.prefEditorsModified = function () {
+                    const editors = $scope.userPrefsEdit.editors || [];
+                    return _PREF_DEFAULT_WIDGET_EDITORS.some(
+                        (def, index) =>
+                            !editors[index] ||
+                            editors[index].key !== def.key ||
+                            !!editors[index].visible !== def.visible
+                    );
+                };
+
+                function _resetPrefEditors() {
+                    const editors = $scope.userPrefsEdit.editors || [];
+                    const ordered = [];
+                    for (const def of _PREF_DEFAULT_WIDGET_EDITORS) {
+                        const editor = editors.find((item) => item.key === def.key);
+                        if (editor) {
+                            editor.visible = def.visible;
+                            ordered.push(editor);
+                        }
+                    }
+                    $scope.userPrefsEdit.editors = ordered.concat(editors.filter((item) => !ordered.includes(item)));
+                }
+
+                $scope.resetPrefEditors = _resetPrefEditors;
+
+                $scope.prefEditorIndex = function (editor) {
+                    return ($scope.userPrefsEdit.editors || []).indexOf(editor);
+                };
+
+                $scope.movePrefEditor = function (editor, delta) {
+                    const editors = $scope.userPrefsEdit.editors || [];
+                    const index = editors.indexOf(editor);
+                    const target = index + delta;
+                    if (index === -1 || target < 0 || target >= editors.length) return;
+                    editors.splice(index, 1);
+                    editors.splice(target, 0, editor);
+                    $scope.prefMoveStatus =
+                        editor.label + ' moved to position ' + (target + 1) + ' of ' + editors.length + '.';
+                    $timeout(() => {
+                        const direction = delta < 0 ? 'up' : 'down';
+                        const opposite = delta < 0 ? 'down' : 'up';
+                        const preferred = document.getElementById('pref-move-' + editor.key + '-' + direction);
+                        const button =
+                            preferred && !preferred.disabled
+                                ? preferred
+                                : document.getElementById('pref-move-' + editor.key + '-' + opposite);
+                        if (button) button.focus();
+                    });
+                };
+
+                function _userPrefsEditState() {
+                    const edit = $scope.userPrefsEdit;
+                    const state = {
+                        editors: (edit.editors || []).map((editor) => [editor.key, !!editor.visible]),
+                        showOpenHistory: edit.showOpenHistory,
+                    };
+                    for (const option of _prefOptions) state[option.key] = edit[option.key];
+                    for (const key of _PREF_STAGED_IMPORT_KEYS) state[key] = edit[key];
+                    return angular.toJson(state);
+                }
+
+                $scope.userPrefsDirty = function () {
+                    return _userPrefsEditState() !== _userPrefsBaseline;
+                };
+
+                // Applies theme and font settings to open editors without saving them.
+                function _applyEditorAppearance(prefs) {
+                    const options = { fontFamily: _buildFontFamily(prefs.fontFamily) };
+                    if (_validFontSize(prefs.fontSize)) options.fontSize = prefs.fontSize;
+                    Object.keys(monacoEditors).forEach((key) => monacoEditors[key].updateOptions(options));
+                    if (window.monaco) monaco.editor.setTheme(_resolveMonacoTheme(prefs.editorTheme));
+                }
+
+                function _startUserPrefsPreview() {
+                    _stopUserPrefsPreview(false);
+                    _stopPrefPreviewWatch = $scope.$watchGroup(
+                        ['userPrefsEdit.editorTheme', 'userPrefsEdit.fontSize', 'userPrefsEdit.fontFamily'],
+                        (values, previous) => {
+                            if (values !== previous) _applyEditorAppearance($scope.userPrefsEdit);
+                        }
+                    );
+                }
+
+                function _stopUserPrefsPreview(revert) {
+                    if (_stopPrefPreviewWatch) {
+                        _stopPrefPreviewWatch();
+                        _stopPrefPreviewWatch = null;
+                        if (revert) _applyEditorAppearance($scope.userPrefs);
+                    }
+                }
+
+                $scope.prefPreviewStyle = function () {
+                    const size = _validFontSize($scope.userPrefsEdit.fontSize)
+                        ? $scope.userPrefsEdit.fontSize
+                        : $scope.userPrefs.fontSize;
+                    return { fontFamily: _buildFontFamily($scope.userPrefsEdit.fontFamily), fontSize: size + 'px' };
+                };
+
+                function _closeUserPrefsModal(revertPreview) {
+                    _stopUserPrefsPreview(revertPreview);
+                    $scope.confirmDiscardUserPrefs = false;
+                    _closeModal(function () {
+                        $scope.showUserPrefsModal = false;
+                    });
+                }
+
                 $scope.openUserPrefsModal = function () {
                     _loadGoogleFonts();
                     var _savedOrder = $scope.userPrefs.editorOrder;
@@ -10508,9 +11143,15 @@
                         googleFonts: _GOOGLE_FONTS,
                     };
                     _loadClassPortals();
+                    _userPrefsDefaults = _defaultUserPrefs();
+                    _userPrefsBaseline = _userPrefsEditState();
+                    $scope.prefFilter.text = '';
+                    $scope.prefMoveStatus = '';
+                    $scope.confirmDiscardUserPrefs = false;
                     $scope.importPrefsStatus = null;
                     $scope.showUserPrefsModal = true;
                     $scope.openDropdown = null;
+                    _startUserPrefsPreview();
                 };
 
                 // Lazily loads portals for the "CSS theme" preference dropdown.
@@ -10527,12 +11168,10 @@
                 }
 
                 $scope.saveUserPrefsModal = function () {
-                    if (
-                        !_validAutosaveInterval($scope.userPrefsEdit.autosaveInterval) ||
-                        !_validDraftRetentionDays($scope.userPrefsEdit.draftRetentionDays)
-                    ) {
+                    if (_userPrefsInvalid()) {
                         return;
                     }
+                    $scope.confirmDiscardUserPrefs = false;
                     $scope.userPrefs.autosaveInterval = $scope.userPrefsEdit.autosaveInterval;
                     $scope.userPrefs.draftRetentionDays = $scope.userPrefsEdit.draftRetentionDays;
                     _draftRetentionLoaded = true;
@@ -10564,7 +11203,9 @@
                     $scope.userPrefs.autoIndent = $scope.userPrefsEdit.autoIndent;
                     $scope.userPrefs.formatOnPaste = $scope.userPrefsEdit.formatOnPaste;
                     $scope.userPrefs.formatOnType = $scope.userPrefsEdit.formatOnType;
-                    $scope.userPrefs.fontSize = $scope.userPrefsEdit.fontSize;
+                    if (_validFontSize($scope.userPrefsEdit.fontSize)) {
+                        $scope.userPrefs.fontSize = $scope.userPrefsEdit.fontSize;
+                    }
                     $scope.userPrefs.fontFamily = $scope.userPrefsEdit.fontFamily || '';
                     $scope.userPrefs.languageHelpers = $scope.userPrefsEdit.languageHelpers;
                     $scope.userPrefs.showUnusedVars = !!$scope.userPrefsEdit.showUnusedVars;
@@ -10594,13 +11235,11 @@
                         : '';
                     $scope.userPrefs.htmlClassThemeSysId = _selectedClassPortal ? _selectedClassPortal.themeSysId : '';
                     $scope.userPrefs.htmlClassIncludeStandardCss = !!$scope.userPrefsEdit.htmlClassIncludeStandardCss;
-                    var ts = parseInt($scope.userPrefsEdit.tabSize, 10);
-                    if (ts >= 1 && ts <= 8) {
-                        $scope.userPrefs.tabSize = ts;
+                    if (_validTabSize($scope.userPrefsEdit.tabSize)) {
+                        $scope.userPrefs.tabSize = $scope.userPrefsEdit.tabSize;
                     }
-                    var rb = parseFloat($scope.userPrefsEdit.remBase);
-                    if (rb > 0) {
-                        $scope.userPrefs.remBase = rb;
+                    if (_validRemBase($scope.userPrefsEdit.remBase)) {
+                        $scope.userPrefs.remBase = $scope.userPrefsEdit.remBase;
                     }
                     var wrapVal = $scope.userPrefs.wordWrap ? 'on' : 'off';
                     var minimapVal = { enabled: !!$scope.userPrefs.minimap };
@@ -10766,9 +11405,7 @@
                                     if (!saveRes || !saveRes.success) {
                                         return $q.reject('The server rejected the save.');
                                     }
-                                    _closeModal(function () {
-                                        $scope.showUserPrefsModal = false;
-                                    });
+                                    _closeUserPrefsModal(false);
                                 },
                                 function (reason) {
                                     $scope.importPrefsStatus = {
@@ -10782,73 +11419,36 @@
                             );
                         return;
                     }
-                    _closeModal(function () {
-                        $scope.showUserPrefsModal = false;
-                    });
+                    _closeUserPrefsModal(false);
                 };
 
                 $scope.cancelUserPrefsModal = function () {
-                    _closeModal(function () {
-                        $scope.showUserPrefsModal = false;
-                    });
+                    if ($scope.userPrefsDirty()) {
+                        $scope.confirmDiscardUserPrefs = true;
+                        return;
+                    }
+                    _closeUserPrefsModal(true);
+                };
+
+                $scope.keepEditingUserPrefs = function () {
+                    $scope.confirmDiscardUserPrefs = false;
+                };
+
+                $scope.discardUserPrefsChanges = function () {
+                    _closeUserPrefsModal(true);
                 };
 
                 $scope.resetUserPrefsModal = function () {
                     if ($scope.isWidgetRecord !== false) {
-                        var defaultOrder = ['template', 'css', 'client_script', 'link', 'script'];
-                        var defaultVisible = {
-                            template: true,
-                            css: true,
-                            client_script: true,
-                            link: false,
-                            script: true,
-                        };
-                        var sorted = [];
-                        defaultOrder.forEach(function (key) {
-                            for (var i = 0; i < $scope.userPrefsEdit.editors.length; i++) {
-                                if ($scope.userPrefsEdit.editors[i].key === key) {
-                                    var e = $scope.userPrefsEdit.editors[i];
-                                    e.visible = !!defaultVisible[key];
-                                    sorted.push(e);
-                                    break;
-                                }
-                            }
-                        });
-                        $scope.userPrefsEdit.editors = sorted;
+                        _resetPrefEditors();
                     }
-                    $scope.userPrefsEdit.formatTabsToSpaces = true;
-                    $scope.userPrefsEdit.wordWrap = true;
-                    $scope.userPrefsEdit.editorTheme = 'auto';
-                    $scope.userPrefsEdit.minimap = false;
-                    if ($scope.isWidgetRecord !== false) $scope.userPrefsEdit.alwaysShowLink = true;
-                    $scope.userPrefsEdit.realtimeWidgetUpdates = false;
-                    $scope.userPrefsEdit.autoIndent = true;
-                    $scope.userPrefsEdit.formatOnPaste = true;
-                    $scope.userPrefsEdit.formatOnType = true;
-                    $scope.userPrefsEdit.fontSize = 13;
-                    $scope.userPrefsEdit.fontFamily = '';
-                    $scope.userPrefsEdit.languageHelpers = true;
-                    $scope.userPrefsEdit.showUnusedVars = true;
-                    $scope.userPrefsEdit.widgetDataChecks = true;
-                    $scope.userPrefsEdit.remBase = 16;
-                    $scope.userPrefsEdit.stickyScroll = true;
-                    $scope.userPrefsEdit.htmlValidation = true;
-                    $scope.userPrefsEdit.htmlAutoCloseTags = true;
-                    $scope.userPrefsEdit.autoSurround = 'languageDefined';
-                    $scope.userPrefsEdit.autoClosingBrackets = 'languageDefined';
-                    $scope.userPrefsEdit.autoClosingQuotes = 'languageDefined';
-                    $scope.userPrefsEdit.linkedEditing = true;
-                    $scope.userPrefsEdit.insertSpaceBeforeFuncParen = false;
-                    $scope.userPrefsEdit.tabSize = 4;
-                    $scope.userPrefsEdit.autosaveInterval = 30;
-                    $scope.userPrefsEdit.draftRetentionDays = 7;
-                    $scope.userPrefsEdit.ctrlSSaveActiveOnly = true;
-                    $scope.userPrefsEdit.flashOnEditorOpen = !window.matchMedia('(prefers-reduced-motion: reduce)')
-                        .matches;
-                    $scope.userPrefsEdit.showOpenInVsCode = true;
-                    $scope.userPrefsEdit.showRecentlyOpenedWidgets = true;
-                    $scope.userPrefsEdit.showOpenHistory = true;
-                    $scope.userPrefsEdit.showAssistantButton = false;
+                    const defaults = _defaultUserPrefs();
+                    for (const option of _prefOptions) {
+                        if (_prefApplies(option)) {
+                            $scope.userPrefsEdit[option.key] = defaults[option.key];
+                        }
+                    }
+                    $scope.userPrefsEdit.showOpenHistory = defaults.showOpenHistory;
                 };
 
                 $scope.importPrefsStatus = null;
@@ -11009,29 +11609,26 @@
                     } else if (p.hasOwnProperty('contextMenuMode')) {
                         $scope.userPrefsEdit.contextMenuMode = 'enhanced';
                     }
+                    if (typeof p.htmlClassPortalSysId === 'string') {
+                        $scope.userPrefsEdit.htmlClassPortalSysId = p.htmlClassPortalSysId;
+                    }
+                    if (p.hasOwnProperty('htmlClassIncludeStandardCss')) {
+                        $scope.userPrefsEdit.htmlClassIncludeStandardCss = !!p.htmlClassIncludeStandardCss;
+                    }
                     if (_validAutosaveInterval(p.autosaveInterval)) {
                         $scope.userPrefsEdit.autosaveInterval = p.autosaveInterval;
                     }
                     if (_validDraftRetentionDays(p.draftRetentionDays)) {
                         $scope.userPrefsEdit.draftRetentionDays = p.draftRetentionDays;
                     }
-                    if (p.hasOwnProperty('fontSize')) {
-                        var fs = parseInt(p.fontSize, 10);
-                        if (fs >= 8 && fs <= 32) {
-                            $scope.userPrefsEdit.fontSize = fs;
-                        }
+                    if (p.hasOwnProperty('fontSize') && _validFontSize(parseInt(p.fontSize, 10))) {
+                        $scope.userPrefsEdit.fontSize = parseInt(p.fontSize, 10);
                     }
-                    if (p.hasOwnProperty('tabSize')) {
-                        var ts = parseInt(p.tabSize, 10);
-                        if (ts >= 1 && ts <= 8) {
-                            $scope.userPrefsEdit.tabSize = ts;
-                        }
+                    if (p.hasOwnProperty('tabSize') && _validTabSize(parseInt(p.tabSize, 10))) {
+                        $scope.userPrefsEdit.tabSize = parseInt(p.tabSize, 10);
                     }
-                    if (p.hasOwnProperty('remBase')) {
-                        var rb = parseFloat(p.remBase);
-                        if (rb > 0) {
-                            $scope.userPrefsEdit.remBase = rb;
-                        }
+                    if (p.hasOwnProperty('remBase') && _validRemBase(parseFloat(p.remBase))) {
+                        $scope.userPrefsEdit.remBase = parseFloat(p.remBase);
                     }
                     if (p.hasOwnProperty('recentWidgets') && Array.isArray(p.recentWidgets)) {
                         $scope.userPrefs.recentWidgets = p.recentWidgets;

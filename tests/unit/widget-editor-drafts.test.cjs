@@ -963,13 +963,78 @@ test('retention exports with shared preferences and Reset restores seven days', 
     vm.runInContext(source.slice(blobStart, source.indexOf('                function saveUserPrefs(', blobStart)), h.context);
     h.$scope.userPrefs.draftRetentionDays = 14;
     assert.equal(h.run('_buildUserPrefsBlob().draftRetentionDays'), 14);
+    loadPrefsDialog(h);
     const resetStart = source.indexOf('                $scope.resetUserPrefsModal =');
     vm.runInContext(source.slice(resetStart, source.indexOf('                $scope.importPrefsStatus =', resetStart)), h.context);
-    h.$scope.userPrefsEdit = { editors: [], draftRetentionDays: 14, autosaveInterval: 60 };
-    h.context.window.matchMedia = () => ({ matches: false });
+    h.$scope.userPrefsEdit = { editors: [], draftRetentionDays: 14, autosaveInterval: 60, fontSize: 20, contextMenuMode: 'off', htmlClassPortalSysId: 'portal', htmlClassIncludeStandardCss: true };
     h.$scope.resetUserPrefsModal();
     assert.equal(h.$scope.userPrefsEdit.draftRetentionDays, 7);
     assert.equal(h.$scope.userPrefsEdit.autosaveInterval, 30);
+    assert.equal(h.$scope.userPrefsEdit.fontSize, 12, 'Reset matches the initial default font size');
+    assert.equal(h.$scope.userPrefsEdit.contextMenuMode, 'enhanced');
+    assert.equal(h.$scope.userPrefsEdit.htmlClassPortalSysId, '');
+    assert.equal(h.$scope.userPrefsEdit.htmlClassIncludeStandardCss, false);
+});
+
+test('preference dialog validates every number field and tracks unsaved changes', () => {
+    const h = harness();
+    loadPrefsDialog(h);
+    const option = key => h.$scope.prefColumns.flat().flatMap(section => section.options).find(item => item.key === key);
+    h.$scope.userPrefsEdit = { editors: [], autosaveInterval: 30, draftRetentionDays: 7, fontSize: 12, remBase: 16, tabSize: 4 };
+    h.run('_userPrefsBaseline = _userPrefsEditState()');
+    assert.equal(h.$scope.userPrefsInvalid(), false);
+    assert.equal(h.$scope.userPrefsDirty(), false);
+    for (const [key, value] of [['fontSize', 40], ['fontSize', undefined], ['tabSize', 0], ['tabSize', 2.5], ['remBase', 0], ['remBase', 101]]) {
+        const saved = h.$scope.userPrefsEdit[key];
+        h.$scope.userPrefsEdit[key] = value;
+        assert.equal(h.$scope.prefValueValid(option(key)), false, key + ' ' + value);
+        assert.equal(h.$scope.userPrefsInvalid(), true);
+        h.$scope.userPrefsEdit[key] = saved;
+    }
+    h.$scope.userPrefsEdit.fontSize = undefined;
+    h.$scope.stepPref(option('fontSize'), 1);
+    assert.equal(h.$scope.userPrefsEdit.fontSize, 13, 'Stepping an invalid value starts from the default');
+    h.$scope.userPrefsEdit.fontSize = 32;
+    h.$scope.stepPref(option('fontSize'), 1);
+    assert.equal(h.$scope.userPrefsEdit.fontSize, 32);
+    assert.equal(h.$scope.prefStepDisabled(option('fontSize'), 1), true);
+    assert.equal(h.$scope.isPrefModified(option('fontSize')), true);
+    assert.equal(h.$scope.prefDefaultLabel(option('fontSize')), '12 px');
+    assert.equal(h.$scope.userPrefsDirty(), true);
+    h.$scope.resetPref(option('fontSize'));
+    assert.equal(h.$scope.userPrefsEdit.fontSize, 12);
+    assert.equal(h.$scope.userPrefsDirty(), false);
+    h.$scope.userPrefsEdit.credit = { view: 'grouped', whitespace: 'none' };
+    assert.equal(h.$scope.userPrefsDirty(), true, 'A staged import counts as an unsaved change');
+});
+
+test('preference dialog filter, conditions and keyboard reordering', () => {
+    const h = harness();
+    loadPrefsDialog(h);
+    const sections = h.$scope.prefColumns.flat();
+    const section = title => sections.find(item => item.title === title);
+    const editors = [{ key: 'template', label: 'Body HTML template', visible: true }, { key: 'css', label: 'CSS/SCSS', visible: true }, { key: 'script', label: 'Server script', visible: true }];
+    h.$scope.userPrefsEdit = { editors: editors.slice(), htmlClassPortalSysId: '' };
+    h.$scope.prefFilter.text = 'minimap';
+    assert.deepEqual(Array.from(sections.filter(h.$scope.prefSectionShown), item => item.title), ['Editor display']);
+    h.$scope.prefFilter.text = 'zzz';
+    assert.equal(h.$scope.prefNoMatches(), true);
+    h.$scope.prefFilter.text = '';
+    const include = section('Service Portal').options.find(item => item.key === 'htmlClassIncludeStandardCss');
+    assert.equal(h.$scope.prefOptionShown(include), false, 'Standard CSS needs a CSS theme');
+    h.$scope.userPrefsEdit.htmlClassPortalSysId = 'portal';
+    assert.equal(h.$scope.prefOptionShown(include), true);
+    h.$scope.isWidgetRecord = false;
+    h.$scope.coreEditorDefs = [{ key: 'script', language: 'javascript' }];
+    assert.equal(h.$scope.prefSectionShown(section('Default editors')), false);
+    assert.equal(h.$scope.prefSectionShown(section('HTML editing')), false);
+    assert.equal(h.$scope.prefOptionShown(section('Code assistance').options.find(item => item.key === 'remBase')), false);
+    h.$scope.isWidgetRecord = true;
+    h.$scope.movePrefEditor(h.$scope.userPrefsEdit.editors[2], -1);
+    assert.deepEqual(h.$scope.userPrefsEdit.editors.map(item => item.key), ['template', 'script', 'css']);
+    assert.equal(h.$scope.prefMoveStatus, 'Server script moved to position 2 of 3.');
+    h.$scope.movePrefEditor(h.$scope.userPrefsEdit.editors[0], -1);
+    assert.deepEqual(h.$scope.userPrefsEdit.editors.map(item => item.key), ['template', 'script', 'css']);
 });
 
 test('related record recovery checks current access and restores content and identifiers', async () => {
@@ -1195,7 +1260,8 @@ test('Credit preferences export fresh shared values, import on Save and stay out
     assert.deepEqual(downloads[1].credit, shared.credit, 'Export refreshes choices changed in the Credit page');
     await h.run('saveUserPrefs()');
     assert.equal(Object.hasOwn(saves.at(-1), 'credit'), false, 'Unrelated saves cannot overwrite current Credit choices');
-    h.$scope.userPrefsEdit = { editors: [], autosaveInterval: 30, draftRetentionDays: 7 };
+    loadPrefsDialog(h);
+    h.$scope.userPrefsEdit = { editors: [], autosaveInterval: 30, draftRetentionDays: 7, fontSize: 12, remBase: 16, tabSize: 4 };
     h.context.imported = downloads[0];
     h.run('_applyPrefsBlobToEdit(imported)');
     assert.deepEqual(JSON.parse(JSON.stringify(h.$scope.userPrefsEdit.credit)), downloads[0].credit);
@@ -1215,6 +1281,15 @@ test('Credit preferences export fresh shared values, import on Save and stay out
     assert.deepEqual(saves.at(-1).credit, downloads[0].credit, 'Save includes the imported choices');
     assert.deepEqual(classReloads, [true], 'Save reloads class completions for the chosen portal theme');
 });
+
+function loadPrefsDialog(h) {
+    h.context.window.matchMedia = () => ({ matches: false });
+    h.context.angular.toJson = value => JSON.stringify(value);
+    const defaultsStart = source.indexOf('                // Default values for every setting in the User preferences dialog.');
+    vm.runInContext(source.slice(defaultsStart, source.indexOf('                // User preferences (loaded from server', defaultsStart)), h.context);
+    const dialogStart = source.indexOf('                // User preferences dialog definitions');
+    vm.runInContext(source.slice(dialogStart, source.indexOf('                $scope.openUserPrefsModal =', dialogStart)), h.context);
+}
 
 function loadUnsavedGuard(h) {
     h.$scope.headerDirty = {};
