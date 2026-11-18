@@ -119,7 +119,7 @@ Export selected ServiceNow records as XML context for AI tools.
 ### Build with ServiceNow SDK
 1. Clone the repository and install dependencies:
    ```bash
-   git clone https://github.com/tchris3/widget-editor-plus.git
+   git clone https://github.com/tbc-productions/widget-editor-plus.git
    cd widget-editor-plus
    nvm install
    nvm use
@@ -139,7 +139,7 @@ npm run deploy
 ```
 This runs `now-sdk install` against the configured instance.
 
-Alternatively, deploy the retrieved update set XML artifact located in the latest [GitHub Release](https://github.com/tchris3/widget-editor-plus/releases) via **System Update Sets → Retrieved Update Sets**.
+Alternatively, deploy the retrieved update set XML artifact located in the latest [GitHub Release](https://github.com/tbc-productions/widget-editor-plus/releases) via **System Update Sets → Retrieved Update Sets**.
 
 ---
 
