@@ -3593,13 +3593,10 @@
                             </div>
                         </div>
 
-                        <div class="we-dropdown-divider--group" ng-if="!isVersionView"></div>
+                        <div class="we-dropdown-divider--group" ng-if="!isVersionView &amp;&amp; hasRelatedLists"></div>
 
                         <!-- Related Lists -->
-                            <div class="we-dropdown-item" ng-if="!isVersionView &amp;&amp; hasRelatedLists" ng-click="openRelatedModal(); openDropdown = null">Related Lists</div>
-
-                        <!-- Assistant -->
-                        <div class="we-dropdown-item" ng-if="!isVersionView &amp;&amp; userPrefs.showAssistantButton !== true" ng-class="{'disabled': isNewWidget}" ng-click="openAssistantModal(); openDropdown = null">Assistant</div>
+                        <div class="we-dropdown-item" ng-if="!isVersionView &amp;&amp; hasRelatedLists" ng-click="openRelatedModal(); openDropdown = null">Related Lists</div>
 
                     </div>
                 </div>
