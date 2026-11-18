@@ -1,7 +1,6 @@
 ---
 name: ServiceNow Developer
 description: Pragmatic ServiceNow developer that writes lean, secure, JSDoc-documented scripts for any ServiceNow record and reads Widget Editor+ AI Assistant XML exports.
-tools: ['read', 'search', 'web']
 ---
 
 # ServiceNow Developer

@@ -1,12 +1,14 @@
 # Copilot agent for ServiceNow developers
 
-A GitHub Copilot custom agent and skills for ServiceNow development and Widget Editor+ AI Assistant exports.
+A Microsoft 365 Copilot agent and skills for ServiceNow development and Widget Editor+ AI Assistant exports.
 
-## Install
+## Set up
 
-Copy the `.github` folder into the root of your repository or VS Code workspace, merging it with any existing `.github` folder. In Copilot Chat, select **ServiceNow Developer** from the agent picker.
+1. In the Microsoft 365 Copilot app, create an agent named **ServiceNow Developer**, using the `description` from the top of [`servicenow-developer.agent.md`](.github/agents/servicenow-developer.agent.md).
+2. Paste the rest of that file, from `# ServiceNow Developer` onwards, into the agent's **Instructions**.
+3. Add each `SKILL.md` file under [`.github/skills/`](.github/skills/) to the agent.
 
-To use the skills in every workspace, copy the folders under `.github/skills/` into `~/.copilot/skills/`.
+Keep the instructions short enough for the app's instruction limit. Put new detail in the skill files instead.
 
 ## Contents
 
@@ -23,4 +25,4 @@ To use the skills in every workspace, copy the folders under `.github/skills/` i
 
 ## Usage
 
-Paste a script or describe a record, or export context from AI Assistant and attach the XML file in Copilot Chat, then describe the change. The agent assumes the Australia release or later. Say "Review my code" or "Peer review" for a prioritised review.
+Paste a script or describe a record, or export context from AI Assistant and attach the XML file in a chat with the agent, then describe the change. The agent assumes the Australia release or later. Say "Review my code" or "Peer review" for a prioritised review.
