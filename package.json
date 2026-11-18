@@ -32,5 +32,11 @@
     "eslint": "9.39.5",
     "prettier": "3.6.1",
     "typescript": "6.0.3"
+  },
+  "allowScripts": {
+    "@parcel/watcher@2.6.0": true,
+    "@swc/core@1.15.43": true,
+    "fsevents@2.3.3": true,
+    "libxmljs2@0.37.0": true
   }
 }
