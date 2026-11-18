@@ -16,7 +16,7 @@
     "pack": "now-sdk pack && node scripts/generate-update-set-xml.js",
     "transform": "now-sdk transform",
     "types": "now-sdk dependencies",
-    "test:unit": "node --test tests/unit/*.test.cjs",
+    "test:unit": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./scripts/test-progress-reporter.js --test-reporter-destination=stdout tests/unit/*.test.cjs",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "lint": "eslint src scripts tests",
