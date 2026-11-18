@@ -13,13 +13,13 @@ Judge the code against the agent's rules and the other skills in this pack. Comm
 
 | Category | Look for |
 |---|---|
-| Security | Unjustified `GlideRecord`, unchecked client input, missing `canRead()`/`canWrite()`, unescaped HTML (`ng-bind-html`, `innerHTML`), hard-coded credentials. |
-| Performance | Queries in loops, existence checks that count rows or use `getRowCount()` instead of `setLimit(1)` and `hasNext()`, related-record filters done with a second query instead of `addJoinQuery()` or `RLQUERY`, dot-walking without `addExtraField()`, counting without `GlideAggregate`, missing `setLimit()`, slow work outside async rules, `getXMLWait()`, GlideAjax where `g_scratchpad` would do. |
-| Reliability | Boolean `getValue()` not compared with `'1'`, queries on empty values, unchecked `get()`, `current.update()` in before rules, wrong ES syntax, DOM APIs on the server, broken callers of shared code, safeguards dropped when code moved. |
+| Security | Unjustified `GlideRecord`, `GlideRecord` without `canRead()`/`canWrite()` where client input picks the record, unchecked client input, client input concatenated into `addEncodedQuery()`, user-entered content bound with `ng-bind-html` or passed to `$sce.trustAsHtml()`, `innerHTML`, unescaped values in email scripts or UI pages, unjustified `setWorkflow(false)` or `autoSysFields(false)`, Scripted REST resources without authentication or ACL authorisation, hard-coded credentials, tokens or endpoints, secrets in logs. |
+| Performance | Queries in loops, outbound REST calls the user waits on, existence checks that count rows or use `getRowCount()` instead of `setLimit(1)` and `hasNext()`, related-record filters done with a second query instead of `addJoinQuery()` or `RLQUERY`, dot-walking without `addExtraField()`, counting without `GlideAggregate`, missing `setLimit()`, slow work outside async rules, `getXMLWait()`, GlideAjax where `g_scratchpad` would do. |
+| Reliability | Boolean `getValue()` not compared with `'1'`, widget options or properties compared without converting from strings, queries on empty values, unchecked `get()`, `current.update()` in before rules, ES12 syntax in widget server scripts, `${…}` placeholders in UI pages, DOM APIs on the server, unchecked outbound REST status codes, fix scripts that are unsafe to run twice, broken callers of shared code, safeguards dropped when code moved. |
 | Maintainability | Missing or wrong JSDoc, `if` statements without braces, missing block comments (or one on every line), positional parameters where a destructured object fits, single-use helpers, hard-coded sys_ids, dead code, duplicated logic. |
 | Best practice | Script Includes not defined with `Class.create()`, shorthand methods in server scripts, widget forms validated by hand instead of with `ngForm`, script where a condition or UI policy would do, `GlideElement` compared without `getValue()`, missing labels, `alt` text or keyboard access, repeated `<div>`s instead of list or table markup, `role` where a native element would do. |
 
-Also flag over-engineering as Low, such as sys_id pattern checks.
+Also flag over-engineering as Low, such as sys_id pattern checks or `canRead()`/`canWrite()` on a `GlideRecordSecure`.
 
 ## Priorities
 
@@ -53,22 +53,22 @@ Name records exactly as they appear in the instance so the user can find them. W
 
 | # | Record | Location | Issue | Priority |
 |---|---|---|---|---|
-| 1 | **My Tasks** (Widget) | **Server script** - close action | Unchecked `input.sysId` reaches `get()` | High 🔴 |
+| 1 | **My Tasks** (Widget) | **Server script** - close action | Users can close any task through `input.sysId` | High 🔴 |
 | 2 | **TaskUtils** (Script Include) | **Script** - `getTasks()` | One `sys_user` query per task | Medium 🟠 |
 | 3 | **TaskUtils** (Script Include) | **Script** - `getTasks()`, `_format()` | Missing JSDoc | Low 🔵 |
 
 ## [**My Tasks**](record_url) (Widget)
 
-### 1. Unchecked `input.sysId` reaches `get()` (High 🔴)
+### 1. Users can close any task through `input.sysId` (High 🔴)
 
 **Server script** - close action (Lines ~4–8)
 
-`input` comes from the browser. When `sysId` is missing, `get()` runs on an empty value, and any user can close any task they can reach through the widget.
+`input` comes from the browser, and `GlideRecord` skips ACLs, so any user can close any task by sending its sys_id. When `sysId` is missing, `get()` runs on an empty value.
 
 ```javascript
 // Current
 if (input && input.action === 'close') {
-    var task = new GlideRecordSecure('task');
+    var task = new GlideRecord('task');
     task.get(input.sysId);
     task.setValue('state', 3);
     task.update();
@@ -79,7 +79,7 @@ if (input && input.action === 'close') {
 // Suggested
 if (input && input.action === 'close' && input.sysId) {
     var task = new GlideRecordSecure('task');
-    if (task.get(input.sysId) && task.canWrite()) {
+    if (task.get(input.sysId)) {
         task.setValue('state', 3);
         task.update();
     }
@@ -152,7 +152,15 @@ Format rules:
   | Widget | `css` | CSS |
   | Widget | `link` | Link function |
   | Widget | `option_schema` | Option schema |
-  | Script Include, business rule, client script | `script` | Script |
+  | Angular Provider | `script` | Client Script |
+  | Angular ng-template | `template` | Template |
+  | Style Sheet | `css` | CSS |
+  | UI Page | `html` | HTML |
+  | UI Page | `client_script` | Client script |
+  | UI Page | `processing_script` | Processing script |
+  | Script Include, UI Script, Email Script, Fix Script, Business Rule, Client Script, UI Action, ACL, Scripted REST Resource | `script` / `operation_script` | Script |
+  | Business Rule, UI Action | `condition` | Condition |
+  | Scheduled Script Execution | `script` | Run this script |
   | UI policy | `script_true` / `script_false` | Execute if true / Execute if false |
 
 - Label code blocks with the language's comment style: `// Current` and `// Suggested` for JavaScript, `<!-- Current -->` and `<!-- Suggested -->` for HTML, `/* Current */` and `/* Suggested */` for CSS.

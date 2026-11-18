@@ -1,6 +1,6 @@
 ---
 name: service-portal-widgets
-description: Patterns for Service Portal widgets, including server scripts, client controllers, HTML templates, CSS, options and Angular providers. Use when writing or editing an sp_widget or sp_angular_provider record.
+description: Patterns for Service Portal widgets, including server scripts, client controllers, HTML templates, CSS, options, Angular providers, Angular HTML templates and style sheets. Use when writing or editing an sp_widget, sp_angular_provider, sp_ng_template or sp_css record.
 ---
 
 # Service Portal widgets
@@ -18,14 +18,14 @@ description: Patterns for Service Portal widgets, including server scripts, clie
 
 ## Server script
 
-Widget server scripts are ES5 style; see the `servicenow-es-compatibility` skill.
+Widget server scripts are ES5 only, never ES12; see the `servicenow-es-compatibility` skill.
 
 ```javascript
 (function () {
     /* Close the task the user selected */
     if (input && input.action === 'close' && input.sysId) {
         var task = new GlideRecordSecure('task');
-        if (task.get(input.sysId) && task.canWrite()) {
+        if (task.get(input.sysId)) {
             task.setValue('state', 3);
             task.update();
         }
@@ -36,7 +36,7 @@ Widget server scripts are ES5 style; see the `servicenow-es-compatibility` skill
     var gr = new GlideRecordSecure('task');
     gr.addActiveQuery();
     gr.addQuery('assigned_to', gs.getUserID());
-    gr.setLimit(options.limit || 10);
+    gr.setLimit(parseInt(options.limit, 10) || 10);
     gr.query();
     while (gr.next()) {
         data.tasks.push({ number: gr.getValue('number'), sys_id: gr.getUniqueValue() });
@@ -47,6 +47,8 @@ Widget server scripts are ES5 style; see the `servicenow-es-compatibility` skill
 - Branch on `input` for client actions. `input` is `undefined` on the first load.
 - Treat `input` as untrusted: check required values before querying, limit actions to a known set, and use `GlideRecordSecure`.
 - Put only what the template needs in `data`.
+- `GlideRecordSecure` already enforces read and write ACLs, so do not add `canRead()` or `canWrite()` checks to it. Use those checks only with `GlideRecord`.
+- Option values arrive as strings. Parse numbers with `parseInt(options.name, 10)` and compare booleans with `options.name === 'true'`.
 
 ## Client controller
 
@@ -59,7 +61,7 @@ api.controller = function ($scope) {
      * @param {Object} params
      * @param {string} params.sysId `task.sys_id`
      */
-    c.close = function ({ sysId } = {}) {
+    c.close = function ({ sysId }) {
         c.server.get({ action: 'close', sysId }).then((response) => {
             c.data.tasks = response.data.tasks;
         });
@@ -90,6 +92,25 @@ api.controller = function ($scope) {
 - Bootstrap grid classes (`container`, `row`, `col-*`) are fine for layout. Do not add Bootstrap component classes (`alert`, `form-group`, `form-control`, `btn`, `list-group`, `panel`, `help-block` and so on) unless the user asks for them. Style with the widget's own `css` instead.
 - Write plain text in templates. Do not use `${…}` message tags or `gs.getMessage()` for template text unless asked.
 - Use `<sp-widget widget="c.data.embedded">` with `$sp.getWidget()` to embed widgets.
+
+### `ng-bind-html`
+
+Use `{{ }}` or `ng-bind` for text; AngularJS escapes it. Use `ng-bind-html` only for trusted HTML, such as an HTML field written by administrators, a knowledge article body, or markup the server script builds from fixed strings.
+
+Never bind user-entered content with `ng-bind-html`: comments, work notes, short descriptions, `input` values or anything an end user can type. Show it as text instead. Never call `$sce.trustAsHtml()` on user-entered content; it switches off sanitising.
+
+```html
+<!-- Wrong: the comment comes from a user -->
+<p ng-bind-html="c.data.comment"></p>
+
+<!-- Right -->
+<p>{{c.data.comment}}</p>
+```
+
+## Angular templates and style sheets
+
+- Angular HTML templates (`sp_ng_template`) hold reusable markup in their `template` field. Attach them through the widget's Angular ng-templates related list and load them with `ng-include="'template-id'"`, where `template-id` is the template's ID, in quotes inside the attribute.
+- Style sheets (`sp_css`) hold portal or theme CSS in their `css` field and apply outside a single widget. Put styles for one widget in the widget's `css`, not a style sheet. Use theme variables such as `$brand-primary`, not hex codes.
 
 ## Forms
 

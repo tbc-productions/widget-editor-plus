@@ -29,11 +29,13 @@ Use the parameter's actual table and field, never one copied from these examples
 
 ## Destructured parameters
 
-Functions take a single destructured object, defaulted to `{}`, so parameters can be added later without changing callers: `getTasks: function ({ userId, limit = 10 } = {})`.
+Functions take a single destructured object, so parameters can be added later without changing callers: `getTasks: function ({ userId, limit = 10 })`.
 
+- Do not add an empty-object default (`= {}`) after the destructured object. Callers always pass an object.
+- Give property defaults inside the object, such as `limit = 10`.
 - Document the object as `params` and each property as `params.name`.
-- Keep positional parameters only where the platform calls the function with fixed arguments: business rules (`current`, `previous`), client scripts and GlideAjax methods.
-- Without ES12, take a `params` object instead (see the ES5 example).
+- Keep positional parameters only where the platform calls the function with fixed arguments: business rules (`current`, `previous`), client scripts, GlideAjax methods, Scripted REST resources, email scripts and UI action functions.
+- In widget server scripts and other ES5 scripts, take a `params` object instead (see the ES5 example).
 
 ## Types
 
@@ -45,6 +47,8 @@ Functions take a single destructured object, defaulted to `{}`, so parameters ca
 | Value from `getValue()` | `{string}` (it may be `null` for an empty field; booleans are `'1'` or `'0'`) |
 | Widget server data | `{Object}` |
 | Client form | `{GlideForm}` |
+| Scripted REST request and response | `{RESTAPIRequest}`, `{RESTAPIResponse}` |
+| Outbound REST message and response | `{sn_ws.RESTMessageV2}`, `{sn_ws.RESTResponseV2}` |
 | Array | `{string[]}`, `{Object[]}`, `{{number: string}[]}`; never `Array<…>` |
 | Small object | Inline: `{{sys_id: string, is_active: boolean}}` |
 | Complex object | `@typedef`, in moderation: for a non-private Script Include function returning many properties, nested objects or arrays of objects. Place it immediately above the Script Include. |
@@ -81,7 +85,7 @@ GroupUtils.prototype = {
      * @param {number} [params.limit=50] Maximum number of incidents to return.
      * @returns {GroupSummary|null} Group summary, or null if the group is missing or not found.
      */
-    getGroupSummary: function ({ groupId, limit = 50 } = {}) {
+    getGroupSummary: function ({ groupId, limit = 50 }) {
         /* Get the group */
         if (!groupId) {
             return null;
@@ -116,7 +120,7 @@ GroupUtils.prototype = {
      * @param {string} params.userId `sys_user.sys_id`
      * @returns {{sys_id: string, is_active: boolean}|null} User status, or null if the user is missing or not found.
      */
-    getUserStatus: function ({ userId } = {}) {
+    getUserStatus: function ({ userId }) {
         if (!userId) {
             return null;
         }
@@ -132,18 +136,18 @@ Private helper taking a record:
 
 ```javascript
 /**
- * Returns the caller's manager for a task.
+ * Returns the caller's manager for an incident.
  * @private
  * @param {Object} params
- * @param {GlideRecordSecure} params.task `task` record
+ * @param {GlideRecordSecure} params.incident `incident` record
  * @returns {string} `sys_user.manager`, or an empty string if none is set.
  */
-_getCallerManager: function ({ task } = {}) {
-    return task ? task.caller_id.manager.toString() : '';
+_getCallerManager: function ({ incident }) {
+    return incident.caller_id.manager.toString();
 },
 ```
 
-ES5 equivalent for scripts without ES12:
+ES5 equivalent for widget server scripts and scripts without ES12:
 
 ```javascript
 /**
@@ -153,7 +157,7 @@ ES5 equivalent for scripts without ES12:
  * @returns {number} Open task count, or 0 if no user is given.
  */
 function getOpenTaskCount(params) {
-    var userId = params && params.userId;
+    var userId = params.userId;
     if (!userId) {
         return 0;
     }

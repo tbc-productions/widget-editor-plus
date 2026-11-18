@@ -1,6 +1,6 @@
 ---
 name: servicenow-client-scripts
-description: Patterns for classic ServiceNow client scripts, UI policies, g_form and client-side GlideAjax. Use when writing or editing sys_script_client, catalog client scripts or UI policy scripts.
+description: Patterns for classic ServiceNow client scripts, UI policies, g_form, client-side GlideAjax, UI action client code, UI scripts and UI pages. Use when writing or editing sys_script_client, catalog client scripts, UI policy scripts, client-side sys_ui_action, sys_ui_script or sys_ui_page records.
 ---
 
 # ServiceNow client scripts
@@ -60,3 +60,60 @@ The matching Script Include is in the `servicenow-server-scripting` skill.
 ## Service Portal
 
 Client scripts with UI Type set to All also run in Service Portal, where only the documented `g_form` API is available. Do not rely on `g_form.getControl()` or other DOM access there.
+
+## UI actions with client and server code
+
+Tick **Client**, set **Onclick** to the client function, and give the action an **Action name**. The client function validates, then resubmits the form with `gsftSubmit()`, which runs the same script again on the server.
+
+```javascript
+/**
+ * Checks the close notes, then runs the server side of the action.
+ * @returns {boolean|undefined} False when the close notes are empty.
+ */
+function closeTask() {
+    if (!g_form.getValue('close_notes')) {
+        g_form.showFieldMsg('close_notes', 'Enter close notes.', 'error');
+        return false;
+    }
+    gsftSubmit(null, g_form.getFormElement(), 'close_task');
+}
+
+/* Run the server side after the form is resubmitted */
+if (typeof window === 'undefined') {
+    closeTaskOnServer();
+}
+
+/**
+ * Closes the task and returns to it.
+ */
+function closeTaskOnServer() {
+    current.setValue('state', 3);
+    current.update();
+    action.setRedirectURL(current);
+}
+```
+
+- The third argument to `gsftSubmit()` must match the **Action name**.
+- The whole script runs in the browser and on the server, so code outside the two functions must work in both.
+- This pattern applies to the classic form. Workspaces use the action's workspace client script instead.
+
+## UI scripts
+
+- UI scripts (`sys_ui_script`) hold shared browser code. Leave **Global** off unless every classic page needs the script; global scripts load everywhere.
+- In Service Portal, load a UI script through the theme's or widget's JS includes, not a `<script>` tag.
+- Wrap the script so it does not add global variables, apart from one deliberate namespace object.
+
+## UI pages
+
+UI pages (`sys_ui_page`) have three script fields:
+
+| Field | Runs | Contents |
+|---|---|---|
+| `html` | Server, then browser | Jelly XML that renders the page. |
+| `client_script` | Browser | JavaScript for the page. |
+| `processing_script` | Server, on form submit | See the `servicenow-server-scripting` skill. |
+
+- Put JavaScript in `client_script`, not in `<script>` tags inside `html`. The `html` field is XML, so `&&` and `<` in inline scripts break it.
+- Never use `${…}` placeholders in `html` or `client_script`, including inside template literals; Jelly evaluates them first. Concatenate strings instead.
+- Use descendant selectors in `<style>` blocks, not `>` child selectors, which Jelly can turn into `&gt;`.
+- Values from the URL or the user reach the page through Jelly. Escape them, and never write them into HTML or scripts unescaped.

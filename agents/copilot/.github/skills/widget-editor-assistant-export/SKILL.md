@@ -42,11 +42,29 @@ The AI Assistant in Widget Editor+ exports selected ServiceNow records as one XM
 
 - Start with `primary_record`. It is the record the user is working on.
 - Use `context_manifest` to see how records connect. `source` and `target` match each wrapper's `id` (`table:sys_id`). The graph covers only exported records; it is not a complete dependency list, so do not assume something is unused because it is absent.
-- Field values are inside `current_version/<table>/<field>`. Script fields such as `script`, `client_script`, `template`, `css` and `link` contain the code to edit.
+- Field values are inside `current_version/<table>/<field>`. Exports can contain any table. The code to edit is usually in these fields:
+
+  | Table | Record type | Code fields |
+  |---|---|---|
+  | `sp_widget` | Widget | `script`, `client_script`, `template`, `css`, `link`, `option_schema` |
+  | `sp_angular_provider` | Angular Provider | `script` |
+  | `sp_ng_template` | Angular ng-template | `template` |
+  | `sp_css` | Style Sheet | `css` |
+  | `sys_script_include` | Script Include | `script` |
+  | `sys_ui_script` | UI Script | `script` |
+  | `sys_ui_page` | UI Page | `html`, `client_script`, `processing_script` |
+  | `sys_script_email` | Email Script | `script` |
+  | `sys_script_fix` | Fix Script | `script` |
+  | `sys_script` | Business Rule | `script`, `condition` |
+  | `sys_script_client` | Client Script | `script` |
+  | `sys_ui_action` | UI Action | `script`, `condition` |
+  | `sys_ui_policy` | UI Policy | `script_true`, `script_false` |
+
+  For any other table, treat fields holding JavaScript, HTML or CSS as code.
 - Reference fields hold a sys_id and may carry a `display_value` attribute. Use the sys_id in code and the display value in explanations.
 - `record_url` links to the live record, not a historical version.
 - `sys_mod_count` counts saved updates to that record only. It is not a global version number.
-- `es12_override_at_export` is the server-side ES12 override when exported. `true` or `false` is reliable; `not_found` or `unavailable` means the application default applies. See the `servicenow-es-compatibility` skill.
+- `es12_override_at_export` is the server-side ES12 override when exported. `false` means write ES5; `true`, `not_found` or `unavailable` means ES12 applies. Widget server scripts are ES5 whatever it says. See the `servicenow-es-compatibility` skill.
 
 ## Special elements and attributes
 
@@ -55,6 +73,9 @@ The AI Assistant in Widget Editor+ exports selected ServiceNow records as one XM
 | `blocked="true"` on `record`, or `<blocked_record>` | The table is on the export blocklist; the data was withheld. Do not guess its contents. |
 | `<deleted_record>` | The update set deleted this record. |
 | `status="unavailable"` on `current_version` | The record could not be loaded or no longer exists. |
+| `record_url_status="unavailable"` | No link to the record could be built. Name the record without a link. |
+| `sys_mod_count_status="unavailable"` | The record's update count could not be read. |
+| `update_set_sys_id`, `update_set_name`, `update_set_action` on `record` | The update set the record came from, and its action there, such as `INSERT_OR_UPDATE` or `DELETE`. |
 | `redacted="true"` on a field | A password or email value was removed. Do not reproduce or invent it. |
 | Table schema in place of a record | The record was a `sys_db_object` row; its current version is the table's field structure. |
 | `reason` on `record` | Why the Assistant suggested the related record. |
