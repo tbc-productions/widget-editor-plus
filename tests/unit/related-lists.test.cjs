@@ -20,7 +20,7 @@ const recordId = 'a'.repeat(32);
 function harness(params, options = {}) {
     const rows = {
         sp_widget: [{ sys_id: recordId }],
-        sys_script_include: [{ sys_id: recordId }],
+        sys_script_include: [{ sys_id: recordId, client_callable: options.clientCallable ? 'true' : 'false' }],
         sys_ui_related_list: [
             { sys_id: 'rl-widget', name: 'sp_widget', view: 'Default view' },
             { sys_id: 'rl-metadata', name: 'sys_metadata', view: 'Default view' },
@@ -41,6 +41,48 @@ function harness(params, options = {}) {
             })),
         ],
         sys_relationship: [{ sys_id: 'rel1', name: 'Callers', basic_query_from: 'sys_script' }],
+        sys_ui_policy: options.policies
+            ? [
+                  {
+                      sys_id: 'policy-show',
+                      table: 'sys_script_include',
+                      conditions: 'client_callable=true^ORmobile_callable=true^EQ',
+                      active: 'true',
+                      on_load: 'true',
+                      global: 'true',
+                      inherit: 'false',
+                      reverse_if_false: 'true',
+                      order: 100,
+                  },
+                  {
+                      sys_id: 'policy-parent',
+                      table: 'sys_metadata',
+                      conditions: '',
+                      active: 'true',
+                      on_load: 'true',
+                      global: 'true',
+                      inherit: options.inheritParentPolicy ? 'true' : 'false',
+                      reverse_if_false: 'false',
+                      order: 50,
+                  },
+                  {
+                      sys_id: 'policy-inactive',
+                      table: 'sys_script_include',
+                      conditions: '',
+                      active: 'false',
+                      on_load: 'true',
+                      global: 'true',
+                      inherit: 'false',
+                      reverse_if_false: 'false',
+                      order: 10,
+                  },
+              ]
+            : [],
+        sys_ui_policy_rl_action: [
+            { ui_policy: 'policy-show', list: 'REL:rel1', visible: 'true' },
+            { ui_policy: 'policy-parent', list: 'sys_ui_action.script_include', visible: 'false' },
+            { ui_policy: 'policy-inactive', list: 'm2m_sp_ng_pro_sp_widget.sp_widget', visible: 'false' },
+        ],
         sys_ui_list: [{ sys_id: 'list-action', name: 'sys_ui_action', view: '' }],
         sys_ui_list_element: [
             { list_id: 'list-action', position: 0, element: 'name' },
@@ -75,6 +117,7 @@ function harness(params, options = {}) {
         '>': (actual, value) => actual > value,
         ISEMPTY: (actual) => actual === '',
         ISNOTEMPTY: (actual) => actual !== '',
+        IN: (actual, value) => value.split(',').includes(actual),
         CONTAINS: (actual, value) => actual.includes(value),
         STARTSWITH: (actual, value) => actual.startsWith(value),
     };
@@ -104,8 +147,18 @@ function harness(params, options = {}) {
         this.addNullQuery = (field) => this.addQuery(field, 'ISEMPTY', '');
         this.addNotNullQuery = (field) => this.addQuery(field, 'ISNOTEMPTY', '');
         this.addEncodedQuery = (query) => {
-            for (const [field, op, value] of JSON.parse(query).filter((part) => part[0] !== 'OR')) {
-                this.addQuery(field, op, value);
+            if (query.startsWith('[')) {
+                for (const [field, op, value] of JSON.parse(query).filter((part) => part[0] !== 'OR')) {
+                    this.addQuery(field, op, value);
+                }
+                return;
+            }
+            let condition = null;
+            for (const part of query.split('^').filter((term) => term && term !== 'EQ')) {
+                const isOr = part.startsWith('OR');
+                const [field, value] = (isOr ? part.substring(2) : part).split('=');
+                if (isOr && condition) condition.addOrCondition(field, '=', value);
+                else condition = this.addQuery(field, '=', value);
             }
         };
         this.getEncodedQuery = () => JSON.stringify(encoded);
@@ -124,13 +177,15 @@ function harness(params, options = {}) {
                 .filter((row) => filters.every((test) => test(row)))
                 .sort((a, b) =>
                     order
-                        ? String(a[order[0]]).localeCompare(String(b[order[0]])) * order[1]
+                        ? String(a[order[0]]).localeCompare(String(b[order[0]]), undefined, { numeric: true }) *
+                          order[1]
                         : (a.position ?? 0) - (b.position ?? 0)
                 )
                 .slice(0, limit);
             cursor = -1;
         };
         this.next = () => ++cursor < matches.length;
+        this.hasNext = () => cursor + 1 < matches.length;
         this.get = (id) => {
             this.addQuery('sys_id', id);
             this.query();
@@ -167,9 +222,10 @@ function harness(params, options = {}) {
             this.getAggregate = () => String(gr.getRowCount());
         },
         GlideRecord: function (name) {
+            if (name !== 'sys_properties') return new Secure(name);
             let cursor = -1;
             this.addQuery = this.orderBy = this.query = () => {};
-            this.next = () => name === 'sys_properties' && ++cursor < properties.length;
+            this.next = () => ++cursor < properties.length;
             this.getValue = (field) => properties[cursor][field];
         },
         GlideRecordSecure: Secure,
@@ -404,4 +460,29 @@ test('related list modal renders classic list controls', () => {
     ]) {
         assert.ok(client.includes(`label: '${label}'`), label);
     }
+});
+
+test('UI policy related list actions hide or show lists for the saved record', () => {
+    const tabs = (options) =>
+        harness({ record_table: 'sys_script_include', sys_id: recordId }, { policies: true, ...options })
+            .call('getRelatedDefinitions')
+            .tabs.map((tab) => tab.related_list);
+
+    assert.deepEqual(tabs(), ['sys_ui_action.script_include', 'm2m_sp_ng_pro_sp_widget.sp_widget']);
+    assert.deepEqual(tabs({ clientCallable: true }), [
+        'sys_ui_action.script_include',
+        'm2m_sp_ng_pro_sp_widget.sp_widget',
+        'REL:rel1',
+    ]);
+    assert.deepEqual(tabs({ clientCallable: true, inheritParentPolicy: true }), [
+        'm2m_sp_ng_pro_sp_widget.sp_widget',
+        'REL:rel1',
+    ]);
+
+    const hidden = harness({ record_table: 'sys_script_include', sys_id: recordId }, { policies: true });
+    assert.equal(hidden.call('getRelatedData', { related_list: 'REL:rel1' }).error, 'Related list not available.');
+    assert.equal(
+        hidden.call('getRelatedPreview', { related_list: 'REL:rel1', row_sys_id: 'e'.repeat(32) }).error,
+        'Related list not available.'
+    );
 });

@@ -3591,7 +3591,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             return this._answer({ success: false, error: parent.error });
         }
 
-        var values = this._relatedGetListValues(parent.table);
+        var values = this._relatedGetVisibleListValues(parent);
         var tabs = [];
         for (var i = 0; i < values.length; i++) {
             var list = this._relatedResolveList(values[i]);
@@ -3627,7 +3627,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             return this._answer({ success: false, error: parent.error });
         }
         var self = this;
-        var available = this._relatedGetListValues(parent.table).some(function (value) {
+        var available = this._relatedGetVisibleListValues(parent).some(function (value) {
             return !!self._relatedResolveList(value);
         });
         return this._answer({ success: true, available: available });
@@ -3656,7 +3656,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             return this._answer({ success: false, error: parent.error });
         }
         var list =
-            this._relatedGetListValues(parent.table).indexOf(relatedList) === -1
+            this._relatedGetVisibleListValues(parent).indexOf(relatedList) === -1
                 ? null
                 : this._relatedResolveList(relatedList);
         if (!list) {
@@ -3718,7 +3718,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
             return this._answer({ success: false, error: parent.error });
         }
         var list =
-            this._relatedGetListValues(parent.table).indexOf(relatedList) === -1
+            this._relatedGetVisibleListValues(parent).indexOf(relatedList) === -1
                 ? null
                 : this._relatedResolveList(relatedList);
         if (!list) {
@@ -4042,6 +4042,116 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     },
 
     /**
+     * Returns the related_list values shown for a record, after applying the related list
+     * actions of active on-load UI policies whose conditions match the saved record.
+     * UI policy scripts are not run.
+     * @param {{table: string, record: GlideRecord}} parent - Record that owns the related lists.
+     * @returns {Array.<string>} Ordered sys_ui_related_list_entry.related_list values.
+     */
+    _relatedGetVisibleListValues: function (parent) {
+        var values = this._relatedGetListValues(parent.table);
+        if (values.length === 0) {
+            return values;
+        }
+        var visibility = {};
+        try {
+            var tables = [];
+            var hierarchy = new TableUtils(parent.table).getTables();
+            for (var h = 0; h < hierarchy.size(); h++) {
+                tables.push(String(hierarchy.get(h)));
+            }
+            if (tables.indexOf(parent.table) === -1) {
+                tables.unshift(parent.table);
+            }
+            var policies = [];
+            var policyGr = new GlideRecord('sys_ui_policy');
+            policyGr.addQuery('active', true);
+            policyGr.addQuery('on_load', true);
+            policyGr.addQuery('table', 'IN', tables.join(','));
+            policyGr.addQuery('global', true).addOrCondition('view', 'Default view');
+            policyGr.orderBy('order');
+            policyGr.query();
+            while (policyGr.next()) {
+                var policyTable = String(policyGr.getValue('table') || '');
+                if (
+                    policyTable !== parent.table &&
+                    String(policyGr.getValue('inherit')) !== '1' &&
+                    String(policyGr.getValue('inherit')) !== 'true'
+                ) {
+                    continue;
+                }
+                policies.push({
+                    actions: [],
+                    conditions: String(policyGr.getValue('conditions') || ''),
+                    reverse:
+                        String(policyGr.getValue('reverse_if_false')) === '1' ||
+                        String(policyGr.getValue('reverse_if_false')) === 'true',
+                    sysId: policyGr.getUniqueValue(),
+                });
+            }
+            if (policies.length === 0) {
+                return values;
+            }
+            var byId = {};
+            for (var p = 0; p < policies.length; p++) {
+                byId[policies[p].sysId] = policies[p];
+            }
+            var actionGr = new GlideRecord('sys_ui_policy_rl_action');
+            actionGr.addQuery('ui_policy', 'IN', Object.keys(byId).join(','));
+            actionGr.addQuery('list', 'IN', values.join(','));
+            actionGr.query();
+            while (actionGr.next()) {
+                var visible = String(actionGr.getValue('visible') || '');
+                if (visible === 'true' || visible === 'false') {
+                    byId[String(actionGr.getValue('ui_policy'))].actions.push({
+                        list: String(actionGr.getValue('list')),
+                        visible: visible === 'true',
+                    });
+                }
+            }
+            for (var i = 0; i < policies.length; i++) {
+                var policy = policies[i];
+                if (policy.actions.length === 0) {
+                    continue;
+                }
+                var matches = this._relatedRecordMatches(parent, policy.conditions);
+                if (!matches && !policy.reverse) {
+                    continue;
+                }
+                for (var a = 0; a < policy.actions.length; a++) {
+                    visibility[policy.actions[a].list] = matches
+                        ? policy.actions[a].visible
+                        : !policy.actions[a].visible;
+                }
+            }
+        } catch (e) {
+            gs.error('Widget Editor _relatedGetVisibleListValues error: ' + e.message);
+            return values;
+        }
+        return values.filter(function (value) {
+            return visibility[value] !== false;
+        });
+    },
+
+    /**
+     * Checks whether a saved record matches an encoded query; an empty query always matches.
+     * @param {{table: string, record: GlideRecord}} parent - Record to test.
+     * @param {string} conditions - Encoded query.
+     * @returns {boolean} True when the record matches.
+     */
+    _relatedRecordMatches: function (parent, conditions) {
+        if (!conditions || conditions === '^EQ') {
+            return true;
+        }
+        var check = new GlideRecord(parent.table);
+        check.addQuery('sys_id', parent.record.getUniqueValue());
+        check.addEncodedQuery(conditions);
+        check.setLimit(1);
+        check.query();
+        return check.hasNext();
+    },
+
+    /**
      * Resolves a related_list value to its target table and either the reference field
      * (table.field) or the sys_relationship record (REL:<sys_id>).
      * @param {string} value - Raw related_list value from sys_ui_related_list_entry.
@@ -4099,9 +4209,7 @@ WidgetEditorAjax.prototype = Object.extendsObject(AbstractAjaxProcessor, {
     _relatedGetCount: function (list, parent) {
         try {
             if (list.relGr) {
-                var gr = this._relatedQuery(list, parent);
-                gr.query();
-                return gr.getRowCount();
+                return this._relatedCountQuery(list.table, this._relatedQuery(list, parent).getEncodedQuery());
             }
             var ga = new GlideAggregate(list.table);
             ga.addQuery(list.field, parent.getUniqueValue());
