@@ -7950,7 +7950,16 @@
                         ? _relatedSearchCondition(col, text, 'search')
                         : { field: '', label: 'Keywords = ' + text, op: 'TEXT', source: 'search', value: text };
                     tab.searchText = '';
-                    _addRelatedConditions(tab, [condition]);
+                    const index = tab.conditions.findIndex(
+                        (existing) => existing.source === 'search' && existing.field === condition.field
+                    );
+                    if (index === -1) {
+                        _addRelatedConditions(tab, [condition]);
+                        return;
+                    }
+                    tab.conditions = tab.conditions.map((existing, i) => (i === index ? condition : existing));
+                    _updateRelatedCrumbs(tab);
+                    $scope.loadRelatedTabData(tab, 0);
                 };
 
                 $scope.relatedColumnSearch = function (tab) {
