@@ -1573,7 +1573,7 @@
         .we-related-modal .we-related-search { display: flex; flex-wrap: nowrap; align-items: stretch; flex: 0 1 30rem; width: auto; min-width: 16rem; height: 32px; }
         .we-related-modal .we-related-search .input-group-select { position: relative; flex: 0 0 auto; width: auto; min-width: 0; padding: 0; border-right: 0; }
         .we-related-modal .we-related-search select.form-control { width: 8rem; min-width: 0; height: 32px; padding: 0 1.5rem 0 0.5rem; line-height: 30px; appearance: none; -webkit-appearance: none; text-overflow: ellipsis; border-top-right-radius: 0; border-bottom-right-radius: 0; }
-        .we-related-modal .we-related-search .select-indicator { position: absolute; top: 0; right: 0.5rem; bottom: 0; display: flex; align-items: center; margin: 0; pointer-events: none; font-size: 0.625rem; line-height: 1; }
+        .we-related-modal .we-related-search.input-group .input-group-addon.input-group-select .select-indicator { position: absolute; top: 0; right: 0.5rem; bottom: 0; height: auto; display: flex; align-items: center; margin: 0; pointer-events: none; font-size: 0.625rem; line-height: 1; }
         .we-related-modal .we-related-search input.form-control { flex: 1 1 auto; width: auto; min-width: 0; height: 32px; border-top-left-radius: 0; border-bottom-left-radius: 0; }
         .we-related-modal .we-related-breadcrumbs { flex-shrink: 0; padding: 6px 10px; background: rgb(var(--now-color_background--secondary)); }
         .we-related-modal .we-related-breadcrumbs .breadcrumb_list { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; margin: 0; padding: 0; list-style: none; }
@@ -1601,8 +1601,8 @@
         .we-related-modal .list_popup { opacity: 0; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; color: rgb(var(--now-color--primary-1)); }
         .we-related-modal tr:hover .list_popup,
         .we-related-modal .list_popup:focus { opacity: 1; }
-        .we-related-modal .we-related-column-search td { padding: 4px 10px; background: rgb(var(--now-color_background--primary)); }
-        .we-related-modal .we-related-column-search .form-control { height: 28px; padding: 2px 6px; }
+        .we-related-modal .we-related-column-search td { position: relative; height: 36px; padding: 0; background: rgb(var(--now-color_background--primary)); }
+        .we-related-modal .we-related-column-search .form-control { position: absolute; top: 4px; right: 10px; left: 10px; width: auto; min-width: 0; height: 28px; padding: 2px 6px; }
         .we-related-context-menu.context_menu { position: absolute; z-index: 30; display: block; visibility: visible; min-width: 150px; padding: 4px 0; background: rgb(var(--now-color_background--primary)); border: 1px solid rgb(var(--now-color_border--secondary)); border-radius: 6px; box-shadow: 0 4px 8px rgba(var(--now-color--neutral-18, 0,0,0), 0.25); }
         .we-related-context-menu .context_item { padding: 2px 20px; line-height: 1.25; white-space: nowrap; cursor: pointer; color: rgb(var(--now-color_text--primary)); }
         .we-related-context-menu .context_item:hover,
